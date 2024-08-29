@@ -1,5 +1,5 @@
-pub(crate) mod ty{
-    
+pub(crate) mod ty {
+
     use std::borrow::Cow;
     #[derive(Debug, Clone)]
     pub(crate) enum Ty<'s> {
@@ -22,13 +22,12 @@ pub(crate) mod ty{
     }
 }
 
-
-pub(crate) mod expression{
-    use std::borrow::Cow;
+pub(crate) mod expression {
     use super::ty::Ty;
+    use std::borrow::Cow;
 
     #[derive(Debug, Clone)]
-    pub(crate) enum Expr<'s>{
+    pub(crate) enum Expr<'s> {
         LitInt(i64),
         LitBool(bool),
         LitFloat(f64),
@@ -63,7 +62,6 @@ pub(crate) mod expression{
         format: Option<Cow<'s, str>>,
     }
 
-
     #[derive(Debug, Clone)]
     pub(crate) struct Attr<'s> {
         pub(crate) obj: Box<Expr<'s>>,
@@ -81,13 +79,13 @@ pub(crate) mod expression{
         pub(crate) name: Cow<'s, str>,
         pub(crate) arg_tys: Vec<Ty<'s>>,
     }
-    
+
     #[derive(Debug, Clone)]
     pub(crate) struct SpecializedFunctor<'s> {
         name: Cow<'s, str>,
         args: Vec<Ty<'s>>,
     }
-    
+
     #[derive(Debug, Clone)]
     pub(crate) enum Functor<'s> {
         Expr(Box<Expr<'s>>),
@@ -147,7 +145,7 @@ pub(crate) mod expression{
             }
         }
     }
-    
+
     #[derive(Debug, Clone)]
     pub(crate) struct Call<'s> {
         pub(crate) functor: Functor<'s>,
@@ -162,12 +160,12 @@ pub(crate) mod expression{
     }
 }
 
-pub(crate) mod statement{
-    
-    use std::borrow::Cow;
+pub(crate) mod statement {
+
     use super::expression::Expr;
     use super::ty::Ty;
-    
+    use std::borrow::Cow;
+
     pub(crate) enum Stmt<'s> {
         Let(Let<'s>),
         Fn(Fn<'s>),

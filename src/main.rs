@@ -1,31 +1,28 @@
-
 #[macro_use]
 mod unique;
 
 mod ast;
-mod compilation_scope;
 mod bytecode;
+mod compilation_scope;
 mod core;
-mod dinopack;
 mod dinobj;
-mod runtime;
+mod dinopack;
 mod grammar;
+mod maybe_owned;
+mod runtime;
 
 use core::CorePack;
-use std::sync::Arc;
 
-use ast::statement::{self, FnArg, Stmt};
-use compilation_scope::{ty::{BuiltinTemplate, TyTemplate}, CompilationScope};
+use compilation_scope::CompilationScope;
 use dinopack::DinoPack;
-use grammar::{parse_raw_statement, parse_raw_statements};
+use grammar::parse_raw_statements;
 use runtime::RuntimeFrame;
 
 fn main() {
-
     let mut scope = CompilationScope::root();
-    
+
     let core_pack = CorePack;
-    core_pack.setup(&mut scope);
+    core_pack.setup_compiler(&mut scope);
     /*
     let stmt1 = Stmt::Let(ast::statement::Let{
         var: "x".into(),
@@ -74,7 +71,7 @@ fn main() {
     let inp = r#"
     let x = 5;
     fn f(g: int) -> str {
-        "hello"
+        "hello"//+to_string(g)
     }
     let y = f(x);
     "#;
