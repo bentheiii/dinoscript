@@ -326,7 +326,7 @@ struct RelativeOverload<'p, 's>{
 pub(crate) struct CompilationScope<'p, 's> {
     parent: Option<&'p CompilationScope<'p, 's>>,
     pub(crate) names: HashMap<Cow<'s, str>, NamedItem<'s>>,
-    n_cells: usize,
+    pub(crate) n_cells: usize,
     pending_captures: Vec<PendingCapture>,
 }
 

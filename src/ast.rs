@@ -41,6 +41,26 @@ pub(crate) mod expression{
         VariantOpt(Variant<'s>),
         MethodCall(MethodCall<'s>),
         Call(Call<'s>),
+        Formatted(Vec<FormattedPart<'s>>),
+        Lookup(Lookup<'s>),
+    }
+
+    #[derive(Debug, Clone)]
+    pub(crate) struct Lookup<'s> {
+        pub(crate) obj: Box<Expr<'s>>,
+        pub(crate) keys: Vec<Expr<'s>>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub(crate) enum FormattedPart<'s> {
+        Literal(Cow<'s, str>),
+        Expr(FormattedExpression<'s>),
+    }
+
+    #[derive(Debug, Clone)]
+    struct FormattedExpression<'s> {
+        expr: Expr<'s>,
+        format: Option<Cow<'s, str>>,
     }
 
 
@@ -58,8 +78,8 @@ pub(crate) mod expression{
 
     #[derive(Debug, Clone)]
     pub(crate) struct Disambiguation<'s> {
-        name: Cow<'s, str>,
-        arg_tys: Vec<Ty<'s>>,
+        pub(crate) name: Cow<'s, str>,
+        pub(crate) arg_tys: Vec<Ty<'s>>,
     }
     
     #[derive(Debug, Clone)]
@@ -77,45 +97,53 @@ pub(crate) mod expression{
 
     #[derive(Debug, Clone)]
     pub(crate) enum Operator {
-        Add,
-        Sub,
-        Mul,
-        Div,
-        Mod,
-        And,
-        Or,
-        Not,
-        Eq,
-        Neq,
-        Gt,
-        Lt,
-        Gte,
-        Lte,
-        BitAnd,
-        BitOr,
-        BitXor,
+        BinAdd,
+        BinSub,
+        BinMul,
+        BinDiv,
+        BinMod,
+        BinAnd,
+        BinOr,
+        BinEq,
+        BinNeq,
+        BinGt,
+        BinLt,
+        BinGte,
+        BinLte,
+        BinBitAnd,
+        BinBitOr,
+        BinBitXor,
+        UnPos,
+        UnNeg,
+        UnNot,
+        UnInv,
+        Lookup,
     }
 
     impl Operator {
         pub(crate) fn func_name(&self) -> &'static str {
             match self {
-                Operator::Add => "op_add",
-                Operator::Sub => "op_sub",
-                Operator::Mul => "op_mul",
-                Operator::Div => "op_div",
-                Operator::Mod => "op_mod",
-                Operator::And => "op_and",
-                Operator::Or => "op_or",
-                Operator::Not => "op_not",
-                Operator::Eq => "op_eq",
-                Operator::Neq => "op_neq",
-                Operator::Gt => "op_gt",
-                Operator::Lt => "op_lt",
-                Operator::Gte => "op_gte",
-                Operator::Lte => "op_lte",
-                Operator::BitAnd => "op_bitand",
-                Operator::BitOr => "op_bitor",
-                Operator::BitXor => "op_bitxor",
+                Operator::BinAdd => "add",
+                Operator::BinSub => "sub",
+                Operator::BinMul => "mul",
+                Operator::BinDiv => "div",
+                Operator::BinMod => "mod",
+                Operator::BinAnd => "and",
+                Operator::BinOr => "or",
+                Operator::BinEq => "eq",
+                Operator::BinNeq => "neq",
+                Operator::BinGt => "gt",
+                Operator::BinLt => "lt",
+                Operator::BinGte => "gte",
+                Operator::BinLte => "lte",
+                Operator::BinBitAnd => "bitand",
+                Operator::BinBitOr => "bitor",
+                Operator::BinBitXor => "bitxor",
+                Operator::UnPos => "pos",
+                Operator::UnNeg => "neg",
+                Operator::UnNot => "not",
+                Operator::UnInv => "inv",
+                Operator::Lookup => "lookup",
             }
         }
     }

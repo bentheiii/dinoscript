@@ -74,11 +74,12 @@ impl <'s, 'r> RuntimeFrame<'s, 'r>{
                     return Ok(())
                 }
                 Some(StackItem::Pending(..)) => {
-                    let Some(StackItem::Pending(pending)) = self.stack.pop() else {unreachable!()};
-                    match pending.func.as_ref(){
+                    let Some(StackItem::Pending(Pending { func, arguments })) = self.stack.pop() else {unreachable!()};
+                    match func.as_ref(){
                         DinObject::UserFn(user_fn) => {
+                            // todo the frame could hold a ref to the user_fn instead of cloning the captures
                             let mut child_frame = self.child(user_fn.captures.clone(), user_fn.n_cells);
-                            child_frame.stack.extend(pending.arguments.iter().cloned());
+                            child_frame.stack.extend(arguments);
                             for command in user_fn.commands.iter(){
                                 child_frame.execute(command)?;
                             }
