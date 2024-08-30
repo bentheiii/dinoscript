@@ -11,7 +11,9 @@ pub mod utils {
     use std::{borrow::Cow, sync::Arc};
 
     use crate::{
-        bytecode::SourceId, compilation_scope::{ty::Ty, CompilationScope, Overload, OverloadArg, OverloadLoc, SystemLoc}, dinobj::{DinObject, SourceFnFunc, UserFn}
+        bytecode::SourceId,
+        compilation_scope::{ty::Ty, CompilationScope, Overload, OverloadArg, OverloadLoc, SystemLoc},
+        dinobj::{DinObject, SourceFnFunc, UserFn},
     };
 
     pub enum SetupItem<'s, C> {
@@ -28,10 +30,7 @@ pub mod utils {
         ) {
             match self {
                 SetupItem::Function(f) => {
-                    let (name, overload) = f.to_overload(
-                        c,
-                        SystemLoc::new(source, id_generator()),
-                    );
+                    let (name, overload) = f.to_overload(c, SystemLoc::new(source, id_generator()));
                     scope.add_overload(name, overload);
                 }
             }

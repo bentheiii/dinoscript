@@ -288,7 +288,7 @@ enum RelativeLocation {
 }
 
 impl RelativeLocation {
-    fn from_cell_idx<'p,'s,B>(scope: &CompilationScope<'s,'p,B>, cell_idx: usize) -> Self {
+    fn from_cell_idx<'p, 's, B>(scope: &CompilationScope<'s, 'p, B>, cell_idx: usize) -> Self {
         if scope.is_root() {
             RelativeLocation::Global(cell_idx)
         } else {
@@ -360,7 +360,7 @@ pub struct CompilationScope<'p, 's, B> {
 impl<'p, 's, B> CompilationScope<'p, 's, B> {
     fn is_root(&self) -> bool {
         self.parent.is_none()
-    }    
+    }
 
     pub fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>) {
         let existing_name = self.names.entry(name);
@@ -384,7 +384,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         self.n_cells += 1;
         idx
     }
-
 
     pub fn root() -> Self {
         Self {

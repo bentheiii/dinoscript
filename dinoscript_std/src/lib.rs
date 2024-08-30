@@ -1,14 +1,19 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use dinoscript_core::{
-    bytecode::SourceId, compilation_scope::{
+    bytecode::{Command, MakeFunction, PushFromSource, SourceId},
+    compilation_scope::{
         self,
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
-    }, dinobj::{DinObject, StackItem}, dinopack::{
+    },
+    dinobj::{DinObject, StackItem, UserFn},
+    dinopack::{
         utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature},
         DinoPack,
-    }, maybe_owned::MaybeOwned, runtime::RuntimeFrame
+    },
+    maybe_owned::MaybeOwned,
+    runtime::RuntimeFrame,
 };
 
 pub struct StdPack;
@@ -51,20 +56,39 @@ macro_rules! signature_fn {
 impl StdPack {
     const SOURCE_ID: SourceId = "core";
     fn setup_items<'a, 's>() -> Vec<SetupItem<'s, &'a Builtins<'s>>> {
+        static DOUBLE: LazyLock<Vec<Command>> = LazyLock::new(|| {
+            vec![
+                dinoscript_core::bytecode::Command::PopToCell(0),
+                dinoscript_core::bytecode::Command::PushFromCell(0),
+                dinoscript_core::bytecode::Command::PushFromCell(0),
+                dinoscript_core::bytecode::Command::PushFromSource(dinoscript_core::bytecode::PushFromSource::new("core",0)),
+                dinoscript_core::bytecode::Command::MakePending(2),
+                dinoscript_core::bytecode::Command::EvalTop
+            ]                              
+        });
         vec![
-            SetupItem::Function(SetupFunction::new(signature_fn!(add (a: int, b: int) -> int), SetupFunctionBody::System(Box::new(|mut stack| {
-                let StackItem::Value(Ok(b)) = stack.pop().unwrap() else { todo!()};
-                let StackItem::Value(Ok(a)) = stack.pop().unwrap() else { todo!()};
-                match (a.as_ref(), b.as_ref()) {
-                    (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
-                    _ => Ok(Err(())),
-                }
-            }))))
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(add (a: int, b: int) -> int),
+                SetupFunctionBody::System(Box::new(|mut stack| {
+                    let StackItem::Value(Ok(b)) = stack.pop().unwrap() else {
+                        todo!()
+                    };
+                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            )),
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(double (a: int) -> int),
+                SetupFunctionBody::User(UserFn::without_capture(10, &DOUBLE)),
+            )),
         ]
     }
-        
 }
-
 
 impl DinoPack for StdPack {
     type Builtins<'s> = Builtins<'s>;
@@ -90,7 +114,7 @@ impl DinoPack for StdPack {
         let str = register_type(scope, "str", TyTemplate::Builtin(BuiltinTemplate::primitive("str")));
 
         let builtins = Builtins { int, float, bool, str };
-        
+
         let mut next_id = 0;
         let mut get_id = || {
             let ret = next_id;
@@ -101,17 +125,6 @@ impl DinoPack for StdPack {
         for item in Self::setup_items() {
             item.push_to_compilation(scope, &builtins, source_id, &mut get_id);
         }
-        /*
-        SetupItem::Function(SetupFunction::new(signature_fn!(add (a: int, b: int) -> int), SetupFunctionBody::System(Box::new(|mut stack| {
-            let StackItem::Value(Ok(b)) = stack.pop().unwrap() else { todo!()};
-            let StackItem::Value(Ok(a)) = stack.pop().unwrap() else { todo!()};
-            match (a.as_ref(), b.as_ref()) {
-                (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
-                _ => Ok(Err(())),
-            }
-        }))))
-        .push_to_compilation(scope, &builtins, SOURCE_ID, &mut get_id);
-        */
 
         scope.builtins = Some(MaybeOwned::Owned(builtins));
     }

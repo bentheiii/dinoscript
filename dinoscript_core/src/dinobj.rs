@@ -2,7 +2,7 @@ use derive_more::Debug;
 
 use std::{borrow::Cow, sync::Arc};
 
-use crate::bytecode::Command;
+use crate::{bytecode::Command, maybe_owned::MaybeOwned};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -13,7 +13,7 @@ pub enum DinObject<'s> {
     Struct(Vec<Arc<DinObject<'s>>>),
     Variant(VariantObject<'s>),
     UserFn(UserFn<'s>),
-    SourceFn(#[debug("<system_function>")]SourceFnFunc),
+    SourceFn(#[debug("<system_function>")] SourceFnFunc),
     Extended(Box<dyn ExtendedObject<'s>>),
     Tail,
 }
@@ -25,6 +25,16 @@ pub struct UserFn<'s> {
     pub captures: Vec<Arc<DinObject<'s>>>,
     pub n_cells: usize,
     pub commands: &'s Vec<Command<'s>>,
+}
+
+impl<'s> UserFn<'s> {
+    pub fn without_capture(n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
+        Self {
+            captures: vec![],
+            n_cells,
+            commands,
+        }
+    }
 }
 
 #[derive(Debug)]

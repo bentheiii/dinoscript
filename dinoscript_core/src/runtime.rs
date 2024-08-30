@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     bytecode::{Command, SourceId},
     dinobj::{DinObject, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, UserFn},
+    maybe_owned::MaybeOwned,
 };
 
 #[derive(Debug, Clone)]
@@ -21,14 +22,16 @@ pub struct Sources<'s> {
 
 impl<'s> Sources<'s> {
     fn new() -> Self {
-        Self { sources: HashMap::new() }
+        Self {
+            sources: HashMap::new(),
+        }
     }
 }
 
 pub struct RuntimeFrame<'s, 'r> {
     stack: DinoStack<'s>,
 
-    captures: Vec<Arc<DinObject<'s>>>, // todo can we keep this a as a reference somehow?
+    user_fn: Option<Arc<DinObject<'s>>>, // guaranteed to be a UserFn if present
     pub cells: Vec<RuntimeCell<'s>>,
     global_frame: Option<&'r RuntimeFrame<'s, 'r>>,
     sources: Option<Sources<'s>>,
@@ -38,7 +41,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
     pub fn root(n_cells: usize) -> Self {
         Self {
             stack: Vec::new(),
-            captures: Vec::new(),
+            user_fn: None,
             cells: vec![RuntimeCell::Uninitialized; n_cells],
             global_frame: None,
             sources: Some(Sources::new()),
@@ -64,10 +67,14 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         self.get_global_frame().sources.as_ref().unwrap()
     }
 
-    pub fn child(&'r self, captures: Vec<Arc<DinObject<'s>>>, n_cells: usize) -> Self {
+    pub fn child(&'r self, user_fn: Arc<DinObject<'s>>) -> Self {
+        let (n_cells) = match user_fn.as_ref() {
+            DinObject::UserFn(user_fn) => user_fn.n_cells,
+            _ => unreachable!(),
+        };
         Self {
             stack: Vec::new(),
-            captures,
+            user_fn: Some(user_fn),
             cells: vec![RuntimeCell::Uninitialized; n_cells],
             global_frame: Some(self.get_global_frame()),
             sources: None,
@@ -85,7 +92,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     match func.as_ref() {
                         DinObject::UserFn(user_fn) => {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
-                            let mut child_frame = self.child(user_fn.captures.clone(), user_fn.n_cells);
+                            let mut child_frame = self.child(func.clone());
                             child_frame.stack.extend(arguments);
                             for command in user_fn.commands.iter() {
                                 child_frame.execute(command)?;
@@ -98,9 +105,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
-                            let Ok(ret) = source_fn(arguments) else {
-                                todo!()
-                            };
+                            let Ok(ret) = source_fn(arguments) else { todo!() };
                             self.stack.push(StackItem::Value(ret));
                         }
                         _ => {
@@ -115,7 +120,14 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    pub fn execute(&mut self, command: &'s Command<'s>) -> Result<(), ()> {
+    fn get_capture<'a>(&'a mut self, i: usize) -> Arc<DinObject<'s>> {
+        match self.user_fn.as_ref().unwrap().as_ref() {
+            DinObject::UserFn(user_fn) => user_fn.captures[i].clone(),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn execute<'a>(&mut self, command: &'s Command<'s>) -> Result<(), ()> {
         match command {
             Command::PopToCell(i) => {
                 debug_assert!(matches!(self.cells[*i], RuntimeCell::Uninitialized));
@@ -133,9 +145,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
             }
-            Command::EvalTop => {
-                self.eval_top()
-            }
+            Command::EvalTop => self.eval_top(),
             Command::PushInt(i) => {
                 self.stack
                     .push(StackItem::Value(DinoValue::Ok(Arc::new(DinObject::Int(*i)))));
@@ -171,8 +181,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(())
             }
             Command::PushFromCapture(i) => {
-                self.stack
-                    .push(StackItem::Value(DinoValue::Ok(self.captures[*i].clone())));
+                let val = self.get_capture(*i);
+                self.stack.push(StackItem::Value(DinoValue::Ok(val)));
                 Ok(())
             }
             Command::PushGlobal(i) => {

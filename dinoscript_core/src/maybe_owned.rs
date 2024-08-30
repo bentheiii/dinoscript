@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+#[derive(Debug)]
 pub enum MaybeOwned<'a, T> {
     Borrowed(&'a T),
     Owned(T),
