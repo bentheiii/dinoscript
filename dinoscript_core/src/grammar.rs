@@ -356,7 +356,7 @@ fn parse_execution<'s>(input: Pair<'s, Rule>) -> Result<Vec<Stmt<'s>>, ()> {
     return input.into_inner().map(parse_statement).collect();
 }
 
-pub(crate) fn parse_raw_statements<'s>(input: &'s str) -> Result<Vec<Stmt<'s>>, pest::error::Error<Rule>> {
+pub fn parse_raw_statements<'s>(input: &'s str) -> Result<Vec<Stmt<'s>>, pest::error::Error<Rule>> {
     return DinoParse::parse(Rule::header, input)?
         .next()
         .unwrap()

@@ -6,16 +6,16 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub(crate) enum RuntimeCell<'s> {
+pub enum RuntimeCell<'s> {
     Uninitialized,
     Value(Arc<DinObject<'s>>),
 }
 
-pub(crate) struct Runtime<'s> {
+pub struct Runtime<'s> {
     stack: DinoStack<'s>,
 }
 
-pub(crate) struct Sources<'s> {
+pub struct Sources<'s> {
     sources: HashMap<SourceId, Vec<Arc<DinObject<'s>>>>,
 }
 
@@ -25,17 +25,17 @@ impl<'s> Sources<'s> {
     }
 }
 
-pub(crate) struct RuntimeFrame<'s, 'r> {
+pub struct RuntimeFrame<'s, 'r> {
     stack: DinoStack<'s>,
 
     captures: Vec<Arc<DinObject<'s>>>, // todo can we keep this a as a reference somehow?
-    pub(crate) cells: Vec<RuntimeCell<'s>>,
+    pub cells: Vec<RuntimeCell<'s>>,
     global_frame: Option<&'r RuntimeFrame<'s, 'r>>,
     sources: Option<Sources<'s>>,
 }
 
 impl<'s, 'r> RuntimeFrame<'s, 'r> {
-    pub(crate) fn root(n_cells: usize) -> Self {
+    pub fn root(n_cells: usize) -> Self {
         Self {
             stack: Vec::new(),
             captures: Vec::new(),
@@ -53,7 +53,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         self.global_frame.unwrap_or(self)
     }
 
-    pub(crate) fn add_source(&mut self, source_id: SourceId, source: Vec<Arc<DinObject<'s>>>) {
+    pub fn add_source(&mut self, source_id: SourceId, source: Vec<Arc<DinObject<'s>>>) {
         assert!(self.is_root());
         let sources = self.sources.as_mut().unwrap();
         assert!(!sources.sources.contains_key(&source_id));
@@ -64,7 +64,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         self.get_global_frame().sources.as_ref().unwrap()
     }
 
-    pub(crate) fn child(&'r self, captures: Vec<Arc<DinObject<'s>>>, n_cells: usize) -> Self {
+    pub fn child(&'r self, captures: Vec<Arc<DinObject<'s>>>, n_cells: usize) -> Self {
         Self {
             stack: Vec::new(),
             captures,
@@ -115,7 +115,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    pub(crate) fn execute(&mut self, command: &'s Command<'s>) -> Result<(), ()> {
+    pub fn execute(&mut self, command: &'s Command<'s>) -> Result<(), ()> {
         match command {
             Command::PopToCell(i) => {
                 debug_assert!(matches!(self.cells[*i], RuntimeCell::Uninitialized));

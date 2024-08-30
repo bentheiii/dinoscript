@@ -1,8 +1,8 @@
-pub(crate) mod ty {
+pub mod ty {
 
     use std::borrow::Cow;
     #[derive(Debug, Clone)]
-    pub(crate) enum Ty<'s> {
+    pub enum Ty<'s> {
         Ref(Cow<'s, str>),
         Tuple(Vec<Ty<'s>>),
         Fn(FnTy<'s>),
@@ -10,24 +10,24 @@ pub(crate) mod ty {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct FnTy<'s> {
-        pub(crate) args: Vec<Ty<'s>>,
-        pub(crate) ret: Box<Ty<'s>>,
+    pub struct FnTy<'s> {
+        pub args: Vec<Ty<'s>>,
+        pub ret: Box<Ty<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct SpecializedTy<'s> {
-        pub(crate) name: Cow<'s, str>,
-        pub(crate) args: Vec<Ty<'s>>,
+    pub struct SpecializedTy<'s> {
+        pub name: Cow<'s, str>,
+        pub args: Vec<Ty<'s>>,
     }
 }
 
-pub(crate) mod expression {
+pub mod expression {
     use super::ty::Ty;
     use std::borrow::Cow;
 
     #[derive(Debug, Clone)]
-    pub(crate) enum Expr<'s> {
+    pub enum Expr<'s> {
         LitInt(i64),
         LitBool(bool),
         LitFloat(f64),
@@ -45,13 +45,13 @@ pub(crate) mod expression {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Lookup<'s> {
-        pub(crate) obj: Box<Expr<'s>>,
-        pub(crate) keys: Vec<Expr<'s>>,
+    pub struct Lookup<'s> {
+        pub obj: Box<Expr<'s>>,
+        pub keys: Vec<Expr<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum FormattedPart<'s> {
+    pub enum FormattedPart<'s> {
         Literal(Cow<'s, str>),
         Expr(FormattedExpression<'s>),
     }
@@ -63,38 +63,38 @@ pub(crate) mod expression {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Attr<'s> {
-        pub(crate) obj: Box<Expr<'s>>,
-        pub(crate) name: Cow<'s, str>,
+    pub struct Attr<'s> {
+        pub obj: Box<Expr<'s>>,
+        pub name: Cow<'s, str>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Variant<'s> {
-        pub(crate) obj: Box<Expr<'s>>,
-        pub(crate) name: Cow<'s, str>,
+    pub struct Variant<'s> {
+        pub obj: Box<Expr<'s>>,
+        pub name: Cow<'s, str>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Disambiguation<'s> {
-        pub(crate) name: Cow<'s, str>,
-        pub(crate) arg_tys: Vec<Ty<'s>>,
+    pub struct Disambiguation<'s> {
+        pub name: Cow<'s, str>,
+        pub arg_tys: Vec<Ty<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct SpecializedFunctor<'s> {
+    pub struct SpecializedFunctor<'s> {
         name: Cow<'s, str>,
         args: Vec<Ty<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum Functor<'s> {
+    pub enum Functor<'s> {
         Expr(Box<Expr<'s>>),
         Operator(Operator),
         Specialized(SpecializedFunctor<'s>),
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum Operator {
+    pub enum Operator {
         BinAdd,
         BinSub,
         BinMul,
@@ -119,7 +119,7 @@ pub(crate) mod expression {
     }
 
     impl Operator {
-        pub(crate) fn func_name(&self) -> &'static str {
+        pub fn func_name(&self) -> &'static str {
             match self {
                 Operator::BinAdd => "add",
                 Operator::BinSub => "sub",
@@ -147,84 +147,84 @@ pub(crate) mod expression {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Call<'s> {
-        pub(crate) functor: Functor<'s>,
-        pub(crate) args: Vec<Expr<'s>>,
+    pub struct Call<'s> {
+        pub functor: Functor<'s>,
+        pub args: Vec<Expr<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct MethodCall<'s> {
-        pub(crate) obj: Box<Expr<'s>>,
-        pub(crate) name: Cow<'s, str>,
-        pub(crate) args: Vec<Expr<'s>>,
+    pub struct MethodCall<'s> {
+        pub obj: Box<Expr<'s>>,
+        pub name: Cow<'s, str>,
+        pub args: Vec<Expr<'s>>,
     }
 }
 
-pub(crate) mod statement {
+pub mod statement {
 
     use super::expression::Expr;
     use super::ty::Ty;
     use std::borrow::Cow;
 
-    pub(crate) enum Stmt<'s> {
+    pub enum Stmt<'s> {
         Let(Let<'s>),
         Fn(Fn<'s>),
         Type(Type<'s>),
         Compound(Compound<'s>),
     }
 
-    pub(crate) struct Type<'s> {
+    pub struct Type<'s> {
         name: Cow<'s, str>,
         generic_params: Vec<Cow<'s, str>>,
         value: Ty<'s>,
     }
 
-    pub(crate) struct Compound<'s> {
+    pub struct Compound<'s> {
         kind: CompoundKind,
         name: Cow<'s, str>,
         generic_params: Vec<Cow<'s, str>>,
         fields: Vec<Field<'s>>,
     }
 
-    pub(crate) enum CompoundKind {
+    pub enum CompoundKind {
         Struct,
         Union,
     }
 
-    pub(crate) struct Field<'s> {
+    pub struct Field<'s> {
         name: Cow<'s, str>,
         ty: Ty<'s>,
     }
 
-    pub(crate) struct Let<'s> {
-        pub(crate) var: Cow<'s, str>,
-        pub(crate) ty: Option<Ty<'s>>,
-        pub(crate) expr: Expr<'s>,
+    pub struct Let<'s> {
+        pub var: Cow<'s, str>,
+        pub ty: Option<Ty<'s>>,
+        pub expr: Expr<'s>,
     }
 
-    pub(crate) struct Fn<'s> {
-        pub(crate) name: Cow<'s, str>,
-        pub(crate) generic_params: Vec<Cow<'s, str>>,
-        pub(crate) args: Vec<FnArg<'s>>,
-        pub(crate) return_ty: Ty<'s>,
-        pub(crate) body: Vec<Stmt<'s>>,
-        pub(crate) ret: Expr<'s>,
+    pub struct Fn<'s> {
+        pub name: Cow<'s, str>,
+        pub generic_params: Vec<Cow<'s, str>>,
+        pub args: Vec<FnArg<'s>>,
+        pub return_ty: Ty<'s>,
+        pub body: Vec<Stmt<'s>>,
+        pub ret: Expr<'s>,
     }
 
-    pub(crate) struct FnArg<'s> {
-        pub(crate) name: Cow<'s, str>,
-        pub(crate) ty: Ty<'s>,
-        pub(crate) default: Option<FnArgDefault<'s>>,
+    pub struct FnArg<'s> {
+        pub name: Cow<'s, str>,
+        pub ty: Ty<'s>,
+        pub default: Option<FnArgDefault<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum FnArgDefault<'s> {
+    pub enum FnArgDefault<'s> {
         Value(Expr<'s>),
         ResolveOverload(ResolveOverload<'s>),
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct ResolveOverload<'s> {
+    pub struct ResolveOverload<'s> {
         name: Cow<'s, str>,
         arg_tys: Vec<Ty<'s>>,
         ret_ty: Ty<'s>,

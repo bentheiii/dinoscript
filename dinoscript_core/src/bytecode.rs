@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 #[derive(Debug)]
-pub(crate) enum Command<'s> {
+pub enum Command<'s> {
     PopToCell(usize), // POP
     EvalTop,              // EVL
 
@@ -24,17 +24,17 @@ pub(crate) enum Command<'s> {
     VariantOpt(usize), // VOP
 }
 
-pub(crate) type SourceId = &'static str;
+pub type SourceId = &'static str;
 
 #[derive(Debug)]
-pub(crate) struct PushFromSource {
-    pub(crate) source: SourceId,
-    pub(crate) id: usize,
+pub struct PushFromSource {
+    pub source: SourceId,
+    pub id: usize,
 }
 
 #[derive(Debug)]
-pub(crate) struct MakeFunction<'s> {
-    pub(crate) n_captures: usize,
-    pub(crate) n_cells: usize,
-    pub(crate) commands: Vec<Command<'s>>,
+pub struct MakeFunction<'s> {
+    pub n_captures: usize,
+    pub n_cells: usize,
+    pub commands: Vec<Command<'s>>,
 }

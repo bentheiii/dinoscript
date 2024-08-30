@@ -1,4 +1,5 @@
 [workspace]
-members = [
-    "dinoscript",
+resolver = "2"
+members = [ "dinoscript",
+    "dinoscript_core", "dinoscript_derive", "dinoscript_playground", "dinoscript_std",
 ]

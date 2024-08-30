@@ -14,20 +14,20 @@ use crate::{
         ty::FnTy,
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
-    core::Builtins,
+    //core::Builtins,
     maybe_owned::MaybeOwned,
 };
 
-pub(crate) mod ty {
+pub mod ty {
     use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
     #[derive(Debug, Clone)]
-    pub(crate) enum TyTemplate<'s> {
+    pub enum TyTemplate<'s> {
         Builtin(BuiltinTemplate),
         Compound(CompoundTemplate<'s>),
     }
     impl<'s> TyTemplate<'s> {
-        pub(crate) fn instantiate(self: &Arc<Self>, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
+        pub fn instantiate(self: &Arc<Self>, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
             assert_eq!(
                 args.len(),
                 match self.as_ref() {
@@ -41,7 +41,7 @@ pub(crate) mod ty {
             }))
         }
 
-        pub(crate) fn n_generics(&self) -> usize {
+        pub fn n_generics(&self) -> usize {
             match self {
                 TyTemplate::Builtin(template) => template.n_generics,
                 TyTemplate::Compound(template) => template.n_generics,
@@ -50,20 +50,20 @@ pub(crate) mod ty {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct BuiltinTemplate {
+    pub struct BuiltinTemplate {
         name: Cow<'static, str>,
         n_generics: usize,
     }
 
     impl BuiltinTemplate {
-        pub(crate) fn primitive(name: impl Into<Cow<'static, str>>) -> Self {
+        pub fn primitive(name: impl Into<Cow<'static, str>>) -> Self {
             Self {
                 name: name.into(),
                 n_generics: 0,
             }
         }
 
-        pub(crate) fn generic(name: impl Into<Cow<'static, str>>, n_generics: usize) -> Self {
+        pub fn generic(name: impl Into<Cow<'static, str>>, n_generics: usize) -> Self {
             Self {
                 name: name.into(),
                 n_generics,
@@ -72,27 +72,27 @@ pub(crate) mod ty {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct CompoundTemplate<'s> {
-        pub(crate) name: Cow<'s, str>,
+    pub struct CompoundTemplate<'s> {
+        pub name: Cow<'s, str>,
         compound_kind: CompoundKind,
         n_generics: usize,
         fields: HashMap<Cow<'s, str>, Field<'s>>,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Field<'s> {
-        pub(crate) ty: Arc<Ty<'s>>,
-        pub(crate) idx: usize,
+    pub struct Field<'s> {
+        pub ty: Arc<Ty<'s>>,
+        pub idx: usize,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum CompoundKind {
+    pub enum CompoundKind {
         Struct,
         Union,
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) enum Ty<'s> {
+    pub enum Ty<'s> {
         Specialized(Specialized<'s>),
         Tuple(Vec<Arc<Ty<'s>>>),
         Fn(Fn<'s>),
@@ -103,7 +103,7 @@ pub(crate) mod ty {
     }
 
     impl<'s> Ty<'s> {
-        pub(crate) fn resolve(self: &Arc<Self>, tail: &Arc<Self>, generic_args: &Vec<Arc<Self>>) -> Arc<Self> {
+        pub fn resolve(self: &Arc<Self>, tail: &Arc<Self>, generic_args: &Vec<Arc<Self>>) -> Arc<Self> {
             match self.as_ref() {
                 Ty::Specialized(specialized) => Arc::new(Ty::Specialized(Specialized {
                     template: specialized.template.clone(),
@@ -125,25 +125,25 @@ pub(crate) mod ty {
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Fn<'s> {
-        pub(crate) args: Vec<Arc<Ty<'s>>>,
-        pub(crate) return_ty: Arc<Ty<'s>>,
+    pub struct Fn<'s> {
+        pub args: Vec<Arc<Ty<'s>>>,
+        pub return_ty: Arc<Ty<'s>>,
     }
 
     impl<'s> Fn<'s> {
-        pub(crate) fn new(args: Vec<Arc<Ty<'s>>>, return_ty: Arc<Ty<'s>>) -> Self {
+        pub fn new(args: Vec<Arc<Ty<'s>>>, return_ty: Arc<Ty<'s>>) -> Self {
             Self { args, return_ty }
         }
     }
 
     #[derive(Debug, Clone)]
-    pub(crate) struct Specialized<'s> {
+    pub struct Specialized<'s> {
         template: Arc<TyTemplate<'s>>,
         args: Vec<Arc<Ty<'s>>>,
     }
 
     impl<'s> Specialized<'s> {
-        pub(crate) fn get_field(&self, name: &Cow<'s, str>, tail: &Arc<Ty<'s>>) -> Option<Field<'s>> {
+        pub fn get_field(&self, name: &Cow<'s, str>, tail: &Arc<Ty<'s>>) -> Option<Field<'s>> {
             let raw = match self.template.as_ref() {
                 TyTemplate::Compound(template) => template.fields.get(name).cloned(),
                 _ => None,
@@ -157,7 +157,7 @@ pub(crate) mod ty {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum NamedItem<'s> {
+pub enum NamedItem<'s> {
     Overloads(Overloads<'s>),
     Variable(Variable<'s>),
     Type(NamedType<'s>),
@@ -165,20 +165,20 @@ pub(crate) enum NamedItem<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Variable<'s> {
+pub struct Variable<'s> {
     ty: Arc<Ty<'s>>,
     cell_idx: usize,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum NamedType<'s> {
+pub enum NamedType<'s> {
     Template(Arc<TyTemplate<'s>>),
     // is guaranteed to be a generic
     Concrete(Arc<Ty<'s>>),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Overloads<'s> {
+pub struct Overloads<'s> {
     overloads: Vec<Overload<'s>>,
 }
 
@@ -189,11 +189,11 @@ impl<'s> Overloads<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Overload<'s> {
-    pub(crate) generic_params: Vec<Cow<'s, str>>,
-    pub(crate) args: Vec<OverloadArg<'s>>,
-    pub(crate) return_ty: Arc<Ty<'s>>,
-    pub(crate) loc: OverloadLoc,
+pub struct Overload<'s> {
+    pub generic_params: Vec<Cow<'s, str>>,
+    pub args: Vec<OverloadArg<'s>>,
+    pub return_ty: Arc<Ty<'s>>,
+    pub loc: OverloadLoc,
 }
 
 impl<'s> Overload<'s> {
@@ -206,32 +206,32 @@ impl<'s> Overload<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum OverloadLoc {
+pub enum OverloadLoc {
     Cell(usize),
     // this will only be in the root scope
     System(SystemLoc),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct SystemLoc {
-    pub(crate) source: SourceId,
-    pub(crate) id: usize,
+pub struct SystemLoc {
+    pub source: SourceId,
+    pub id: usize,
 }
 
 impl SystemLoc {
-    pub(crate) fn new(source: SourceId, id: usize) -> Self {
+    pub fn new(source: SourceId, id: usize) -> Self {
         Self { source, id }
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct OverloadArg<'s> {
-    pub(crate) ty: Arc<Ty<'s>>,
-    pub(crate) default: Option<OverloadArgDefault<'s>>,
+pub struct OverloadArg<'s> {
+    pub ty: Arc<Ty<'s>>,
+    pub default: Option<OverloadArgDefault<'s>>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum OverloadArgDefault<'s> {
+pub enum OverloadArgDefault<'s> {
     Expr(Expr<'s>),
     OverloadResolve(OverloadResolve<'s>),
 }
@@ -288,7 +288,7 @@ enum RelativeLocation {
 }
 
 impl RelativeLocation {
-    fn from_cell_idx(scope: &CompilationScope, cell_idx: usize) -> Self {
+    fn from_cell_idx<'p,'s,B>(scope: &CompilationScope<'s,'p,B>, cell_idx: usize) -> Self {
         if scope.is_root() {
             RelativeLocation::Global(cell_idx)
         } else {
@@ -342,26 +342,51 @@ struct RelativeOverload<'p, 's> {
     loc: RelativeLocation,
 }
 
-pub(crate) struct CompilationScope<'p, 's> {
-    parent: Option<&'p CompilationScope<'p, 's>>,
-    pub(crate) builtins: Option<MaybeOwned<'p, Builtins<'s>>>,
-    pub(crate) names: HashMap<Cow<'s, str>, NamedItem<'s>>,
-    pub(crate) n_cells: usize,
+pub trait Builtins<'s> {
+    fn int(&self) -> Arc<Ty<'s>>;
+    fn float(&self) -> Arc<Ty<'s>>;
+    fn bool(&self) -> Arc<Ty<'s>>;
+    fn str(&self) -> Arc<Ty<'s>>;
+}
+
+pub struct CompilationScope<'p, 's, B> {
+    parent: Option<&'p Self>,
+    pub builtins: Option<MaybeOwned<'p, B>>,
+    pub names: HashMap<Cow<'s, str>, NamedItem<'s>>,
+    pub n_cells: usize,
     pending_captures: Vec<PendingCapture>,
 }
 
-impl<'p, 's> CompilationScope<'p, 's> {
+impl<'p, 's, B> CompilationScope<'p, 's, B> {
+    fn is_root(&self) -> bool {
+        self.parent.is_none()
+    }    
+
+    pub fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>) {
+        let existing_name = self.names.entry(name);
+        match existing_name {
+            Entry::Occupied(mut entry) => match entry.get_mut() {
+                NamedItem::Overloads(overloads) => overloads.overloads.push(overload),
+                _ => todo!(),
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NamedItem::Overloads(Overloads {
+                    overloads: vec![overload],
+                }));
+            }
+        }
+    }
+}
+
+impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn get_cell_idx(&mut self) -> usize {
         let idx = self.n_cells;
         self.n_cells += 1;
         idx
     }
 
-    fn is_root(&self) -> bool {
-        self.parent.is_none()
-    }
 
-    pub(crate) fn root() -> Self {
+    pub fn root() -> Self {
         Self {
             parent: None,
             builtins: None,
@@ -401,38 +426,23 @@ impl<'p, 's> CompilationScope<'p, 's> {
     }
 
     fn int(&self) -> Arc<Ty<'s>> {
-        self.builtins.as_ref().unwrap().int.clone()
+        self.builtins.as_ref().unwrap().int()
     }
 
     fn float(&self) -> Arc<Ty<'s>> {
-        self.builtins.as_ref().unwrap().float.clone()
+        self.builtins.as_ref().unwrap().float()
     }
 
     fn bool(&self) -> Arc<Ty<'s>> {
-        self.builtins.as_ref().unwrap().bool.clone()
+        self.builtins.as_ref().unwrap().bool()
     }
 
     fn str(&self) -> Arc<Ty<'s>> {
-        self.builtins.as_ref().unwrap().str.clone()
+        self.builtins.as_ref().unwrap().str()
     }
 
     fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.gen_prim_type("Optional", vec![ty])
-    }
-
-    pub(crate) fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>) {
-        let existing_name = self.names.entry(name);
-        match existing_name {
-            Entry::Occupied(mut entry) => match entry.get_mut() {
-                NamedItem::Overloads(overloads) => overloads.overloads.push(overload),
-                _ => todo!(),
-            },
-            Entry::Vacant(entry) => {
-                entry.insert(NamedItem::Overloads(Overloads {
-                    overloads: vec![overload],
-                }));
-            }
-        }
     }
 
     fn parse_type(&self, ty: &ast::ty::Ty<'s>) -> Result<Arc<Ty<'s>>, ()> {
@@ -769,7 +779,7 @@ impl<'p, 's> CompilationScope<'p, 's> {
         Ok(ret)
     }
 
-    pub(crate) fn feed_statement(&mut self, stmt: &Stmt<'s>, sink: &mut Vec<Command<'s>>) -> Result<(), ()> {
+    pub fn feed_statement(&mut self, stmt: &Stmt<'s>, sink: &mut Vec<Command<'s>>) -> Result<(), ()> {
         match stmt {
             Stmt::Let(Let { var, ty, expr }) => {
                 let actual_ty = self.feed_expression(&expr, sink)?;

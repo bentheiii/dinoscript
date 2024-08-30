@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-pub(crate) enum MaybeOwned<'a, T> {
+pub enum MaybeOwned<'a, T> {
     Borrowed(&'a T),
     Owned(T),
 }

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use crate::{
+use dinoscript_core::{
     bytecode::SourceId, compilation_scope::{
+        self,
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
     }, dinobj::{DinObject, StackItem}, dinopack::{
@@ -10,26 +11,44 @@ use crate::{
     }, maybe_owned::MaybeOwned, runtime::RuntimeFrame
 };
 
-pub(crate) struct CorePack;
+pub struct StdPack;
 
-pub(crate) struct Builtins<'s> {
+pub struct Builtins<'s> {
     pub int: Arc<Ty<'s>>,
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
     pub str: Arc<Ty<'s>>,
 }
 
+impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
+    fn int(&self) -> Arc<Ty<'s>> {
+        self.int.clone()
+    }
+
+    fn float(&self) -> Arc<Ty<'s>> {
+        self.float.clone()
+    }
+
+    fn bool(&self) -> Arc<Ty<'s>> {
+        self.bool.clone()
+    }
+
+    fn str(&self) -> Arc<Ty<'s>> {
+        self.str.clone()
+    }
+}
+
 macro_rules! signature_fn {
     ($name:ident ($($param_name:ident : $type_name:ident),*) -> $ret_type:ident) => {
         |b: &Builtins<'_>| Signature::new(
             std::borrow::Cow::Borrowed(stringify!($name)),
-            vec![$($crate::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), b.$type_name.clone())),*],
+            vec![$(dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), b.$type_name.clone())),*],
             b.$ret_type.clone(),
         )
     };
 }
 
-impl CorePack {
+impl StdPack {
     const SOURCE_ID: SourceId = "core";
     fn setup_items<'a, 's>() -> Vec<SetupItem<'s, &'a Builtins<'s>>> {
         vec![
@@ -47,11 +66,13 @@ impl CorePack {
 }
 
 
-impl DinoPack for CorePack {
-    fn setup_compiler(&self, scope: &mut CompilationScope) {
-        let source_id = CorePack::SOURCE_ID;
-        fn register_type<'p, 's>(
-            scope: &mut CompilationScope<'p, 's>,
+impl DinoPack for StdPack {
+    type Builtins<'s> = Builtins<'s>;
+
+    fn setup_compiler<'p, 's>(&self, scope: &mut CompilationScope<'p, 's, Self::Builtins<'s>>) {
+        let source_id = StdPack::SOURCE_ID;
+        fn register_type<'p, 's, B>(
+            scope: &mut CompilationScope<'p, 's, B>,
             name: &'s str,
             template: TyTemplate<'s>,
         ) -> Arc<Ty<'s>> {
@@ -96,7 +117,7 @@ impl DinoPack for CorePack {
     }
 
     fn setup_runtime(&self, frame: &mut RuntimeFrame) {
-        let source_id = CorePack::SOURCE_ID;
+        let source_id = StdPack::SOURCE_ID;
         let mut items = Vec::new();
 
         for item in Self::setup_items() {
