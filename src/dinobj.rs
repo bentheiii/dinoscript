@@ -1,4 +1,6 @@
-use std::{borrow::Cow, fmt::Debug, sync::Arc};
+use derive_more::Debug;
+
+use std::{borrow::Cow, sync::Arc};
 
 use crate::bytecode::Command;
 
@@ -11,16 +13,12 @@ pub(crate) enum DinObject<'s> {
     Struct(Vec<Arc<DinObject<'s>>>),
     Variant(VariantObject<'s>),
     UserFn(UserFn<'s>),
-    SourceFn(SourceFn),
+    SourceFn(#[debug("<system_function>")]SourceFnFunc),
     Extended(Box<dyn ExtendedObject<'s>>),
     Tail,
 }
 
-pub(crate) trait SourceFnTrait: Debug {
-    fn call<'s>(&self, stack: DinoStack<'s>) -> DinObject<'s>;
-}
-
-pub(crate) type SourceFn = Box<dyn SourceFnTrait>;
+pub(crate) type SourceFnFunc = Box<dyn for<'s> Fn(DinoStack<'s>) -> DinoResult<'s>>;
 
 #[derive(Debug)]
 pub(crate) struct UserFn<'s> {
@@ -40,6 +38,7 @@ pub(crate) trait ExtendedObject<'s>: Debug {
 }
 
 pub(crate) type DinoValue<'s> = Result<Arc<DinObject<'s>>, ()>;
+pub(crate) type DinoResult<'s> = Result<DinoValue<'s>, ()>;
 
 #[derive(Debug, Clone)]
 pub(crate) enum StackItem<'s> {

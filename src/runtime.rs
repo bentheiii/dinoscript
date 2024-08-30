@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    bytecode::Command,
-    dinobj::{DinObject, DinoStack, DinoValue, Pending, SourceFn, StackItem, UserFn},
+    bytecode::{Command, SourceId},
+    dinobj::{DinObject, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, UserFn},
 };
 
 #[derive(Debug, Clone)]
@@ -16,12 +16,12 @@ pub(crate) struct Runtime<'s> {
 }
 
 pub(crate) struct Sources<'s> {
-    sources: Vec<Vec<Arc<DinObject<'s>>>>,
+    sources: HashMap<SourceId, Vec<Arc<DinObject<'s>>>>,
 }
 
 impl<'s> Sources<'s> {
     fn new() -> Self {
-        Self { sources: Vec::new() }
+        Self { sources: HashMap::new() }
     }
 }
 
@@ -51,6 +51,13 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
 
     fn get_global_frame<'a>(&'a self) -> &'a RuntimeFrame<'s, 'r> {
         self.global_frame.unwrap_or(self)
+    }
+
+    pub(crate) fn add_source(&mut self, source_id: SourceId, source: Vec<Arc<DinObject<'s>>>) {
+        assert!(self.is_root());
+        let sources = self.sources.as_mut().unwrap();
+        assert!(!sources.sources.contains_key(&source_id));
+        sources.sources.insert(source_id, source);
     }
 
     fn get_sources(&self) -> &Sources<'s> {
@@ -83,13 +90,18 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             for command in user_fn.commands.iter() {
                                 child_frame.execute(command)?;
                             }
-                            let StackItem::Value(val) = child_frame.stack.pop().unwrap() else {
+                            let ret = child_frame.stack.pop().unwrap();
+                            let StackItem::Value(val) = ret else {
+                                dbg!(ret);
                                 todo!()
                             };
                             self.stack.push(StackItem::Value(val));
                         }
-                        DinObject::SourceFn(..) => {
-                            todo!()
+                        DinObject::SourceFn(source_fn) => {
+                            let Ok(ret) = source_fn(arguments) else {
+                                todo!()
+                            };
+                            self.stack.push(StackItem::Value(ret));
                         }
                         _ => {
                             todo!() // err
@@ -120,6 +132,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                         todo!() // exit the current frame
                     }
                 }
+            }
+            Command::EvalTop => {
+                self.eval_top()
             }
             Command::PushInt(i) => {
                 self.stack

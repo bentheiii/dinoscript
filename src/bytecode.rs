@@ -3,6 +3,7 @@ use std::borrow::Cow;
 #[derive(Debug)]
 pub(crate) enum Command<'s> {
     PopToCell(usize), // POP
+    EvalTop,              // EVL
 
     PushInt(i64),                   // PIC
     PushFloat(f64),                 // PFC
@@ -23,9 +24,11 @@ pub(crate) enum Command<'s> {
     VariantOpt(usize), // VOP
 }
 
+pub(crate) type SourceId = &'static str;
+
 #[derive(Debug)]
 pub(crate) struct PushFromSource {
-    pub(crate) source: usize,
+    pub(crate) source: SourceId,
     pub(crate) id: usize,
 }
 

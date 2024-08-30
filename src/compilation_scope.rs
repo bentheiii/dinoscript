@@ -13,7 +13,7 @@ use crate::{
         statement::{self, Let, Stmt},
         ty::FnTy,
     },
-    bytecode::{Command, MakeFunction, PushFromSource},
+    bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     core::Builtins,
     maybe_owned::MaybeOwned,
 };
@@ -214,12 +214,12 @@ pub(crate) enum OverloadLoc {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SystemLoc {
-    pub(crate) source: usize,
+    pub(crate) source: SourceId,
     pub(crate) id: usize,
 }
 
 impl SystemLoc {
-    pub(crate) fn new(source: usize, id: usize) -> Self {
+    pub(crate) fn new(source: SourceId, id: usize) -> Self {
         Self { source, id }
     }
 }
@@ -348,8 +348,6 @@ pub(crate) struct CompilationScope<'p, 's> {
     pub(crate) names: HashMap<Cow<'s, str>, NamedItem<'s>>,
     pub(crate) n_cells: usize,
     pending_captures: Vec<PendingCapture>,
-
-    n_sources: Option<usize>,
 }
 
 impl<'p, 's> CompilationScope<'p, 's> {
@@ -370,7 +368,6 @@ impl<'p, 's> CompilationScope<'p, 's> {
             names: HashMap::new(),
             n_cells: 0,
             pending_captures: Vec::new(),
-            n_sources: Some(0),
         }
     }
 
@@ -381,7 +378,6 @@ impl<'p, 's> CompilationScope<'p, 's> {
             names: HashMap::new(),
             n_cells: 0,
             pending_captures: Vec::new(),
-            n_sources: None,
         }
     }
 
@@ -393,12 +389,6 @@ impl<'p, 's> CompilationScope<'p, 's> {
             self.pending_captures.push(capture);
             idx
         }
-    }
-
-    pub(crate) fn get_source(&mut self) -> usize {
-        let idx = self.n_sources.unwrap();
-        self.n_sources.replace(idx + 1);
-        idx
     }
 
     fn gen_prim_type(&self, name: &'static str, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
@@ -774,7 +764,9 @@ impl<'p, 's> CompilationScope<'p, 's> {
     }
 
     fn feed_return(&mut self, expr: &Expr<'s>, sink: &mut Vec<Command<'s>>) -> Result<Arc<Ty<'s>>, ()> {
-        self.feed_expression(expr, sink)
+        let ret = self.feed_expression(expr, sink)?;
+        sink.push(Command::EvalTop);
+        Ok(ret)
     }
 
     pub(crate) fn feed_statement(&mut self, stmt: &Stmt<'s>, sink: &mut Vec<Command<'s>>) -> Result<(), ()> {

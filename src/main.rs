@@ -70,8 +70,9 @@ fn main() {
 
     let inp = r#"
     let x = 5;
-    fn f(g: int) -> str {
-        "hello"//+to_string(g)
+    fn f(g: int) -> int {
+        //"hello"//+to_string(g)
+        g+g
     }
     let y = f(x);
     "#;
@@ -81,6 +82,7 @@ fn main() {
         scope.feed_statement(&stmt, &mut sink).unwrap();
     }
     let mut runtime_frame = RuntimeFrame::root(scope.n_cells);
+    core_pack.setup_runtime(&mut runtime_frame);
     for com in sink.iter() {
         runtime_frame.execute(com).unwrap();
     }

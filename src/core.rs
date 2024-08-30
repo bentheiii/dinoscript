@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    compilation_scope::{
+    bytecode::SourceId, compilation_scope::{
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
-    },
-    dinopack::{utils::{SetupFunction, SetupItem, Signature}, DinoPack},
-    maybe_owned::MaybeOwned,
-    runtime::RuntimeFrame,
+    }, dinobj::{DinObject, StackItem}, dinopack::{
+        utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature},
+        DinoPack,
+    }, maybe_owned::MaybeOwned, runtime::RuntimeFrame
 };
 
 pub(crate) struct CorePack;
@@ -29,8 +29,27 @@ macro_rules! signature_fn {
     };
 }
 
+impl CorePack {
+    const SOURCE_ID: SourceId = "core";
+    fn setup_items<'a, 's>() -> Vec<SetupItem<'s, &'a Builtins<'s>>> {
+        vec![
+            SetupItem::Function(SetupFunction::new(signature_fn!(add (a: int, b: int) -> int), SetupFunctionBody::System(Box::new(|mut stack| {
+                let StackItem::Value(Ok(b)) = stack.pop().unwrap() else { todo!()};
+                let StackItem::Value(Ok(a)) = stack.pop().unwrap() else { todo!()};
+                match (a.as_ref(), b.as_ref()) {
+                    (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
+                    _ => Ok(Err(())),
+                }
+            }))))
+        ]
+    }
+        
+}
+
+
 impl DinoPack for CorePack {
-    fn setup_compiler_with_id(&self, scope: &mut CompilationScope, source_id: usize) {
+    fn setup_compiler(&self, scope: &mut CompilationScope) {
+        let source_id = CorePack::SOURCE_ID;
         fn register_type<'p, 's>(
             scope: &mut CompilationScope<'p, 's>,
             name: &'s str,
@@ -50,8 +69,7 @@ impl DinoPack for CorePack {
         let str = register_type(scope, "str", TyTemplate::Builtin(BuiltinTemplate::primitive("str")));
 
         let builtins = Builtins { int, float, bool, str };
-        scope.builtins = Some(MaybeOwned::Owned(builtins));
-
+        
         let mut next_id = 0;
         let mut get_id = || {
             let ret = next_id;
@@ -59,10 +77,32 @@ impl DinoPack for CorePack {
             ret
         };
 
-        
-        SetupItem::Function(SetupFunction::new(
-            signature_fn!(add (a: int, b: int) -> int),
-            todo!()
-        )).push_to_compilation(scope, &builtins, source_id, &mut get_id)
+        for item in Self::setup_items() {
+            item.push_to_compilation(scope, &builtins, source_id, &mut get_id);
+        }
+        /*
+        SetupItem::Function(SetupFunction::new(signature_fn!(add (a: int, b: int) -> int), SetupFunctionBody::System(Box::new(|mut stack| {
+            let StackItem::Value(Ok(b)) = stack.pop().unwrap() else { todo!()};
+            let StackItem::Value(Ok(a)) = stack.pop().unwrap() else { todo!()};
+            match (a.as_ref(), b.as_ref()) {
+                (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
+                _ => Ok(Err(())),
+            }
+        }))))
+        .push_to_compilation(scope, &builtins, SOURCE_ID, &mut get_id);
+        */
+
+        scope.builtins = Some(MaybeOwned::Owned(builtins));
+    }
+
+    fn setup_runtime(&self, frame: &mut RuntimeFrame) {
+        let source_id = CorePack::SOURCE_ID;
+        let mut items = Vec::new();
+
+        for item in Self::setup_items() {
+            items.push(item.to_dinobject());
+        }
+
+        frame.add_source(source_id, items);
     }
 }
