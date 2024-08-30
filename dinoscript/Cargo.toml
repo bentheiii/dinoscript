@@ -1,0 +1,9 @@
+[package]
+name = "dinoscript"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+derive_more = {version="1.0.0", features=["debug"]}
+pest = "2.7.11"
+pest_derive = "2.7.11"

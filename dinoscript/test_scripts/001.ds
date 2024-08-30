@@ -1,0 +1,8 @@
+fn main()->bool{
+    let x = 5;
+    fn f(g) -> str {
+        "hello"
+    }
+    let y = f(x);
+    assert_eq(y, "hello")
+}
