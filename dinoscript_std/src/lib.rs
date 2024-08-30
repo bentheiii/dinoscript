@@ -59,9 +59,11 @@ macro_rules! signature_fn {
 macro_rules! from_source {
     ($source_id:ident, $builder:expr) => {
         {
+            static EMPTY_COMMANDS: Vec<Command> = Vec::new();
             let raw_src = include_str!(concat!("ds_std_funcs/", stringify!($source_id), ".dsf"));
             let (commands, n_cells) = $builder.parse_and_save(stringify!($source_id), raw_src);
-            SetupFunctionBody::User(UserFn::without_capture(n_cells, commands))
+            // we return an empty vec since we don't really care what happens in real time
+            SetupFunctionBody::User(UserFn::without_capture(n_cells, &EMPTY_COMMANDS))
         }
     };
 }
@@ -135,7 +137,7 @@ impl SourceBuilder<'_, '_> {
 impl StdPack {
     const SOURCE_ID: SourceId = "core";
     #[cfg(feature="build_ds")]
-    fn prepare_build<'p, 's>()->SourceBuilder<'p, 's>{
+    fn prepare_build<'p>()->SourceBuilder<'p, 'static>{
         let mut scope = CompilationScope::root();
         let builtins = Self::pre_items_setup(&mut scope);
         SourceBuilder{scope, builtins, source_id: Self::SOURCE_ID, next_id: 0}
@@ -192,23 +194,6 @@ impl StdPack {
                     from_source!(double, builder)
                 },
             )),
-            /*
-            SetupItem::Function(SetupFunction::new(
-                signature_fn!(double (a: int) -> int),{
-                    static DOUBLE: LazyLock<Vec<Command>> = LazyLock::new(|| {
-                        vec![
-                            dinoscript_core::bytecode::Command::PopToCell(0),
-                            dinoscript_core::bytecode::Command::PushFromCell(0),
-                            dinoscript_core::bytecode::Command::PushFromCell(0),
-                            dinoscript_core::bytecode::Command::PushFromSource(dinoscript_core::bytecode::PushFromSource::new("core",0)),
-                            dinoscript_core::bytecode::Command::MakePending(2),
-                            dinoscript_core::bytecode::Command::EvalTop
-                        ]                              
-                    });
-                    SetupFunctionBody::User(UserFn::without_capture(10, &DOUBLE))
-                },
-            )),
-            */
         ]
     }
 }

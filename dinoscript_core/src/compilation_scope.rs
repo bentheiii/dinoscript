@@ -548,10 +548,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         self.names.insert(name, NamedItem::Tail);
     }
 
-    fn feed_params(
+    fn feed_params<'c:'s>(
         &mut self,
-        params: impl IntoIterator<Item = (Cow<'s, str>, Arc<Ty<'s>>)>,
-        sink: &mut Vec<Command<'s>>,
+        params: impl IntoIterator<Item = (Cow<'c, str>, Arc<Ty<'s>>)>,
+        sink: &mut Vec<Command<'c>>,
     ) {
         // we expect the stack to be in the following state when the function is called:
         // [argN, ..., arg0]
@@ -566,11 +566,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_call<'a>(
+    fn feed_call<'a, 'c: 's>(
         &mut self,
-        functor: &Functor<'s>,
-        args: impl IntoIterator<Item = &'a Expr<'s>>,
-        sink: &mut Vec<Command<'s>>,
+        functor: &Functor<'c>,
+        args: impl IntoIterator<Item = &'a Expr<'c>>,
+        sink: &mut Vec<Command<'c>>,
     ) -> Result<Arc<Ty<'s>>, ()>
     where
         's: 'a,
@@ -616,7 +616,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_expression(&mut self, expr: &Expr<'s>, sink: &mut Vec<Command<'s>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_expression<'c: 's>(&mut self, expr: &Expr<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
         // put commands in the sink to ensure that the (possibly lazy) expression is at the top of the stack
         match expr {
             Expr::LitInt(value) => {
@@ -772,13 +772,13 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_return(&mut self, expr: &Expr<'s>, sink: &mut Vec<Command<'s>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_return<'c: 's>(&mut self, expr: &Expr<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
         let ret = self.feed_expression(expr, sink)?;
         sink.push(Command::EvalTop);
         Ok(ret)
     }
 
-    pub fn feed_statement(&mut self, stmt: &Stmt<'s>, sink: &mut Vec<Command<'s>>) -> Result<(), ()> {
+    pub fn feed_statement<'c: 's>(&mut self, stmt: &Stmt<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), ()> {
         match stmt {
             Stmt::Let(Let { var, ty, expr }) => {
                 let actual_ty = self.feed_expression(&expr, sink)?;

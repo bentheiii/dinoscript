@@ -1,5 +1,12 @@
 [workspace]
 resolver = "2"
-members = [ "dinoscript",
-    "dinoscript_core", "dinoscript_derive", "dinoscript_playground", "dinoscript_std",
+members = [ 
+    "dinoscript",
+    "dinoscript_core",
+    "dinoscript_derive",
+    "dinoscript_playground",
+    "dinoscript_std",
+]
+default-members = [ 
+    "dinoscript_playground",
 ]
