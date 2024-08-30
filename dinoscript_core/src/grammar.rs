@@ -272,6 +272,64 @@ fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
         .parse(input.into_inner())
 }
 
+fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()>{
+    debug_assert!(matches!(input.as_rule(), Rule::function));
+    let mut inners = input.into_inner();
+    let [raw_name, gen_params, params, ret_ty, body] = [
+        inners.next().unwrap(),
+        inners.next().unwrap(),
+        inners.next().unwrap(),
+        inners.next().unwrap(),
+        inners.next().unwrap(),
+    ];
+    let name = raw_name.as_str();
+    let gen_params = gen_params.into_inner().map(|p| p.as_str().into()).collect();
+    let params = params
+        .into_inner()
+        .next()
+        .map(|params| {
+            params
+                .into_inner()
+                .map(|p| {
+                    let mut inner = p.into_inner();
+                    let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
+                    let name = name.as_str();
+                    let ty = parse_type(ty)?;
+                    if let Some(default) = inner.next() {
+                        todo!()
+                    }
+                    Ok(FnArg {
+                        name: name.into(),
+                        ty,
+                        default: None,
+                    })
+                })
+                .collect()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let ret_ty = parse_type(ret_ty)?;
+    let mut body_inner = body.into_inner();
+    let [body_exec, ret] = [body_inner.next().unwrap(), body_inner.next().unwrap()];
+    let body = parse_execution(body_exec)?;
+    let ret = parse_expr(ret)?;
+    return Ok(Stmt::Fn(Fn {
+        name: name.into(),
+        generic_params: gen_params,
+        args: params,
+        return_ty: ret_ty,
+        body,
+        ret,
+    }));
+}
+
+pub fn parse_raw_function<'s>(input: &'s str) -> Result<Stmt<'s>, pest::error::Error<Rule>> {
+    return parse_function(DinoParse::parse(Rule::function, input)?
+        .next()
+        .unwrap())
+        .map_err(|_e| todo!());
+}
+
 fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::declaration));
     let mut inner = input.into_inner();
@@ -290,53 +348,7 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()> {
             }));
         }
         Rule::function => {
-            let mut inners = first.into_inner();
-            let [raw_name, gen_params, params, ret_ty, body] = [
-                inners.next().unwrap(),
-                inners.next().unwrap(),
-                inners.next().unwrap(),
-                inners.next().unwrap(),
-                inners.next().unwrap(),
-            ];
-            let name = raw_name.as_str();
-            let gen_params = gen_params.into_inner().map(|p| p.as_str().into()).collect();
-            let params = params
-                .into_inner()
-                .next()
-                .map(|params| {
-                    params
-                        .into_inner()
-                        .map(|p| {
-                            let mut inner = p.into_inner();
-                            let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
-                            let name = name.as_str();
-                            let ty = parse_type(ty)?;
-                            if let Some(default) = inner.next() {
-                                todo!()
-                            }
-                            Ok(FnArg {
-                                name: name.into(),
-                                ty,
-                                default: None,
-                            })
-                        })
-                        .collect()
-                })
-                .transpose()?
-                .unwrap_or_default();
-            let ret_ty = parse_type(ret_ty)?;
-            let mut body_inner = body.into_inner();
-            let [body_exec, ret] = [body_inner.next().unwrap(), body_inner.next().unwrap()];
-            let body = parse_execution(body_exec)?;
-            let ret = parse_expr(ret)?;
-            return Ok(Stmt::Fn(Fn {
-                name: name.into(),
-                generic_params: gen_params,
-                args: params,
-                return_ty: ret_ty,
-                body,
-                ret,
-            }));
+            return parse_function(first);
         }
 
         Rule::compound_def => {

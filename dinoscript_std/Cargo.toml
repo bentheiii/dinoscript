@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 dinoscript_core = { path = "../dinoscript_core" }
+
+[features]
+build_ds = []
