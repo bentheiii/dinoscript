@@ -1,6 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use dinoscript_core::{
-    bytecode::{Command, SourceId, to_in_code},
+    bytecode::{Command, SourceId},
     compilation_scope::{
         self,
         ty::{BuiltinTemplate, Ty, TyTemplate},
@@ -9,6 +9,9 @@ use dinoscript_core::{
     dinobj::{DinObject, StackItem},
     dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature},
 };
+// pragma: skip 2
+use std::collections::HashMap;
+use dinoscript_core::bytecode::to_in_code;
 
 pub struct Builtins<'s> {
     pub int: Arc<Ty<'s>>,

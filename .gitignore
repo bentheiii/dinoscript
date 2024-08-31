@@ -25,4 +25,3 @@ Cargo.lock
 /target
 
 .vscode/settings.json
-dinoscript_std/src/items.rs

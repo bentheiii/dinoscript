@@ -1,13 +1,16 @@
 mod items_template;
 
-use std::{collections::HashMap, fs::File, io::{BufRead, BufReader, Read, Write}};
+use std::{collections::HashMap, fs::File, io::{BufRead, BufReader, Write}};
 
 use items_template::setup_items;
 fn main(){
+    println!("cargo::rerun-if-changed=items_template.rs");
+
     let replacements = setup_items().replacements;
     
     let template_file = BufReader::new(File::open("items_template.rs").unwrap());
-    let output_file = File::create("src/items.rs").unwrap();
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let output_file = File::create(format!("{out_dir}/items.rs")).unwrap();
     apply_template(output_file, template_file, &replacements);
 }
 

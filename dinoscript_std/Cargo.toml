@@ -2,7 +2,6 @@
 name = "dinoscript_std"
 version = "0.1.0"
 edition = "2021"
-default-run = "build_std"
 
 [dependencies]
 dinoscript_core = { path = "../dinoscript_core" }
