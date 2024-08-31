@@ -9,3 +9,6 @@ dinoscript_core = { path = "../dinoscript_core" }
 
 [features]
 build_ds = []
+
+[build-dependencies]
+dinoscript_core = { path = "../dinoscript_core" }

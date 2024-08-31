@@ -52,13 +52,13 @@ impl<'s> Command<'s> {
     }
 }
 
-pub fn to_in_code<'s>(commands: &Vec<Command<'s>>) -> String {
+pub fn to_in_code<'s>(commands: &Vec<Command<'s>>, indent: &str) -> String {
     let inner = commands
         .iter()
-        .map(|c| c.to_in_code("    "))
+        .map(|c| c.to_in_code(&format!("{indent}    ")))
         .collect::<Vec<String>>()
         .join(&format!(",\n"));
-    format!("vec![\n{inner}\n]")
+    format!("vec![\n{inner}\n{indent}]")
 }
 
 pub type SourceId = &'static str;

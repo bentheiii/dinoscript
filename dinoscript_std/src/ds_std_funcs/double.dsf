@@ -1,3 +1,0 @@
-fn double(x: int)->int{
-    x+x
-}

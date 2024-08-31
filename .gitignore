@@ -25,5 +25,4 @@ Cargo.lock
 /target
 
 .vscode/settings.json
-dinoscript_std/src/ds_std_funcs/*.dsbi
-dinoscript_std/src/ds_std_funcs/*.cln
+dinoscript_std/src/items.rs
