@@ -6,3 +6,4 @@ pub mod dinopack;
 pub mod grammar;
 pub mod maybe_owned;
 pub mod runtime;
+pub mod errors;

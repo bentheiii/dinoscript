@@ -164,7 +164,7 @@ ItemsBuilder<'a, 's>
     // pragma:skip 1
     let mut builder = prepare_build();
     vec![
-        // pragma:unwrap-start
+        // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn add (a: int, b: int) -> int),
@@ -181,7 +181,41 @@ ItemsBuilder<'a, 's>
                     }
                 })),
             ))
-        // pragma:unwrap-end
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn assert (a: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|mut stack| {
+                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                        todo!()
+                    };
+                    match a.as_ref() {
+                        DinObject::Bool(true) => Ok(Ok(a.clone())),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn eq (a: int, b: int) -> bool),
+                SetupFunctionBody::System(Box::new(|mut stack| {
+                    let StackItem::Value(Ok(b)) = stack.pop().unwrap() else {
+                        todo!()
+                    };
+                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Bool(a == b)))),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
         )
         ,
         // pragma:replace-start

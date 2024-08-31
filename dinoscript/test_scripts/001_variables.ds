@@ -1,0 +1,4 @@
+fn main()->bool{
+    let x = 5;
+    assert(x == 5)
+}

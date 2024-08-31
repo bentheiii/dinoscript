@@ -179,7 +179,7 @@ pub enum NamedType<'s> {
 
 #[derive(Debug, Clone)]
 pub struct Overloads<'s> {
-    overloads: Vec<Overload<'s>>,
+    pub overloads: Vec<Overload<'s>>,
 }
 
 impl<'s> Overloads<'s> {
@@ -697,6 +697,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         Ok(Arc::new(Ty::Tail))
                     }
                     None => {
+                        dbg!(name);
                         todo!() // raise an error
                     }
                 }

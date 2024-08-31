@@ -1,4 +1,3 @@
-use dinoscript_core::bytecode::to_in_code;
 use dinoscript_core::compilation_scope::CompilationScope;
 use dinoscript_core::dinopack::DinoPack;
 use dinoscript_core::grammar::parse_raw_statements;
