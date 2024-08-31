@@ -7,6 +7,7 @@ members = [
     "dinoscript_playground",
     "dinoscript_std",
 ]
-default-members = [ 
+
+default-members = [
     "dinoscript_playground",
 ]

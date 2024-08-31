@@ -1,8 +1,0 @@
-vec![
-    dinoscript_core::bytecode::Command::PopToCell(0),
-    dinoscript_core::bytecode::Command::PushFromCell(0),
-    dinoscript_core::bytecode::Command::PushFromCell(0),
-    dinoscript_core::bytecode::Command::PushFromSource(dinoscript_core::bytecode::PushFromSource::new("core",0)),
-    dinoscript_core::bytecode::Command::MakePending(2),
-    dinoscript_core::bytecode::Command::EvalTop
-]
