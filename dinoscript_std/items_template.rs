@@ -218,6 +218,25 @@ ItemsBuilder<'a, 's>
             ))
         )
         ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn mul (a: int, b: int) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a * b))),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id

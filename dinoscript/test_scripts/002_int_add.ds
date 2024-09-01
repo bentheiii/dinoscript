@@ -1,0 +1,5 @@
+fn main()->bool{
+    let x = 5;
+    let y = 10;
+    assert(x+y == 15)
+}

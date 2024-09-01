@@ -1,0 +1,9 @@
+fn digits(tens: int, ones: int)->int{
+    tens*10 + ones
+}
+
+fn main()->bool{
+    let x = 5;
+    let y = 1;
+    assert(digits(x, y) == 51)
+}

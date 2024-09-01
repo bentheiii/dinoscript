@@ -9,6 +9,7 @@ use dinoscript_core::{compilation_scope::CompilationScope, grammar::parse_raw_st
 use dinoscript_std::StdPack;
 use glob::glob;
 use itertools::Itertools;
+use stdext::function_name;
 
 fn test_script(script_number: usize){
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
@@ -68,7 +69,22 @@ fn test_script(script_number: usize){
     };
 }
 
+fn test_script_from_name(name: &str){
+    let script_number = name[name.len()-3..].parse().unwrap();
+    test_script(script_number);
+}
+
 #[test]
 fn test_script_001(){
-    test_script(1);
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_002(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_003(){
+    test_script_from_name(function_name!());
 }

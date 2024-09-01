@@ -10,3 +10,4 @@ dinoscript_std = { path = "../dinoscript_std" }
 [dev-dependencies]
 glob = "0.3.1"
 itertools = "0.13.0"
+stdext = "0.3.3"
