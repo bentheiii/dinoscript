@@ -2,8 +2,9 @@ use std::fs;
 
 use dinoscript_core::bytecode::Command;
 use dinoscript_core::compilation_scope::{NamedItem, Overload, OverloadLoc};
+use dinoscript_core::dinobj::{DinObject, StackItem};
 use dinoscript_core::dinopack::DinoPack;
-use dinoscript_core::runtime::RuntimeFrame;
+use dinoscript_core::runtime::{Runtime, RuntimeFrame};
 use dinoscript_core::{compilation_scope::CompilationScope, grammar::parse_raw_statements};
 use dinoscript_std::StdPack;
 use glob::glob;
@@ -46,7 +47,8 @@ fn test_script(script_number: usize){
     let main_cell = *main_cell;
 
     let push_command = Command::PushFromCell(main_cell);
-    let mut runtime_frame = RuntimeFrame::root(scope.n_cells);
+    let runtime = Runtime::new();
+    let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
     core_pack.setup_runtime(&mut runtime_frame);
     for com in commands.iter() {
         runtime_frame.execute(com).unwrap();
@@ -57,8 +59,13 @@ fn test_script(script_number: usize){
     runtime_frame.execute(&Command::EvalTop).unwrap();
     
     // result of main should now be on top of the stack
-    let result = runtime_frame.stack.pop().unwrap();
-    println!("{:?}", result);
+    let popped = runtime_frame.stack.pop().unwrap();
+    let StackItem::Value(Ok(result_ref)) = popped else {
+        panic!("main did not return a value, got {:?}", popped);
+    };
+    let DinObject::Bool(true) = result_ref.as_ref() else {
+        panic!("main did not return true, got {:?}", result_ref);
+    };
 }
 
 #[test]

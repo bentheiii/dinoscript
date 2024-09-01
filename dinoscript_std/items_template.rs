@@ -6,7 +6,7 @@ use dinoscript_core::{
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
     },
-    dinobj::{DinObject, StackItem},
+    dinobj::{DinObject},
     dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature},
 };
 // pragma: skip 2
@@ -168,15 +168,15 @@ ItemsBuilder<'a, 's>
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn add (a: int, b: int) -> int),
-                SetupFunctionBody::System(Box::new(|mut stack| {
-                    let StackItem::Value(Ok(b)) = stack.pop().unwrap() else {
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
-                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                    let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
                     match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Int(a + b)))),
+                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a + b))),
                         _ => Ok(Err(())),
                     }
                 })),
@@ -187,12 +187,12 @@ ItemsBuilder<'a, 's>
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn assert (a: bool) -> bool),
-                SetupFunctionBody::System(Box::new(|mut stack| {
-                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
                     match a.as_ref() {
-                        DinObject::Bool(true) => Ok(Ok(a.clone())),
+                        DinObject::Bool(true) => Ok(Ok(frame.runtime().bool(true)?)),
                         _ => Ok(Err(())),
                     }
                 })),
@@ -203,15 +203,15 @@ ItemsBuilder<'a, 's>
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn eq (a: int, b: int) -> bool),
-                SetupFunctionBody::System(Box::new(|mut stack| {
-                    let StackItem::Value(Ok(b)) = stack.pop().unwrap() else {
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
-                    let StackItem::Value(Ok(a)) = stack.pop().unwrap() else {
+                    let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
                     match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(Arc::new(DinObject::Bool(a == b)))),
+                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
                         _ => Ok(Err(())),
                     }
                 })),

@@ -2,7 +2,7 @@ use derive_more::Debug;
 
 use std::{borrow::Cow, ops::Deref, sync::Arc, mem::size_of};
 
-use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::Runtime};
+use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{Runtime, RuntimeFrame, SystemRuntimeFrame}};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -28,7 +28,13 @@ impl<'s> DinObject<'s>{
     }
 }
 
-pub type SourceFnFunc = Box<dyn for<'s> Fn(DinoStack<'s>) -> DinoResult<'s>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TailCallAvailability {
+    Allowed,
+    Disallowed,
+}
+
+pub type SourceFnFunc = Box<dyn for<'s, 'r> Fn(&mut SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s>>;
 
 #[derive(Debug)]
 pub struct UserFn<'s> {

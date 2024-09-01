@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, sync::{Arc, Mutex}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
+    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
 };
 
 #[derive(Debug)]
@@ -24,7 +24,7 @@ struct SharedRuntime<'s> {
 pub struct Runtime<'s>(Arc<Mutex<SharedRuntime<'s>>>);
 
 impl<'s> Runtime<'s> {
-    fn allocate(&self, obj: Result<DinObject<'s>, RuntimeError>) -> DinoResult<'s> {
+    pub fn allocate(&self, obj: Result<DinObject<'s>, RuntimeError>) -> DinoResult<'s> {
         let Ok(obj) = obj else {todo!()};
         let size = obj.allocated_size();
         let allocated_object = AllocatedObject::new(obj, self.clone());
@@ -45,7 +45,7 @@ impl<'s> Runtime<'s> {
             null: MaybeUninit::uninit(),
             nil: MaybeUninit::uninit(),
         };
-        let mut ret = Self(Arc::new(Mutex::new(shared_runtime)));
+        let ret = Self(Arc::new(Mutex::new(shared_runtime)));
         let true_ = ret.allocate(Ok(DinObject::Bool(true))).unwrap().unwrap();
         let false_ = ret.allocate(Ok(DinObject::Bool(false))).unwrap().unwrap();
         let nil = ret.allocate(Ok(DinObject::Struct(vec![]))).unwrap().unwrap();
@@ -63,17 +63,20 @@ impl<'s> Runtime<'s> {
     }
 
     pub fn bool(&self, b: bool) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        let x = self.0.lock().unwrap();
-        self.clone_ref(
-        if b {
+        let r = {
+            let x = self.0.lock().unwrap();
+            if b {
                 unsafe {
-                    x.true_.assume_init_ref()
+                    x.true_.assume_init_read()
                 }
             } else {
                 unsafe {
-                    x.false_.assume_init_ref()
+                    x.false_.assume_init_read()
                 }
             }
+        };
+        self.clone_ref(
+            &r
         )
     }
 
@@ -115,7 +118,7 @@ impl<'s> Sources<'s> {
 
 pub struct RuntimeFrame<'s, 'r> {
     pub stack: DinoStack<'s>,
-    runtime: &'r Runtime<'s>,
+    pub runtime: &'r Runtime<'s>,
 
     user_fn: Option<AllocatedRef<'s>>, // guaranteed to be a UserFn if present
     pub cells: Vec<RuntimeCell<'s>>,
@@ -177,7 +180,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    fn eval_top(&mut self) -> Result<(), ()> {
+    fn eval_top(&mut self) -> Result<(), RuntimeViolation> {
         loop {
             match self.stack.last() {
                 Some(StackItem::Value(_)) => return Ok(()),
@@ -201,7 +204,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
-                            let Ok(ret) = source_fn(arguments) else { todo!() };
+                            let mut frame = SystemRuntimeFrame::from_parent(&self, arguments);
+                            let ret = source_fn(&mut frame)?;
                             self.stack.push(StackItem::Value(ret));
                         }
                         _ => {
@@ -340,6 +344,57 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             }
             Command::VariantOpt(i) => {
                 todo!()
+            }
+        }
+    }
+}
+
+
+pub struct SystemRuntimeFrame<'p, 's, 'r>{
+    pub stack: DinoStack<'s>,
+    parent: &'p RuntimeFrame<'s, 'r>,
+}
+
+impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
+    fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>) -> Self {
+        Self{
+            stack,
+            parent,
+        }
+    }
+
+    fn from_system_parent(parent: &'p SystemRuntimeFrame<'p, 's, 'r>, stack: DinoStack<'s>) -> Self {
+        Self::from_parent(parent.parent, stack)
+    }
+
+    pub fn runtime(&self) -> &'r Runtime<'s> {
+        self.parent.runtime
+    }
+
+    pub fn eval_pop(&mut self) -> DinoResult<'s> {
+        loop {
+            match self.stack.pop().unwrap(){
+                StackItem::Value(val) => return Ok(val),
+                StackItem::Pending(Pending {func, arguments}) => {
+                    match func.as_ref(){
+                        DinObject::UserFn(user_fn) => {
+                            let mut new_frame = self.parent.child(func.clone());
+                            new_frame.stack.extend(arguments);
+                            for command in user_fn.commands.iter(){
+                                new_frame.execute(command)?;
+                            }
+                            let ret = new_frame.stack.pop().unwrap();
+                            let StackItem::Value(val) = ret else {panic!()};
+                            self.stack.push(StackItem::Value(val));
+                        }
+                        DinObject::SourceFn(source_fn) => {
+                            let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments);
+                            let ret = source_fn(&mut new_frame)?;
+                            self.stack.push(StackItem::Value(ret));
+                        }
+                        _ => {panic!()}
+                    }
+                }
             }
         }
     }

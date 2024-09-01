@@ -42,7 +42,7 @@ impl DinoPack for StdPack {
         let mut items = Vec::new();
 
         for item in setup_items() {
-            items.push(item.to_dinobject());
+            items.push(item.to_dinobject(&frame.runtime).unwrap());
         }
 
         frame.add_source(source_id, items);

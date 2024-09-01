@@ -1,7 +1,7 @@
 use dinoscript_core::compilation_scope::CompilationScope;
 use dinoscript_core::dinopack::DinoPack;
 use dinoscript_core::grammar::parse_raw_statements;
-use dinoscript_core::runtime::RuntimeFrame;
+use dinoscript_core::runtime::{Runtime, RuntimeFrame};
 use dinoscript_std::StdPack;
 
 fn main() {
@@ -25,7 +25,8 @@ fn main() {
     }
     //print!("{}", to_in_code(&sink));
     //return;
-    let mut runtime_frame = RuntimeFrame::root(scope.n_cells);
+    let runtime = Runtime::new();
+    let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
     core_pack.setup_runtime(&mut runtime_frame);
     for com in sink.iter() {
         runtime_frame.execute(com).unwrap();

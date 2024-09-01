@@ -11,9 +11,7 @@ pub mod utils {
     use std::{borrow::Cow, sync::Arc};
 
     use crate::{
-        bytecode::SourceId,
-        compilation_scope::{ty::Ty, CompilationScope, Overload, OverloadArg, OverloadLoc, SystemLoc},
-        dinobj::{DinObject, SourceFnFunc, UserFn},
+        bytecode::SourceId, compilation_scope::{ty::Ty, CompilationScope, Overload, OverloadArg, OverloadLoc, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
     };
 
     pub enum SetupItem<'s, C> {
@@ -36,9 +34,9 @@ pub mod utils {
             }
         }
 
-        pub fn to_dinobject(self) -> Arc<DinObject<'s>> {
+        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
             match self {
-                SetupItem::Function(f) => f.to_dinobject(),
+                SetupItem::Function(f) => f.to_dinobject(runtime),
             }
         }
     }
@@ -58,11 +56,13 @@ pub mod utils {
             (sig.name.clone(), sig.to_overload(loc))
         }
 
-        pub fn to_dinobject(self) -> Arc<DinObject<'s>> {
-            match self.body {
-                SetupFunctionBody::System(f) => Arc::new(DinObject::SourceFn(f)),
-                SetupFunctionBody::User(f) => Arc::new(DinObject::UserFn(f)),
-            }
+        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+            Ok(runtime.allocate(Ok(
+                match self.body {
+                    SetupFunctionBody::System(f) => DinObject::SourceFn(f),
+                    SetupFunctionBody::User(f) => DinObject::UserFn(f),
+                }
+            ))?.unwrap())
         }
     }
 
