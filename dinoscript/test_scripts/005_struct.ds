@@ -1,0 +1,13 @@
+struct Foo (
+    x: int,
+    y: int,
+)
+
+fn foo(f: Foo)->int{
+    f::x*10 + f::y
+}
+
+fn main()->bool{
+    let f: Foo = Foo(5, 1);
+    assert(foo(f) == 51)
+}

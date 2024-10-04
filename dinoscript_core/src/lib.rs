@@ -9,3 +9,4 @@ pub mod runtime;
 pub mod errors;
 mod unique;
 mod overloads;
+mod compilation_error;

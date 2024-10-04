@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty}
 };
 
 #[derive(Parser)]
@@ -356,7 +356,26 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()> {
         }
 
         Rule::compound_def => {
-            todo!()
+            let mut inner = first.into_inner();
+            let [kind, raw_name, gen_params, fields] = [inner.next().unwrap(), inner.next().unwrap(), inner.next().unwrap(), inner.next().unwrap()];
+            let name = raw_name.as_str();
+            let kind = match kind.as_str() {
+                "struct" => CompoundKind::Struct,
+                "union" => CompoundKind::Union,
+                _ => unreachable!(),
+            };
+            let gen_params = gen_params.into_inner().map(|p| todo!()).collect();
+            let fields = fields
+                .into_inner()
+                .map(|field|{
+                    let mut inner = field.into_inner();
+                    let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
+                    let name = name.as_str();
+                    let ty = parse_type(ty)?;
+                    Ok(Field::new(name, ty))
+                })
+                .collect::<Result<_,_>>()?;
+            return Ok(Stmt::Compound(Compound::new(kind, name, gen_params, fields)).with_pair(input_marker));
         }
         Rule::type_def => {
             todo!()

@@ -211,20 +211,46 @@ pub mod statement {
     }
 
     pub struct Compound<'s> {
-        kind: CompoundKind,
-        name: Cow<'s, str>,
-        generic_params: Vec<Cow<'s, str>>,
-        fields: Vec<Field<'s>>,
+        pub name: Cow<'s, str>,
+        pub kind: CompoundKind,
+        pub generic_params: Vec<Cow<'s, str>>,
+        pub fields: Vec<Field<'s>>,
     }
 
+    impl<'s> Compound<'s> {
+        pub fn new(
+            kind: CompoundKind,
+            name: impl Into<Cow<'s, str>>,
+            generic_params: Vec<Cow<'s, str>>,
+            fields: Vec<Field<'s>>,
+        ) -> Compound<'s> {
+            Compound {
+                kind,
+                name: name.into(),
+                generic_params,
+                fields,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
     pub enum CompoundKind {
         Struct,
         Union,
     }
 
     pub struct Field<'s> {
-        name: Cow<'s, str>,
-        ty: Ty<'s>,
+        pub name: Cow<'s, str>,
+        pub ty: Ty<'s>,
+    }
+
+    impl<'s> Field<'s> {
+        pub fn new(name: impl Into<Cow<'s, str>>, ty: Ty<'s>) -> Field<'s> {
+            Field {
+                name: name.into(),
+                ty,
+            }
+        }
     }
 
     pub struct Let<'s> {

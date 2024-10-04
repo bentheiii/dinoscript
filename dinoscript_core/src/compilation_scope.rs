@@ -1,28 +1,26 @@
 use std::{
-    borrow::{Borrow, Cow},
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
+    borrow::Cow, collections::{hash_map::Entry, HashMap}, fmt::Display, sync::Arc
 };
 
-use ty::{Fn, Generic, GenericSetId, Specialized, Ty, TyTemplate};
+use indexmap::IndexMap;
+use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Ty, TyTemplate};
 
 use crate::{
     ast::{
-        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}, ty::FnTy
-    },
-    bytecode::{Command, MakeFunction, PushFromSource, SourceId},
-    //core::Builtins,
-    maybe_owned::MaybeOwned, overloads::BindingResolution,
+        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::{Pairable, WithPair}, statement::{self, Compound, Let, Stmt, StmtWithPair}, ty::FnTy
+    }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::BindingResolution
 };
 
 pub mod ty {
-    use std::{borrow::Cow, collections::HashMap, num::NonZero, sync::Arc};
+    use std::{borrow::Cow, collections::HashMap, fmt::Display, num::NonZero, sync::Arc};
+    use indexmap::IndexMap;
+
     use crate::unique;
 
     #[derive(Debug)]
-    struct TemplateGenericSpecs{
-        id: GenericSetId,
-        n_generics: NonZero<usize>,
+    pub struct TemplateGenericSpecs{
+        pub id: GenericSetId,
+        pub n_generics: NonZero<usize>,
     }
 
     impl TemplateGenericSpecs {
@@ -64,6 +62,13 @@ pub mod ty {
                 TyTemplate::Compound(template) => template.generics.as_ref(),
             }.map(|specs| specs.id)
         }
+
+        pub fn name(&self) -> &Cow<'s, str> {
+            match self {
+                TyTemplate::Builtin(template) => &template.name,
+                TyTemplate::Compound(template) => &template.name,
+            }
+        }
     }
 
     #[derive(Debug)]
@@ -91,9 +96,26 @@ pub mod ty {
     #[derive(Debug)]
     pub struct CompoundTemplate<'s> {
         pub name: Cow<'s, str>,
-        compound_kind: CompoundKind,
-        generics: Option<TemplateGenericSpecs>,
-        fields: HashMap<Cow<'s, str>, Field<'s>>,
+        pub compound_kind: CompoundKind,
+        pub generics: Option<TemplateGenericSpecs>,
+        pub fields: IndexMap<Cow<'s, str>, Field<'s>>,
+    }
+
+    impl<'s> CompoundTemplate<'s> {
+        pub fn new(
+            name: impl Into<Cow<'s, str>>,
+            compound_kind: CompoundKind,
+            generics: Option<TemplateGenericSpecs>,
+            fields: IndexMap<Cow<'s, str>, Field<'s>>,
+        ) -> Self {
+            Self {
+                name: name.into(),
+                compound_kind,
+                generics,
+                fields,
+            }
+        }
+        
     }
 
     #[derive(Debug, Clone)]
@@ -106,6 +128,15 @@ pub mod ty {
     pub enum CompoundKind {
         Struct,
         Union,
+    }
+
+    impl From<crate::ast::statement::CompoundKind> for CompoundKind {
+        fn from(kind: crate::ast::statement::CompoundKind) -> Self {
+            match kind {
+                crate::ast::statement::CompoundKind::Struct => Self::Struct,
+                crate::ast::statement::CompoundKind::Union => Self::Union,
+            }
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -138,6 +169,32 @@ pub mod ty {
                 Ty::Generic(gen) if gen_id.is_some_and(|gid| gen.gen_id == gid) => generic_args[gen.idx].clone(),
                 Ty::Generic(_) => self.clone(),
                 Ty::Tail => tail.clone(),
+            }
+        }
+    }
+
+    impl<'s> Display for Ty<'s>{
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Ty::Specialized(specialized) => {
+                    if specialized.args.is_empty(){
+                        write!(f, "{}", specialized.template.name())
+                    } else {
+                        write!(f, "{}<{}>", specialized.template.name(), specialized.args.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", "))
+                    }
+                },
+                Ty::Tuple(tys) => {
+                    write!(f, "({})", tys.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", "))
+                },
+                Ty::Fn(fn_ty) => {
+                    write!(f, "({}) -> {}", fn_ty.args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>().join(", "), fn_ty.return_ty)
+                },
+                Ty::Generic(gen) => {
+                    write!(f, "T_{}", gen.idx)
+                },
+                Ty::Tail => {
+                    write!(f, "...")
+                }
             }
         }
     }
@@ -205,8 +262,16 @@ pub struct Variable<'s> {
 #[derive(Debug, Clone)]
 pub enum NamedType<'s> {
     Template(Arc<TyTemplate<'s>>),
-    // is guaranteed to be a generic
-    Concrete(Arc<Ty<'s>>),
+    Concrete(Arc<Ty<'s>>), // will always be a generic parameter
+}
+
+impl Display for NamedType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NamedType::Template(template) => write!(f, "{}", template.name()),
+            NamedType::Concrete(ty) => write!(f, "{}", ty),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -479,7 +544,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         self.gen_prim_type("Optional", vec![ty])
     }
 
-    fn parse_type(&self, ty: &ast::ty::Ty<'s>) -> Result<Arc<Ty<'s>>, ()> {
+    fn parse_type<'c: 's>(&self, ty: &ast::ty::Ty<'c>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
         match ty {
             ast::ty::Ty::Ref(name) => {
                 let item = self.get_named_item(name).unwrap();
@@ -606,7 +671,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         functor: &Functor<'c>,
         args: impl IntoIterator<Item = &'a ExprWithPair<'c>>,
         sink: &mut Vec<Command<'c>>,
-    ) -> Result<Arc<Ty<'s>>, ()>
+    ) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>>
     where
         's: 'a,
     {
@@ -631,7 +696,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }
 
                 if let Expr::Ref(name) = &expr.as_ref().inner {
-                    if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = self.get_named_item(name){
+                    let named_item = self.get_named_item(name);
+                    if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = named_item{
                         // TODO: do we want to process this flow if there's only one overload? For now it's fine
                         let mut resolved_overloads = Vec::new();
                         'outer: for rel_overload in overloads {
@@ -641,7 +707,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             let mut resolution = BindingResolution::new(None, 0);
                             for (param, arg_ty) in rel_overload.overload.args.iter().zip(arg_types.iter()) {
                                 if let Err(_) = resolution.assign(&param.ty, arg_ty){
-                                    dbg!(param, arg_ty);
                                     // todo report the error?
                                     continue 'outer;
                                 }
@@ -661,6 +726,22 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 Ok(fn_ty.return_ty.clone())
                             }
                             _ => todo!(), // raise an error
+                        }
+                    }
+                    if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
+                        if let TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Struct, generics, fields , name: struct_name}) = template_arc.as_ref(){
+                            if fields.len() != arg_types.len() {
+                                return Err(CompilationError::StructInstantiationFieldsMismatch { struct_name: struct_name.clone(), expected_num_fields: fields.len(), actual_num_fields: arg_types.len()}.with_pair(expr.pair.clone()));
+                            }
+                            let mut resolution = BindingResolution::new(generics.as_ref().map(|g| g.id), generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default());
+                            for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
+                                if let Err(_) = resolution.assign(&field.ty, arg_ty){
+                                    return Err(CompilationError::ArgumentTypeMismatch { func_name: struct_name.clone(), param_n: i, param_name: Some(name.clone()), expected_ty: field.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
+                                }
+                            }
+                            let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect());
+                            sink.push(Command::Struct(fields.len()));
+                            return Ok(resolved_ty);
                         }
                     }
                 }
@@ -710,7 +791,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_expression<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_expression<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
         // put commands in the sink to ensure that the (possibly lazy) expression is at the top of the stack
         match &expr.inner {
             Expr::LitInt(value) => {
@@ -763,8 +844,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         self.feed_relative_location(&overload.loc, sink);
                         Ok(ty)
                     }
-                    Some(RelativeNamedItem::Type(..)) => {
-                        todo!() // raise an error
+                    Some(RelativeNamedItem::Type(nt)) => {
+                        Err(CompilationError::TypeUsedAsValue { ty:  nt.clone()}.with_pair(expr.pair.clone()))
                     }
                     Some(RelativeNamedItem::Tail(idx)) => {
                         sink.push(Command::PushTail(idx));
@@ -847,19 +928,24 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_return<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_return<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
         let ret = self.feed_expression(expr, sink)?;
         sink.push(Command::EvalTop);
         Ok(ret)
     }
 
-    pub fn feed_statement<'c: 's>(&mut self, stmt: &StmtWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), ()> {
+    pub fn feed_statement<'c: 's>(&mut self, stmt: &StmtWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), CompilationErrorWithPair<'c, 's>> {
         match &stmt.inner {
             Stmt::Let(Let { var, ty, expr }) => {
                 let actual_ty = self.feed_expression(&expr, sink)?;
-                let declared_ty = if let Some(_explicit_ty) = ty {
-                    // todo check that actual_ty is a subtype of ty
-                    todo!("resolve explicit type")
+                let declared_ty = if let Some(explicit_ty) = ty {
+                    // we should check that actual_ty is a subtype of ty
+                    let mut assignment = BindingResolution::primitive();
+                    let ty = self.parse_type(explicit_ty)?;
+                    if let Err(_) = assignment.assign(&ty, &actual_ty) {
+                        return Err(CompilationError::LetTypeMismatch { var: var.clone(), expected_ty: ty, actual_ty }.with_pair(stmt.pair.clone()));
+                    }
+                    ty
                 } else {
                     actual_ty.clone()
                 };
@@ -930,6 +1016,35 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 };
                 self.add_overload(name.clone(), new_overload);
                 sink.push(Command::PopToCell(cell_idx));
+                Ok(())
+            }
+            Stmt::Compound(compound) => {
+                let generics = if compound.generic_params.is_empty() {
+                    None
+                } else {
+                    todo!()
+                };
+                let fields = compound
+                    .fields
+                    .iter()
+                    .map(|field| -> Result<_, _> {
+                        Ok((
+                            // todo check for duplicates
+                            field.name.clone(),
+                            Field {
+                                ty: self.parse_type(&field.ty)?,
+                                idx: self.get_cell_idx(),
+                            },
+                        ))
+                    })
+                    .collect::<Result<IndexMap<_, _>, _>>()?;
+                let template = TyTemplate::Compound(
+                    CompoundTemplate::new(compound.name.clone(), compound.kind.into(), generics, fields)
+                );
+                self.names.insert(
+                    compound.name.clone(),
+                    NamedItem::Type(NamedType::Template(Arc::new(template))),
+                );
                 Ok(())
             }
             _ => todo!(),

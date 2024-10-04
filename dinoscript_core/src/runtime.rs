@@ -335,7 +335,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             Command::MakePending(n_args) => {
                 self.eval_top()?;
                 let StackItem::Value(func) = self.stack.pop().unwrap() else {
-                    todo!()
+                    unreachable!()
                 };
                 let Ok(func) = func else { todo!() };
                 let arguments = self.stack.drain(self.stack.len() - n_args..).collect();
@@ -343,10 +343,41 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(())
             }
             Command::Attr(i) => {
-                todo!()
+                self.eval_top()?;
+                let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                    unreachable!()
+                };
+                match val {
+                    Ok(item) => {
+                        match item.as_ref(){
+                            DinObject::Struct(fields) => {
+                                let attr = &fields[*i];
+                                self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(attr)?)));
+                                Ok(())
+                            }
+                            _ => todo!()
+                        }
+                    }
+                    _ => todo!()
+                }
             }
             Command::Struct(i) => {
-                todo!()
+                let mut fields = Vec::with_capacity(*i);
+                for _ in 0..*i {
+                    self.eval_top()?;
+                    let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                        unreachable!()
+                    };
+                    fields.push(val);
+                }
+                match fields.into_iter().collect(){
+                    Err(_) => todo!(),
+                    Ok(fields) => {
+                        let struct_ = self.runtime.allocate(Ok(DinObject::Struct(fields)))?;
+                        self.stack.push(StackItem::Value(struct_));
+                        Ok(())
+                    }
+                }
             }
             Command::Variant(i) => {
                 todo!()

@@ -34,7 +34,9 @@ fn test_script(script_number: usize){
     core_pack.setup_compiler(&mut scope);
     let mut commands = Vec::new();
     for stmt in statements {
-        scope.feed_statement(&stmt, &mut commands).unwrap();
+        if let Err(err)  = scope.feed_statement(&stmt, &mut commands){
+            panic!("compilation error: {}", err);
+        }
     }
 
     // we need to find the "main" function
@@ -91,5 +93,10 @@ fn test_script_003(){
 
 #[test]
 fn test_script_004(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_005(){
     test_script_from_name(function_name!());
 }

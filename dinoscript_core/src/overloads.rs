@@ -4,7 +4,7 @@ use crate::compilation_scope::ty::{Generic, GenericSetId, Specialized, Ty};
 
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,
-    bound_generics: Vec<Option<Arc<Ty<'s>>>>
+    pub bound_generics: Vec<Option<Arc<Ty<'s>>>>
 }
 
 impl<'s> BindingResolution<'s> {
@@ -12,6 +12,13 @@ impl<'s> BindingResolution<'s> {
         BindingResolution {
             gen_id,
             bound_generics: vec![None; n_generics],
+        }
+    }
+
+    pub fn primitive() -> Self {
+        BindingResolution {
+            gen_id: None,
+            bound_generics: Vec::new(),
         }
     }
 
