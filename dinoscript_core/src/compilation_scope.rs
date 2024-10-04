@@ -8,10 +8,7 @@ use ty::{Fn, Generic, GenericSetId, Specialized, Ty, TyTemplate};
 
 use crate::{
     ast::{
-        self,
-        expression::{Attr, Call, Expr, Functor, MethodCall, Variant},
-        statement::{self, Let, Stmt},
-        ty::FnTy,
+        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}, ty::FnTy
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     //core::Builtins,
@@ -607,7 +604,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn feed_call<'a, 'c: 's>(
         &mut self,
         functor: &Functor<'c>,
-        args: impl IntoIterator<Item = &'a Expr<'c>>,
+        args: impl IntoIterator<Item = &'a ExprWithPair<'c>>,
         sink: &mut Vec<Command<'c>>,
     ) -> Result<Arc<Ty<'s>>, ()>
     where
@@ -633,7 +630,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     sink.extend(arg_sink);
                 }
 
-                if let Expr::Ref(name) = expr.as_ref() {
+                if let Expr::Ref(name) = &expr.as_ref().inner {
                     if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = self.get_named_item(name){
                         // TODO: do we want to process this flow if there's only one overload? For now it's fine
                         let mut resolved_overloads = Vec::new();
@@ -682,7 +679,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }
             }
             Functor::Operator(op) => self.feed_call(
-                &Functor::Expr(Box::new(Expr::Ref(Cow::Borrowed(op.func_name())))),
+                &Functor::Expr(Box::new(Expr::Ref(Cow::Borrowed(op.inner.func_name())).with_pair(op.pair.clone()))),
                 args,
                 sink,
             ),
@@ -713,9 +710,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn feed_expression<'c: 's>(&mut self, expr: &Expr<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_expression<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
         // put commands in the sink to ensure that the (possibly lazy) expression is at the top of the stack
-        match expr {
+        match &expr.inner {
             Expr::LitInt(value) => {
                 sink.push(Command::PushInt(*value));
                 Ok(self.int())
@@ -843,21 +840,21 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             Expr::Call(Call { functor, args }) => self.feed_call(functor, args, sink),
             Expr::MethodCall(MethodCall { obj, name, args }) => {
                 let args = std::iter::once(obj.as_ref()).chain(args.iter());
-                self.feed_call(&Functor::Expr(Box::new(Expr::Ref(name.clone()))), args, sink)
+                self.feed_call(&Functor::Expr(Box::new(Expr::Ref(name.clone()).with_pair(expr.pair.clone()))), args, sink)
             }
 
             _ => todo!(),
         }
     }
 
-    fn feed_return<'c: 's>(&mut self, expr: &Expr<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
+    fn feed_return<'c: 's>(&mut self, expr: &ExprWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<Arc<Ty<'s>>, ()> {
         let ret = self.feed_expression(expr, sink)?;
         sink.push(Command::EvalTop);
         Ok(ret)
     }
 
-    pub fn feed_statement<'c: 's>(&mut self, stmt: &Stmt<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), ()> {
-        match stmt {
+    pub fn feed_statement<'c: 's>(&mut self, stmt: &StmtWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), ()> {
+        match &stmt.inner {
             Stmt::Let(Let { var, ty, expr }) => {
                 let actual_ty = self.feed_expression(&expr, sink)?;
                 let declared_ty = if let Some(_explicit_ty) = ty {

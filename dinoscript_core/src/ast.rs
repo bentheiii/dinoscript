@@ -1,3 +1,20 @@
+pub mod pairable{
+    #[derive(Debug, Clone)]
+    pub struct WithPair<'s, T>{
+        pub inner: T,
+        pub pair: pest::iterators::Pair<'s, crate::grammar::Rule>
+    }
+
+    pub trait Pairable<'s>: Sized{
+        fn with_pair(self, pair: pest::iterators::Pair<'s, crate::grammar::Rule>) -> WithPair<'s, Self>{
+            WithPair{
+                inner: self,
+                pair
+            }
+        }
+    }
+}
+
 pub mod ty {
 
     use std::borrow::Cow;
@@ -23,8 +40,10 @@ pub mod ty {
 }
 
 pub mod expression {
-    use super::ty::Ty;
+    use super::{pairable::{Pairable, WithPair}, ty::Ty};
     use std::borrow::Cow;
+
+    pub type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
 
     #[derive(Debug, Clone)]
     pub enum Expr<'s> {
@@ -35,7 +54,7 @@ pub mod expression {
         Ref(Cow<'s, str>),
         Disambiguation(Disambiguation<'s>),
         Attr(Attr<'s>),
-        Tuple(Vec<Expr<'s>>),
+        Tuple(Vec<ExprWithPair<'s>>),
         Variant(Variant<'s>),
         VariantOpt(Variant<'s>),
         MethodCall(MethodCall<'s>),
@@ -44,10 +63,12 @@ pub mod expression {
         Lookup(Lookup<'s>),
     }
 
+    impl<'s> Pairable<'s> for Expr<'s>{}
+
     #[derive(Debug, Clone)]
     pub struct Lookup<'s> {
-        pub obj: Box<Expr<'s>>,
-        pub keys: Vec<Expr<'s>>,
+        pub obj: Box<ExprWithPair<'s>>,
+        pub keys: Vec<ExprWithPair<'s>>,
     }
 
     #[derive(Debug, Clone)]
@@ -58,19 +79,19 @@ pub mod expression {
 
     #[derive(Debug, Clone)]
     struct FormattedExpression<'s> {
-        expr: Expr<'s>,
+        expr: ExprWithPair<'s>,
         format: Option<Cow<'s, str>>,
     }
 
     #[derive(Debug, Clone)]
     pub struct Attr<'s> {
-        pub obj: Box<Expr<'s>>,
+        pub obj: Box<ExprWithPair<'s>>,
         pub name: Cow<'s, str>,
     }
 
     #[derive(Debug, Clone)]
     pub struct Variant<'s> {
-        pub obj: Box<Expr<'s>>,
+        pub obj: Box<ExprWithPair<'s>>,
         pub name: Cow<'s, str>,
     }
 
@@ -88,8 +109,8 @@ pub mod expression {
 
     #[derive(Debug, Clone)]
     pub enum Functor<'s> {
-        Expr(Box<Expr<'s>>),
-        Operator(Operator),
+        Expr(Box<ExprWithPair<'s>>),
+        Operator(WithPair<'s, Operator>),
         Specialized(SpecializedFunctor<'s>),
     }
 
@@ -117,6 +138,8 @@ pub mod expression {
         UnInv,
         Lookup,
     }
+
+    impl<'s> Pairable<'s> for Operator{}
 
     impl Operator {
         pub fn func_name(&self) -> &'static str {
@@ -149,22 +172,28 @@ pub mod expression {
     #[derive(Debug, Clone)]
     pub struct Call<'s> {
         pub functor: Functor<'s>,
-        pub args: Vec<Expr<'s>>,
+        pub args: Vec<ExprWithPair<'s>>,
     }
 
     #[derive(Debug, Clone)]
     pub struct MethodCall<'s> {
-        pub obj: Box<Expr<'s>>,
+        pub obj: Box<ExprWithPair<'s>>,
         pub name: Cow<'s, str>,
-        pub args: Vec<Expr<'s>>,
+        pub args: Vec<ExprWithPair<'s>>,
     }
 }
 
 pub mod statement {
+    use crate::grammar::Rule;
 
-    use super::expression::Expr;
+    type Pair<'s> = pest::iterators::Pair<'s, Rule>;
+
+    use super::expression::ExprWithPair;
+    use super::pairable::{Pairable, WithPair};
     use super::ty::Ty;
     use std::borrow::Cow;
+
+    pub type StmtWithPair<'s> = WithPair<'s, Stmt<'s>>;
 
     pub enum Stmt<'s> {
         Let(Let<'s>),
@@ -172,6 +201,8 @@ pub mod statement {
         Type(Type<'s>),
         Compound(Compound<'s>),
     }
+
+    impl<'s> Pairable<'s> for Stmt<'s>{}
 
     pub struct Type<'s> {
         name: Cow<'s, str>,
@@ -199,7 +230,7 @@ pub mod statement {
     pub struct Let<'s> {
         pub var: Cow<'s, str>,
         pub ty: Option<Ty<'s>>,
-        pub expr: Expr<'s>,
+        pub expr: ExprWithPair<'s>,
     }
 
     pub struct Fn<'s> {
@@ -207,8 +238,8 @@ pub mod statement {
         pub generic_params: Vec<Cow<'s, str>>,
         pub args: Vec<FnArg<'s>>,
         pub return_ty: Ty<'s>,
-        pub body: Vec<Stmt<'s>>,
-        pub ret: Expr<'s>,
+        pub body: Vec<StmtWithPair<'s>>,
+        pub ret: ExprWithPair<'s>,
     }
 
     pub struct FnArg<'s> {
@@ -219,7 +250,7 @@ pub mod statement {
 
     #[derive(Debug, Clone)]
     pub enum FnArgDefault<'s> {
-        Value(Expr<'s>),
+        Value(ExprWithPair<'s>),
         ResolveOverload(ResolveOverload<'s>),
     }
 

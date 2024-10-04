@@ -8,9 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, Functor, Lookup, MethodCall, Operator, Variant},
-    statement::{Fn, FnArg, Let, Stmt, Type},
-    ty::{SpecializedTy, Ty},
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty}
 };
 
 #[derive(Parser)]
@@ -49,7 +47,7 @@ fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<Ty<'s>, ()> {
     }
 }
 
-fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
+fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression3));
     let inner = input.into_inner().next().unwrap();
     match inner.as_rule() {
@@ -59,12 +57,12 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
                 Rule::single_quote_str => {
                     let inner = inner.into_inner().next().unwrap();
                     let s = inner.as_str(); // todo string escapes
-                    return Ok(Expr::LitString(s.into()));
+                    return Ok(Expr::LitString(s.into()).with_pair(inner));
                 }
                 Rule::double_quote_str => {
                     let inner = inner.into_inner().next().unwrap();
                     let s = inner.as_str(); // todo string escapes
-                    return Ok(Expr::LitString(s.into()));
+                    return Ok(Expr::LitString(s.into()).with_pair(inner));
                 }
                 _ => {
                     todo!()
@@ -74,47 +72,49 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
         Rule::RAW_STRING => {
             let inner = inner.into_inner().next().unwrap();
             let s = inner.as_str(); // todo string escapes
-            return Ok(Expr::LitString(s.into()));
+            return Ok(Expr::LitString(s.into()).with_pair(inner));
         }
         Rule::FORMATTED_STRING => {
             todo!()
         }
         Rule::bool => {
-            let inner = inner.as_str().parse().unwrap();
-            return Ok(Expr::LitBool(inner));
+            let b = inner.as_str().parse().unwrap();
+            return Ok(Expr::LitBool(b).with_pair(inner));
         }
         Rule::NUMBER_ANY => {
             // todo handle hex, bin, digit seps, floats, etc
             let n = inner.as_str().parse().unwrap();
-            return Ok(Expr::LitInt(n));
+            return Ok(Expr::LitInt(n).with_pair(inner));
         }
         Rule::expression => {
             todo!()
         }
         Rule::tuple => {
+            let pair_mark = inner.clone();
             let mut parts = Vec::new();
             for part in inner.into_inner() {
                 let expr = todo!();
                 parts.push(expr);
             }
-            return Ok(Expr::Tuple(parts));
+            return Ok(Expr::Tuple(parts).with_pair(pair_mark));
         }
         Rule::turbofish_cname => {
-            let mut inner = inner.into_inner();
-            let name = inner.next().unwrap().as_str();
+            let pair_mark = inner.clone();
+            let mut child = inner.into_inner();
+            let name = child.next().unwrap().as_str();
             let mut args = Vec::new();
-            for arg in inner.next().unwrap().into_inner() {
+            for arg in child.next().unwrap().into_inner() {
                 let ty = parse_type(arg)?;
                 args.push(ty);
             }
             return Ok(Expr::Disambiguation(Disambiguation {
                 name: name.into(),
                 arg_tys: args,
-            }));
+            }).with_pair(pair_mark));
         }
         Rule::CNAME => {
             let name = inner.as_str();
-            return Ok(Expr::Ref(name.into()));
+            return Ok(Expr::Ref(name.into()).with_pair(inner));
         }
         _ => {
             unreachable!()
@@ -122,12 +122,13 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
     }
 }
 
-fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
+fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression2));
     let mut inners = input.into_inner();
     let mut ret = parse_expr3(inners.next().unwrap())?;
     while let Some(inner) = inners.next() {
-        match inner.as_rule() {
+        let pair_marker = inner.clone();
+        ret = match inner.as_rule() {
             Rule::method => {
                 let mut inner = inner.into_inner();
                 let [method_name, arg_pairs] = [inner.next().unwrap(), inner.next().unwrap()];
@@ -136,11 +137,11 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
                     let expr = parse_expr(arg)?;
                     args.push(expr);
                 }
-                ret = Expr::MethodCall(MethodCall {
+                Expr::MethodCall(MethodCall {
                     obj: Box::new(ret),
                     name: method_name.as_str().into(),
                     args,
-                });
+                })
             }
             Rule::call => {
                 let arg_pairs = inner
@@ -155,26 +156,26 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
                     let expr = parse_expr(arg)?;
                     args.push(expr);
                 }
-                ret = Expr::Call(Call {
+                Expr::Call(Call {
                     functor: Functor::Expr(Box::new(ret)),
                     args,
-                });
+                })
             }
             Rule::member => {
                 let member_name = inner.into_inner().next().unwrap().as_str();
-                ret = Expr::Attr(Attr {
+                Expr::Attr(Attr {
                     obj: Box::new(ret),
                     name: member_name.into(),
-                });
+                })
             }
             Rule::member_opt_value => {
-                ret = Expr::VariantOpt(Variant {
+                Expr::VariantOpt(Variant {
                     obj: Box::new(ret),
                     name: inner.into_inner().next().unwrap().as_str().into(),
                 })
             }
             Rule::member_value => {
-                ret = Expr::Variant(Variant {
+                Expr::Variant(Variant {
                     obj: Box::new(ret),
                     name: inner.into_inner().next().unwrap().as_str().into(),
                 })
@@ -185,7 +186,7 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
                     let expr = parse_expr(arg)?;
                     args.push(expr);
                 }
-                ret = Expr::Lookup(Lookup {
+                Expr::Lookup(Lookup {
                     obj: Box::new(ret),
                     keys: args,
                 })
@@ -193,12 +194,12 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
             _ => {
                 unreachable!()
             }
-        }
+        }.with_pair(pair_marker);
     }
     return Ok(ret);
 }
 
-fn parse_expr1<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
+fn parse_expr1<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression1));
     let mut iter_rev = input.into_inner().rev();
     let mut expr = parse_expr2(iter_rev.next().unwrap())?;
@@ -209,12 +210,12 @@ fn parse_expr1<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
             Rule::UNARY_NOT => Operator::UnNot,
             Rule::UNARY_INV => Operator::UnInv,
             _ => unreachable!(),
-        };
+        }.with_pair(inner.clone());
 
         expr = Expr::Call(Call {
             functor: Functor::Operator(op),
             args: vec![expr],
-        });
+        }).with_pair(inner);
     }
     Ok(expr)
 }
@@ -238,12 +239,13 @@ static BIN_PRATT: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
         .op(Op::infix(Rule::BINARY_POW, Assoc::Right))
 });
 
-fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
+fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression));
+    let pair_mark = input.clone();
     (*BIN_PRATT)
         .map_primary(parse_expr1)
-        .map_infix(|lhs, op, rhs| {
-            let op = match op.as_rule() {
+        .map_infix(|lhs, op_pair, rhs| {
+            let op = match op_pair.as_rule() {
                 Rule::BINARY_AND => Operator::BinAnd,
                 Rule::BINARY_OR => Operator::BinOr,
                 Rule::BINARY_EQ => Operator::BinEq,
@@ -262,17 +264,19 @@ fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
                 Rule::BINARY_MOD => Operator::BinMod,
                 Rule::BINARY_POW => todo!(),
                 _ => unreachable!(),
-            };
+            }.with_pair(op_pair.clone());
             Ok(Expr::Call(Call {
                 functor: Functor::Operator(op),
                 args: vec![lhs?, rhs?],
-            }))
+            }).with_pair(op_pair))
         })
         .parse(input.into_inner())
+        .map(|expr| expr)
 }
 
-fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()>{
+fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
     debug_assert!(matches!(input.as_rule(), Rule::function));
+    let pair = input.clone();
     let mut inners = input.into_inner();
     let [raw_name, gen_params, params, ret_ty, body] = [
         inners.next().unwrap(),
@@ -319,18 +323,19 @@ fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()>{
         return_ty: ret_ty,
         body,
         ret,
-    }));
+    }).with_pair(pair));
 }
 
-pub fn parse_raw_function<'s>(input: &'s str) -> Result<Stmt<'s>, pest::error::Error<Rule>> {
+pub fn parse_raw_function<'s>(input: &'s str) -> Result<StmtWithPair<'s>, pest::error::Error<Rule>> {
     return parse_function(DinoParse::parse(Rule::function, input)?
         .next()
         .unwrap())
         .map_err(|_e| todo!());
 }
 
-fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()> {
+fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::declaration));
+    let input_marker = input.clone();
     let mut inner = input.into_inner();
     let first = inner.next().unwrap();
     match first.as_rule() {
@@ -344,7 +349,7 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()> {
                 var: name.into(),
                 ty,
                 expr,
-            }));
+            }).with_pair(input_marker));
         }
         Rule::function => {
             return parse_function(first);
@@ -362,12 +367,12 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<Stmt<'s>, ()> {
     }
 }
 
-fn parse_execution<'s>(input: Pair<'s, Rule>) -> Result<Vec<Stmt<'s>>, ()> {
+fn parse_execution<'s>(input: Pair<'s, Rule>) -> Result<Vec<StmtWithPair<'s>>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::execution));
     return input.into_inner().map(parse_statement).collect();
 }
 
-pub fn parse_raw_statements<'s>(input: &'s str) -> Result<Vec<Stmt<'s>>, pest::error::Error<Rule>> {
+pub fn parse_raw_statements<'s>(input: &'s str) -> Result<Vec<StmtWithPair<'s>>, pest::error::Error<Rule>> {
     return DinoParse::parse(Rule::header, input)?
         .next()
         .unwrap()
