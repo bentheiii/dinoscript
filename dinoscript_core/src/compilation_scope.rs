@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use ty::{Fn, Specialized, Ty, TyTemplate};
+use ty::{Fn, Generic, GenericSetId, Specialized, Ty, TyTemplate};
 
 use crate::{
     ast::{
@@ -15,13 +15,29 @@ use crate::{
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     //core::Builtins,
-    maybe_owned::MaybeOwned,
+    maybe_owned::MaybeOwned, overloads::BindingResolution,
 };
 
 pub mod ty {
-    use std::{borrow::Cow, collections::HashMap, sync::Arc};
+    use std::{borrow::Cow, collections::HashMap, num::NonZero, sync::Arc};
+    use crate::unique;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
+    struct TemplateGenericSpecs{
+        id: GenericSetId,
+        n_generics: NonZero<usize>,
+    }
+
+    impl TemplateGenericSpecs {
+        fn new(n_generics: usize) -> Self {
+            Self {
+                id: GenericSetId::unique(),
+                n_generics: NonZero::new(n_generics).unwrap(),
+            }
+        }        
+    }
+
+    #[derive(Debug)]
     pub enum TyTemplate<'s> {
         Builtin(BuiltinTemplate),
         Compound(CompoundTemplate<'s>),
@@ -30,10 +46,7 @@ pub mod ty {
         pub fn instantiate(self: &Arc<Self>, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
             assert_eq!(
                 args.len(),
-                match self.as_ref() {
-                    TyTemplate::Builtin(template) => template.n_generics,
-                    TyTemplate::Compound(template) => template.n_generics,
-                }
+                self.n_generics(),
             );
             Arc::new(Ty::Specialized(Specialized {
                 template: self.clone(),
@@ -43,39 +56,46 @@ pub mod ty {
 
         pub fn n_generics(&self) -> usize {
             match self {
-                TyTemplate::Builtin(template) => template.n_generics,
-                TyTemplate::Compound(template) => template.n_generics,
-            }
+                TyTemplate::Builtin(template) => template.generics.as_ref(),
+                TyTemplate::Compound(template) => template.generics.as_ref(),
+            }.map_or(0, |specs| specs.n_generics.get())
+        }
+
+        pub fn generic_id(&self) -> Option<GenericSetId> {
+            match self {
+                TyTemplate::Builtin(template) => template.generics.as_ref(),
+                TyTemplate::Compound(template) => template.generics.as_ref(),
+            }.map(|specs| specs.id)
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub struct BuiltinTemplate {
         name: Cow<'static, str>,
-        n_generics: usize,
+        generics: Option<TemplateGenericSpecs>,
     }
 
     impl BuiltinTemplate {
         pub fn primitive(name: impl Into<Cow<'static, str>>) -> Self {
             Self {
                 name: name.into(),
-                n_generics: 0,
+                generics: None,
             }
         }
 
         pub fn generic(name: impl Into<Cow<'static, str>>, n_generics: usize) -> Self {
             Self {
                 name: name.into(),
-                n_generics,
+                generics: Some(TemplateGenericSpecs::new(n_generics)),
             }
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub struct CompoundTemplate<'s> {
         pub name: Cow<'s, str>,
         compound_kind: CompoundKind,
-        n_generics: usize,
+        generics: Option<TemplateGenericSpecs>,
         fields: HashMap<Cow<'s, str>, Field<'s>>,
     }
 
@@ -97,30 +117,45 @@ pub mod ty {
         Tuple(Vec<Arc<Ty<'s>>>),
         Fn(Fn<'s>),
         // only applicable inside compound templates and generic functions
-        Generic(usize),
+        Generic(Generic),
         // only applicable inside compound templates
         Tail,
     }
 
     impl<'s> Ty<'s> {
-        pub fn resolve(self: &Arc<Self>, tail: &Arc<Self>, generic_args: &Vec<Arc<Self>>) -> Arc<Self> {
+        pub fn resolve(self: &Arc<Self>, tail: &Arc<Self>, generic_args: &Vec<Arc<Self>>, gen_id: Option<GenericSetId>) -> Arc<Self> {
             match self.as_ref() {
                 Ty::Specialized(specialized) => Arc::new(Ty::Specialized(Specialized {
                     template: specialized.template.clone(),
                     args: specialized
                         .args
                         .iter()
-                        .map(|ty| ty.resolve(tail, generic_args))
+                        .map(|ty| ty.resolve(tail, generic_args, gen_id))
                         .collect(),
                 })),
-                Ty::Tuple(tys) => Arc::new(Ty::Tuple(tys.iter().map(|ty| ty.resolve(tail, generic_args)).collect())),
+                Ty::Tuple(tys) => Arc::new(Ty::Tuple(tys.iter().map(|ty| ty.resolve(tail, generic_args, gen_id)).collect())),
                 Ty::Fn(fn_ty) => Arc::new(Ty::Fn(Fn::new(
-                    fn_ty.args.iter().map(|arg| arg.resolve(tail, generic_args)).collect(),
-                    fn_ty.return_ty.resolve(tail, generic_args),
+                    fn_ty.args.iter().map(|arg| arg.resolve(tail, generic_args, gen_id)).collect(),
+                    fn_ty.return_ty.resolve(tail, generic_args, gen_id),
                 ))),
-                Ty::Generic(idx) => generic_args[*idx].clone(),
+                Ty::Generic(gen) if gen_id.is_some_and(|gid| gen.gen_id == gid) => generic_args[gen.idx].clone(),
+                Ty::Generic(_) => self.clone(),
                 Ty::Tail => tail.clone(),
             }
+        }
+    }
+
+    unique!(pub struct GenericSetId);
+
+    #[derive(Debug, Clone)]
+    pub struct Generic{
+        pub idx: usize,
+        pub gen_id: GenericSetId,
+    }
+
+    impl Generic {
+        pub fn new(idx: usize, gen_id: GenericSetId) -> Self {
+            Self { idx, gen_id }
         }
     }
 
@@ -138,8 +173,8 @@ pub mod ty {
 
     #[derive(Debug, Clone)]
     pub struct Specialized<'s> {
-        template: Arc<TyTemplate<'s>>,
-        args: Vec<Arc<Ty<'s>>>,
+        pub template: Arc<TyTemplate<'s>>,
+        pub args: Vec<Arc<Ty<'s>>>,
     }
 
     impl<'s> Specialized<'s> {
@@ -149,7 +184,7 @@ pub mod ty {
                 _ => None,
             };
             raw.map(|field| Field {
-                ty: field.ty.resolve(tail, &self.args),
+                ty: field.ty.resolve(tail, &self.args, self.template.generic_id()),
                 idx: field.idx,
             })
         }
@@ -350,6 +385,7 @@ pub trait Builtins<'s> {
 }
 
 pub struct CompilationScope<'p, 's, B> {
+    id: GenericSetId, // the scope id, used to differentiate between generic params of scopes
     parent: Option<&'p Self>,
     pub builtins: Option<MaybeOwned<'p, B>>,
     pub names: HashMap<Cow<'s, str>, NamedItem<'s>>,
@@ -387,6 +423,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
 
     pub fn root() -> Self {
         Self {
+            id: GenericSetId::unique(),
             parent: None,
             builtins: None,
             names: HashMap::new(),
@@ -397,6 +434,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
 
     fn child(&'p self) -> Self {
         Self {
+            id: GenericSetId::unique(),
             parent: Some(self),
             builtins: self.builtins.as_ref().map(|b| b.borrowed()),
             names: HashMap::new(),
@@ -540,7 +578,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn set_generics(&mut self, names: impl IntoIterator<Item = Cow<'s, str>>) {
         for (i, name) in names.into_iter().enumerate() {
             self.names
-                .insert(name, NamedItem::Type(NamedType::Concrete(Arc::new(Ty::Generic(i)))));
+                .insert(name, NamedItem::Type(NamedType::Concrete(Arc::new(Ty::Generic(Generic::new(i, self.id))))));
         }
     }
 
@@ -595,7 +633,43 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     sink.extend(arg_sink);
                 }
 
+                if let Expr::Ref(name) = expr.as_ref() {
+                    if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = self.get_named_item(name){
+                        // TODO: do we want to process this flow if there's only one overload? For now it's fine
+                        let mut resolved_overloads = Vec::new();
+                        'outer: for rel_overload in overloads {
+                            if arg_types.len() != rel_overload.overload.args.len() {
+                                continue;
+                            }
+                            let mut resolution = BindingResolution::new(None, 0);
+                            for (param, arg_ty) in rel_overload.overload.args.iter().zip(arg_types.iter()) {
+                                if let Err(_) = resolution.assign(&param.ty, arg_ty){
+                                    dbg!(param, arg_ty);
+                                    // todo report the error?
+                                    continue 'outer;
+                                }
+                            }
+                            resolved_overloads.push(rel_overload);
+                        }
+                        if resolved_overloads.len() != 1 {
+                            todo!("no single overload for {:?} ({:?})", name, arg_types);
+                        }
+                        let resolved_overload = resolved_overloads.into_iter().next().unwrap();
+                        let fn_ty = resolved_overload.overload.get_type();
+                        self.feed_relative_location(&resolved_overload.loc, sink);
+                        sink.push(Command::MakePending(arg_types.len()));
+                        return match fn_ty.as_ref() {
+                            Ty::Fn(fn_ty) => {
+                                // todo we should also consider the case where the function is generic
+                                Ok(fn_ty.return_ty.clone())
+                            }
+                            _ => todo!(), // raise an error
+                        }
+                    }
+                }
+
                 let ty = self.feed_expression(expr.as_ref(), sink)?;
+
                 // todo check that the args match
                 sink.push(Command::MakePending(arg_types.len()));
 
@@ -613,6 +687,29 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 sink,
             ),
             Functor::Specialized(..) => todo!(),
+        }
+    }
+
+    fn feed_relative_location<'c: 's>(&mut self, loc: &RelativeLocation, sink: &mut Vec<Command<'c>>) {
+        match loc {
+            RelativeLocation::Local(cell_idx) => {
+                sink.push(Command::PushFromCell(*cell_idx));
+            }
+            RelativeLocation::Capture(capture) => {
+                sink.push(Command::PushFromCapture(self.get_capture(PendingCapture {
+                    ancestor_height: capture.ancestor_height,
+                    cell_idx: capture.cell_idx,
+                })));
+            }
+            RelativeLocation::Global(cell_idx) => {
+                sink.push(Command::PushGlobal(*cell_idx));
+            }
+            RelativeLocation::System(system_loc) => {
+                sink.push(Command::PushFromSource(PushFromSource {
+                    source: system_loc.source,
+                    id: system_loc.id,
+                }));
+            }
         }
     }
 
@@ -664,29 +761,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         if overloads.overloads.len() != 1 {
                             todo!() // raise an error
                         }
-                        let overload = &overloads.overloads[0];
+                        let overload = overloads.overloads.into_iter().next().unwrap();
                         let ty = overload.overload.get_type();
-                        match &overload.loc {
-                            RelativeLocation::Local(cell_idx) => {
-                                sink.push(Command::PushFromCell(*cell_idx));
-                            }
-                            RelativeLocation::Capture(capture) => {
-                                let cap_idx = self.get_capture(PendingCapture {
-                                    ancestor_height: capture.ancestor_height,
-                                    cell_idx: capture.cell_idx,
-                                });
-                                sink.push(Command::PushFromCapture(cap_idx));
-                            }
-                            RelativeLocation::Global(cell_idx) => {
-                                sink.push(Command::PushGlobal(*cell_idx));
-                            }
-                            RelativeLocation::System(system_loc) => {
-                                sink.push(Command::PushFromSource(PushFromSource {
-                                    source: system_loc.source,
-                                    id: system_loc.id,
-                                }));
-                            }
-                        }
+                        self.feed_relative_location(&overload.loc, sink);
                         Ok(ty)
                     }
                     Some(RelativeNamedItem::Type(..)) => {

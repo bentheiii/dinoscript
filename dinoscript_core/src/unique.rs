@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! unique {
     ($v:vis struct $name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

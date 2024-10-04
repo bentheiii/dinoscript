@@ -1,0 +1,19 @@
+fn foo(x: int)->int{
+    x+10
+}
+
+fn foo(x: int, y: int)->int{
+    x*10 + y
+}
+
+fn foo(x: bool)->bool{
+    x
+}
+
+fn main()->bool{
+    let x = 5;
+    let y = 1;
+    assert(foo(x, y) == 51)
+    && assert(foo(x) == 15)
+    && assert(foo(true) == true)
+}

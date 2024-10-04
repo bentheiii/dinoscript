@@ -88,3 +88,8 @@ fn test_script_002(){
 fn test_script_003(){
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_004(){
+    test_script_from_name(function_name!());
+}

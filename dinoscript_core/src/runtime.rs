@@ -13,10 +13,34 @@ pub enum RuntimeCell<'s> {
 struct SharedRuntime<'s> {
     allocated_space: usize,
     // common values
-    true_: MaybeUninit<AllocatedRef<'s>>,
-    false_: MaybeUninit<AllocatedRef<'s>>,
-    null: MaybeUninit<AllocatedRef<'s>>,
-    nil: MaybeUninit<AllocatedRef<'s>>,
+    // TODO replace these with MaybeUninit when that stabilizes
+    true_: Option<AllocatedRef<'s>>,
+    false_: Option<AllocatedRef<'s>>,
+    null: Option<AllocatedRef<'s>>,
+    nil: Option<AllocatedRef<'s>>,
+}
+
+impl<'s> SharedRuntime<'s>{
+
+    fn clone_ref(&mut self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        {
+            self.allocated_space += AllocatedRef::SIZE;
+            // todo check against max size
+        }
+        Ok(obj.clone())
+    }
+
+    fn clone_true(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        self.allocated_space += AllocatedRef::SIZE;
+        // todo check against max size
+        Ok(self.true_.as_ref().unwrap().clone())
+    }
+
+    fn clone_false(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        self.allocated_space += AllocatedRef::SIZE;
+        // todo check against max size
+        Ok(self.false_.as_ref().unwrap().clone())
+    }
 }
 
 // todo in the future, this shouldn't be an arc, objects should instead store a pointer to the runtime
@@ -27,11 +51,11 @@ impl<'s> Runtime<'s> {
     pub fn allocate(&self, obj: Result<DinObject<'s>, RuntimeError>) -> DinoResult<'s> {
         let Ok(obj) = obj else {todo!()};
         let size = obj.allocated_size();
-        let allocated_object = AllocatedObject::new(obj, self.clone());
         {
             let mut rt = self.0.lock().unwrap();
             rt.allocated_space += size + AllocatedRef::SIZE;
         }
+        let allocated_object = AllocatedObject::new(obj, self.clone());
         // todo check against max size
         let ptr = AllocatedRef::new(Arc::new(allocated_object));
         Ok(Ok(ptr))
@@ -40,10 +64,10 @@ impl<'s> Runtime<'s> {
     pub fn new() -> Self {
         let shared_runtime = SharedRuntime{
             allocated_space: 0,
-            true_: MaybeUninit::uninit(),
-            false_: MaybeUninit::uninit(),
-            null: MaybeUninit::uninit(),
-            nil: MaybeUninit::uninit(),
+            true_: None,
+            false_: None,
+            null: None,
+            nil: None,
         };
         let ret = Self(Arc::new(Mutex::new(shared_runtime)));
         let true_ = ret.allocate(Ok(DinObject::Bool(true))).unwrap().unwrap();
@@ -53,49 +77,34 @@ impl<'s> Runtime<'s> {
 
         {
             let mut rt = ret.0.lock().unwrap();
-            rt.true_.write(true_);
-            rt.false_.write(false_);
-            rt.null.write(null);
-            rt.nil.write(nil);
+            rt.true_ = Some(true_);
+            rt.false_ = Some(false_);
+            rt.null = Some(null);
+            rt.nil = Some(nil);
         }
         
         ret
     }
 
     pub fn bool(&self, b: bool) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        let r = {
-            let x = self.0.lock().unwrap();
-            if b {
-                unsafe {
-                    x.true_.assume_init_read()
-                }
-            } else {
-                unsafe {
-                    x.false_.assume_init_read()
-                }
-            }
-        };
-        self.clone_ref(
-            &r
-        )
+        let mut rt = self.0.lock().unwrap();
+        if b {
+            rt.clone_true()
+        } else {
+            rt.clone_false()
+        }
     }
 
     pub fn null(&self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
         let x = self.0.lock().unwrap();
         self.clone_ref(
-            unsafe {
-                x.null.assume_init_ref()
-            }
+            x.null.as_ref().unwrap()
         )
     }
 
     pub fn clone_ref(&self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        {
-            let mut x = self.0.lock().unwrap();
-            x.allocated_space += AllocatedRef::SIZE;
-            // todo check against max size
-        }
-        Ok(obj.clone())
+        let mut rt = self.0.lock().unwrap();
+        rt.clone_ref(obj)
     }
 
     pub fn deallocate(&self, size: usize) {

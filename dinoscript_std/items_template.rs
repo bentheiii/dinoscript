@@ -237,6 +237,42 @@ ItemsBuilder<'a, 's>
             ))
         )
         ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn and (a: bool, b: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match a.as_ref() {
+                        DinObject::Bool(false) => Ok(Ok(frame.runtime().bool(false)?)),
+                        DinObject::Bool(true) => frame.eval_pop(), // todo tail call
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn eq (a: bool, b: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Bool(a), DinObject::Bool(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id

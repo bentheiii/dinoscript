@@ -109,7 +109,7 @@ impl<'s> Drop for AllocatedObject<'s>{
 }
 
 #[derive(Debug)]
-pub struct AllocatedRef<'s>(Arc<AllocatedObject<'s>>);
+pub struct AllocatedRef<'s>(pub Arc<AllocatedObject<'s>>);
 
 impl<'s> AllocatedRef<'s>{
     pub const SIZE: usize = size_of::<AllocatedRef>();

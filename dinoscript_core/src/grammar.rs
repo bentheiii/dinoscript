@@ -80,9 +80,8 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<Expr<'s>, ()> {
             todo!()
         }
         Rule::bool => {
-            let inner = inner.into_inner().next().unwrap();
-            let b = inner.as_str().parse().unwrap();
-            return Ok(Expr::LitBool(b));
+            let inner = inner.as_str().parse().unwrap();
+            return Ok(Expr::LitBool(inner));
         }
         Rule::NUMBER_ANY => {
             // todo handle hex, bin, digit seps, floats, etc
