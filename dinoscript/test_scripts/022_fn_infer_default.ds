@@ -6,6 +6,12 @@ fn bar<T>(a: T, fn_foo: (T)->(T) ~= foo)->T{
     fn_foo(a)
 }
 
+fn other_foo(a: int)->int{
+    a*a*a
+}
+
 fn main() -> bool{
-    assert(bar(5, foo) == 25)
+    assert(bar(5) == 25)
+    && assert(bar(5, foo) == 25)
+    && assert(bar(5, other_foo) == 125)
 }
