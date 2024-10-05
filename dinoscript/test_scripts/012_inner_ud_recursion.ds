@@ -1,0 +1,12 @@
+fn fib_lin(x: int)->int{
+    fn fib_helper(t: int, a: int, b: int) -> int {
+        if(t == 0, a, fib_helper(t - 1, b, a + b))
+    }
+    fib_helper(x, 0, 1)
+}
+
+fn main()->bool{
+    assert(fib_lin(0) == 0)
+    && assert(fib_lin(1) == 1)
+    && assert(fib_lin(10) == 55)
+}

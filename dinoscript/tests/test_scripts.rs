@@ -139,3 +139,13 @@ fn test_script_009(){
 fn test_script_010(){
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_011(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_012(){
+    test_script_from_name(function_name!());
+}

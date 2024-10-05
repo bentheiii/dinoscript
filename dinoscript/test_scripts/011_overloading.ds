@@ -1,0 +1,16 @@
+fn foo()->int{
+    100
+}
+
+fn foo(x:int)->int{
+    x+foo()
+}
+
+fn foo(x:int,y:int)->int{
+    x+y+foo(x)
+}
+
+fn main()->bool{
+    let x=foo(1,2);
+    assert(x==104)
+}
