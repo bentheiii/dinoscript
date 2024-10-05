@@ -215,6 +215,15 @@ macro_rules! as_prim {
     };
 }
 
+macro_rules! as_ext {
+    ($ref:expr, $ty:ident) => {
+        {
+            let ptr = (*as_prim!($ref, Extended)) as *const $ty;
+            unsafe{&*ptr}
+        }
+    };
+}
+
 pub(crate)
 fn setup_items<'a, 's>()->
 // pragma:replace-start
@@ -513,8 +522,7 @@ ItemsBuilder<'a, 's>
                     let seq = unwrap_value!(frame.eval_pop()?);
                     let idx = unwrap_value!(frame.eval_pop()?);
 
-                    let seq_ptr = (*as_prim!(seq, Extended)) as *const Sequence;
-                    let seq = unsafe{&*seq_ptr};
+                    let seq = as_ext!(seq, Sequence);
                     let idx = as_prim!(idx, Int);
                     let Ok(idx) = usize::try_from(*idx) else {
                         return to_return_value(Ok(Err(())));

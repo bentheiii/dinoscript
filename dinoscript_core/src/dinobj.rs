@@ -31,6 +31,16 @@ impl<'s> DinObject<'s>{
     }
 }
 
+impl Drop for DinObject<'_> {
+    fn drop(&mut self) {
+        if let Self::Extended(e) = self {
+            unsafe{
+                drop(Box::from_raw(*e as *mut (dyn ExtendedObject)));
+            };
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TailCallAvailability {
     Allowed,
