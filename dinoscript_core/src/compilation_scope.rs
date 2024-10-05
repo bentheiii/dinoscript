@@ -968,7 +968,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 body,
                 ret,
             }) => {
-                let cell_idx = self.get_cell_idx();
+                let fn_cell_idx = self.get_cell_idx();
                 let gen_params = if generic_params.is_empty() {
                     None
                 } else {
@@ -998,7 +998,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         })
                         .collect(),
                     return_ty: expected_return_ty,
-                    loc: OverloadLoc::Cell(cell_idx),
+                    loc: OverloadLoc::Cell(fn_cell_idx),
                 };
                 self.add_overload(name.clone(), new_overload);
                 
@@ -1020,7 +1020,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let n_cells = subscope.n_cells;
                 for PendingCapture{ancestor_height, cell_idx} in subscope.pending_captures.iter() {
                     if *ancestor_height == 1 {
-                        sink.push(Command::PushFromCell(*cell_idx));
+                        if cell_idx == &fn_cell_idx {
+                            sink.push(Command::PushTail);
+                        }
+                        else {
+                            sink.push(Command::PushFromCell(*cell_idx));
+                        }
                     }
                     else {
                         self.pending_captures.push(PendingCapture{ancestor_height: *ancestor_height - 1, cell_idx: *cell_idx});
@@ -1032,7 +1037,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     commands: subscope_sink,
                 }));
                 
-                sink.push(Command::PopToCell(cell_idx));
+                sink.push(Command::PopToCell(fn_cell_idx));
                 Ok(())
             }
             Stmt::Compound(compound) => {

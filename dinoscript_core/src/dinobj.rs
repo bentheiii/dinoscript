@@ -15,6 +15,7 @@ pub enum DinObject<'s> {
     UserFn(UserFn<'s>),
     SourceFn(#[debug("<system_function>")] SourceFnFunc),
     Extended(Box<dyn ExtendedObject<'s>>),
+    /// This is a special object, indicating that the frame's used function should be used as a value
     Tail,
 }
 

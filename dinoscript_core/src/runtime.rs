@@ -222,6 +222,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     let Some(StackItem::Pending(Pending { func, arguments })) = self.stack.pop() else {
                         unreachable!()
                     };
+                    // note that tail-call-optimization is not allowed here, only from system functions
                     match func.as_ref() {
                         DinObject::UserFn(user_fn) => {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
@@ -241,6 +242,16 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                     return Ok(ControlFlow::Continue(cont));
                                 }
                             }
+                        }
+                        DinObject::Tail => {
+                            // this is a similar case to user functions, but we use the frame's user_fn
+                            let Some(user_fn) = self.user_fn.as_ref() else {
+                                panic!("tail call with no user function")
+                            };
+                            let func = self.runtime.clone_ref(&user_fn)?;
+                            let mut new_frame = self.child(func);
+                            let val = new_frame.exec_fn(arguments)?;
+                            self.stack.push(StackItem::Value(val));
                         }
                         _ => {
                             todo!() // err
@@ -356,7 +367,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
             }
-            Command::PushTail(i) => {
+            Command::PushTail => {
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Tail))?));
                 Ok(ControlFlow::Break(()))
@@ -498,6 +509,19 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                                     return Ok(cont);
                                 }
                             }
+                        }
+                        DinObject::Tail => {
+                            // this is a similar case to user functions, but we use the frame's user_fn
+                            let Some(user_fn) = self.parent.user_fn.as_ref() else {
+                                panic!("tail call with no user function")
+                            };
+                            if tca.is_allowed() && self.tca.is_allowed(){
+                                return Ok(ControlFlow::Continue(arguments));
+                            }
+                            let func = self.runtime().clone_ref(&user_fn)?;
+                            let mut new_frame = self.parent.child(func);
+                            let val = new_frame.exec_fn(arguments)?;
+                            self.stack.push(StackItem::Value(val));
                         }
                         _ => {panic!("unexpected function: {:?}", func)}
                     }

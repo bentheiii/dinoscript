@@ -13,7 +13,7 @@ pub enum Command<'s> {
     PushFromSource(PushFromSource), // PSR
     PushFromCapture(usize),         // PCP
     PushGlobal(usize),              // PGL
-    PushTail(usize),                // PT-
+    PushTail,                // PT-
 
     MakeFunction(MakeFunction<'s>), // MFN
     MakePending(usize),             // MPE
@@ -38,7 +38,7 @@ impl<'s> Command<'s> {
             Command::PushFromSource(source)=>format!("{indent}dinoscript_core::bytecode::Command::PushFromSource(dinoscript_core::bytecode::PushFromSource::new(\"{}\",{}))",source.source,source.id),
             Command::PushFromCapture(capture)=>format!("{indent}dinoscript_core::bytecode::Command::PushFromCapture({})",capture),
             Command::PushGlobal(global)=>format!("{indent}dinoscript_core::bytecode::Command::PushGlobal({})",global),
-            Command::PushTail(tail)=>format!("{indent}dinoscript_core::bytecode::Command::PushTail({})",tail),
+            Command::PushTail=>format!("{indent}dinoscript_core::bytecode::Command::PushTail"),
             Command::MakeFunction(function)=>{
                 let inner_commands=function.commands.iter().map(|c|c.to_in_code(&format!("{indent}    "))).collect::<Vec<String>>().join(&format!(",\n{indent}"));
                 format!("{indent}dinoscript_core::bytecode::Command::MakeFunction(dinoscript_core::bytecode::MakeFunction::new({},{},vec![\n{inner_commands}\n{indent}]))",function.n_captures,function.n_cells)
