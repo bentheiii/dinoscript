@@ -148,10 +148,11 @@ pub mod ty {
         Generic(Generic),
         // only applicable inside compound templates
         Tail,
+        // todo the never type
     }
 
     impl<'s> Ty<'s> {
-        pub fn resolve(self: &Arc<Self>, tail: &Arc<Self>, generic_args: &Vec<Arc<Self>>, gen_id: Option<GenericSetId>) -> Arc<Self> {
+        pub fn resolve(self: &Arc<Self>, tail: Option<&Arc<Self>>, generic_args: &Vec<Arc<Self>>, gen_id: Option<GenericSetId>) -> Arc<Self> {
             match self.as_ref() {
                 Ty::Specialized(specialized) => Arc::new(Ty::Specialized(Specialized {
                     template: specialized.template.clone(),
@@ -168,7 +169,7 @@ pub mod ty {
                 ))),
                 Ty::Generic(gen) if gen_id.is_some_and(|gid| gen.gen_id == gid) => generic_args[gen.idx].clone(),
                 Ty::Generic(_) => self.clone(),
-                Ty::Tail => tail.clone(),
+                Ty::Tail => tail.unwrap().clone(),
             }
         }
     }
@@ -238,7 +239,7 @@ pub mod ty {
                 _ => None,
             };
             raw.map(|field| Field {
-                ty: field.ty.resolve(tail, &self.args, self.template.generic_id()),
+                ty: field.ty.resolve(Some(tail), &self.args, self.template.generic_id()),
                 idx: field.idx,
             })
         }
@@ -286,8 +287,21 @@ impl<'s> Overloads<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Overload<'s> {
+pub struct OverloadGenericParams<'s> {
+    pub gen_id: GenericSetId,
     pub generic_params: Vec<Cow<'s, str>>,
+}
+
+impl<'s> OverloadGenericParams<'s> {
+    pub fn new(gen_id: GenericSetId, generic_params: Vec<Cow<'s, str>>) -> Self {
+        Self { gen_id, generic_params }
+    }
+}
+
+// todo why is this clone?
+#[derive(Debug, Clone)]
+pub struct Overload<'s> {
+    pub generic_params: Option<OverloadGenericParams<'s>>,
     pub args: Vec<OverloadArg<'s>>,
     pub return_ty: Arc<Ty<'s>>,
     pub loc: OverloadLoc,
@@ -702,15 +716,17 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         let is_one_option = overloads.len() == 1;
                         let mut resolved_overloads = Vec::new();
                         'outer: for rel_overload in overloads {
-                            if arg_types.len() != rel_overload.overload.args.len() {
+                            let overload = rel_overload.overload;
+                            if arg_types.len() != overload.args.len() {
                                 if is_one_option {
                                     // if there's only one overload, we can raise a better error here
-                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), expected_n: rel_overload.overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
+                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), expected_n: overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
                                 }
                                 continue;
                             }
-                            let mut resolution = BindingResolution::new(None, 0);
-                            for (i,(param, arg_ty)) in rel_overload.overload.args.iter().zip(arg_types.iter()).enumerate() {
+                            let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
+                            let mut resolution = BindingResolution::new(overload.generic_params.as_ref().map(|g| g.gen_id), overload.generic_params.as_ref().map(|g| g.generic_params.len()).unwrap_or_default());
+                            for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter()).enumerate() {
                                 if let Err(_) = resolution.assign(&param.ty, arg_ty){
                                     if is_one_option {
                                         // if there's only one overload, we can raise a better error here
@@ -719,7 +735,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     continue 'outer;
                                 }
                             }
-                            resolved_overloads.push(rel_overload);
+                            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
+                            resolved_overloads.push((rel_overload, output_type));
                         }
                         if resolved_overloads.is_empty() {
                             return Err(CompilationError::NoOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
@@ -727,17 +744,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         else if resolved_overloads.len() > 1 {
                             return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
                         }
-                        let resolved_overload = resolved_overloads.into_iter().next().unwrap();
-                        let fn_ty = resolved_overload.overload.get_type();
+                        let (resolved_overload, out_ty) = resolved_overloads.into_iter().next().unwrap();
                         self.feed_relative_location(&resolved_overload.loc, sink);
                         sink.push(Command::MakePending(arg_types.len()));
-                        return match fn_ty.as_ref() {
-                            Ty::Fn(fn_ty) => {
-                                // todo we should also consider the case where the function is generic
-                                Ok(fn_ty.return_ty.clone())
-                            }
-                            _ => todo!(), // raise an error
-                        }
+                        return Ok(out_ty)
                     }
                     if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
                         if let TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Struct, generics, fields , name: struct_name}) = template_arc.as_ref(){
@@ -1013,7 +1023,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 // todo check that we don't shadow a variable
 
                 let new_overload = Overload {
-                    generic_params: generic_params.clone(),
+                    generic_params: None, // todo
                     args: args
                         .into_iter()
                         .map(|(_name, ty, default)| OverloadArg {

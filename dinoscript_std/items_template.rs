@@ -7,7 +7,7 @@ use dinoscript_core::{
         CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject},
-    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature},
+    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -38,12 +38,38 @@ impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
     }
 }
 
+macro_rules! get_type {
+    ($b:ident, $gens:expr, $ty_name:ident) => {
+        $b.$ty_name.clone()
+    };
+    ($b:ident, $gens:expr, $g_id:literal) => {
+        $gens[$g_id].clone()
+    };
+}
+
 macro_rules! signature_fn {
-    (fn $name:ident ($($param_name:ident : $type_name:ident),*) -> $ret_type:ident) => {
+    (fn $name:ident <$($gen_name:ident),*> ($($param_name:ident : $type_name:tt),*) -> $ret_type:tt) => {
+        {
+            |b: &Builtins<'_>| {
+                let gen_id = dinoscript_core::compilation_scope::ty::GenericSetId::unique();
+                let gen_names = vec![$(std::borrow::Cow::Borrowed(stringify!($gen_name))),*];
+                let gens: Vec<Arc<Ty<'_>>> = gen_names.iter().enumerate().map(|(i, _)| Arc::new(dinoscript_core::compilation_scope::ty::Ty::Generic(dinoscript_core::compilation_scope::ty::Generic::new(i, gen_id)))).collect();
+                let gen = SignatureGen::new(gen_id, gen_names);
+                Signature::new(
+                    std::borrow::Cow::Borrowed(stringify!($name)),
+                    Some(gen),
+                    vec![$(dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), get_type!(b, gens, $type_name))),*],
+                    get_type!(b, gens, $ret_type),
+                )
+            }
+        }
+    };
+    (fn $name:ident ($($param_name:ident : $type_name:tt),*) -> $ret_type:tt) => {
         |b: &Builtins<'_>| Signature::new(
             std::borrow::Cow::Borrowed(stringify!($name)),
-            vec![$(dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), b.$type_name.clone())),*],
-            b.$ret_type.clone(),
+            None,
+            vec![$(dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), get_type!(b, (), $type_name))),*],
+            get_type!(b, (), $ret_type),
         )
     };
 }
@@ -280,7 +306,7 @@ ItemsBuilder<'a, 's>
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
-                signature_fn!(fn if (b: bool, t: str, e: str) -> str),
+                signature_fn!(fn if <T> (b: bool, t: 0, e: 0) -> 0),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()

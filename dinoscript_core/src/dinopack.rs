@@ -11,7 +11,7 @@ pub mod utils {
     use std::{borrow::Cow, sync::Arc};
 
     use crate::{
-        bytecode::SourceId, compilation_scope::{ty::Ty, CompilationScope, Overload, OverloadArg, OverloadLoc, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
+        bytecode::SourceId, compilation_scope::{ty::{GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
     };
 
     pub enum SetupItem<'s, C> {
@@ -20,7 +20,7 @@ pub mod utils {
 
     impl<'s, C> SetupItem<'s, C> {
         pub fn push_to_compilation<'p, B>(
-            &self,
+            self,
             scope: &mut CompilationScope<'p, 's, B>,
             c: C,
             source: SourceId,
@@ -42,16 +42,16 @@ pub mod utils {
     }
 
     pub struct SetupFunction<'s, C> {
-        pub sig: fn(C) -> Signature<'s>,
+        pub sig: fn(C)->Signature<'s>,
         pub body: SetupFunctionBody<'s>,
     }
 
     impl<'s, C> SetupFunction<'s, C> {
-        pub fn new(sig: fn(C) -> Signature<'s>, body: SetupFunctionBody<'s>) -> Self {
+        pub fn new(sig: fn(C)->Signature<'s>, body: SetupFunctionBody<'s>) -> Self {
             Self { sig, body }
         }
 
-        pub fn to_overload(&self, c: C, loc: SystemLoc) -> (Cow<'s, str>, Overload<'s>) {
+        pub fn to_overload(self, c: C, loc: SystemLoc) -> (Cow<'s, str>, Overload<'s>) {
             let sig = (self.sig)(c);
             (sig.name.clone(), sig.to_overload(loc))
         }
@@ -66,21 +66,33 @@ pub mod utils {
         }
     }
 
+    pub struct SignatureGen<'s> {
+        id: GenericSetId,
+        generic_params: Vec<Cow<'s, str>>,
+    }
+
+    impl<'s> SignatureGen<'s> {
+        pub fn new(id: GenericSetId, generic_params: Vec<Cow<'s, str>>) -> Self {
+            Self { id, generic_params }
+        }
+    }
+
     pub struct Signature<'s> {
         name: Cow<'s, str>,
-        // todo generics
+        generic: Option<SignatureGen<'s>>,
         args: Vec<Arg<'s>>,
         ret: Arc<Ty<'s>>,
     }
 
     impl<'s> Signature<'s> {
-        pub fn new(name: Cow<'s, str>, args: Vec<Arg<'s>>, ret: Arc<Ty<'s>>) -> Self {
-            Self { name, args, ret }
+        pub fn new(name: Cow<'s, str>, generic: Option<SignatureGen<'s>>, args: Vec<Arg<'s>>, ret: Arc<Ty<'s>>) -> Self {
+            Self { name, generic, args, ret }
         }
 
         pub fn to_overload(&self, loc: SystemLoc) -> Overload<'s> {
+            let gen_params = self.generic.as_ref().map(|gen| OverloadGenericParams::new(gen.id, gen.generic_params.clone()));
             Overload {
-                generic_params: Vec::new(),
+                generic_params: gen_params,
                 args: self.args.iter().map(Arg::to_overload_arg).collect(),
                 return_ty: self.ret.clone(),
                 loc: OverloadLoc::System(loc),
