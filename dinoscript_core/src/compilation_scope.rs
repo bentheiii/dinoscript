@@ -549,43 +549,38 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         self.gen_prim_type("Optional", vec![ty])
     }
 
-    fn parse_type<'c: 's>(&self, ty: &ast::ty::TyWithPair<'c>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
+    fn parse_type<'c: 's>(&self, ty: &ast::ty::TyWithPair<'c>, gen_params: &Option<OverloadGenericParams>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
         match &ty.inner {
-            ast::ty::Ty::Ref(name) => {
-                let item = self.get_named_item(name).unwrap();
-                match item {
-                    RelativeNamedItem::Type(NamedType::Concrete(ty)) => Ok(ty.clone()),
-                    RelativeNamedItem::Type(NamedType::Template(template)) if template.n_generics() == 0 => {
-                        Ok(template.instantiate(vec![]))
-                    }
-                    RelativeNamedItem::Type(NamedType::Template(template)) => todo!(), // raise an error
-                    _ => todo!(),                                                      // raise an error
-                }
-            }
             ast::ty::Ty::Tuple(inners) => {
                 let inners = inners
                     .iter()
-                    .map(|inner| self.parse_type(inner))
+                    .map(|inner| self.parse_type(inner, gen_params))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Arc::new(Ty::Tuple(inners)))
             }
             ast::ty::Ty::Fn(ast::ty::FnTy { args, ret }) => {
                 let args = args
                     .iter()
-                    .map(|arg| self.parse_type(arg))
+                    .map(|arg| self.parse_type(arg, gen_params))
                     .collect::<Result<Vec<_>, _>>()?;
-                let return_ty = self.parse_type(&ret)?;
+                let return_ty = self.parse_type(&ret, gen_params)?;
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
             ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
                 let Some(item) = self.get_named_item(name) else {
+                    if let Some(gen) = gen_params.as_ref() {
+                        // todo make this a hash search?
+                        if let Some(idx) = gen.generic_params.iter().position(|param| param == name) {
+                            return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
+                        }
+                    }
                     return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
                 };
                 match item {
                     RelativeNamedItem::Type(NamedType::Template(template)) => {
                         let args = args
                             .iter()
-                            .map(|arg| self.parse_type(arg))
+                            .map(|arg| self.parse_type(arg, gen_params))
                             .collect::<Result<Vec<_>, _>>()?;
                         // todo check that the number of args match
                         Ok(template.instantiate(args))
@@ -945,7 +940,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let declared_ty = if let Some(explicit_ty) = ty {
                     // we should check that actual_ty is a subtype of ty
                     let mut assignment = BindingResolution::primitive();
-                    let ty = self.parse_type(explicit_ty)?;
+                    let ty = self.parse_type(explicit_ty, &None)?;
                     if let Err(_) = assignment.assign(&ty, &actual_ty) {
                         return Err(CompilationError::LetTypeMismatch { var: var.clone(), expected_ty: ty, actual_ty }.with_pair(stmt.pair.clone()));
                     }
@@ -975,22 +970,27 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }) => {
                 let mut subscope_sink = Vec::new();
                 let cell_idx = self.get_cell_idx();
+                let gen_params = if generic_params.is_empty() {
+                    None
+                } else {
+                    Some(OverloadGenericParams::new(GenericSetId::unique(), generic_params.iter().map(|p| p.clone()).collect()))
+                };
 
                 let args = args
                     .into_iter()
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
                             fn_arg.name.clone(),
-                            self.parse_type(&fn_arg.ty)?,
+                            self.parse_type(&fn_arg.ty, &gen_params)?,
                             fn_arg.default.clone(),
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;                
-                let expected_return_ty = self.parse_type(return_ty)?;
+                let expected_return_ty = self.parse_type(return_ty, &gen_params)?;
 
                 // todo check that we don't shadow a variable
                 let new_overload = Overload {
-                    generic_params: None, // todo
+                    generic_params: gen_params, // todo
                     args: args
                         .iter()
                         .map(|(_name, ty, default)| OverloadArg {
@@ -1039,7 +1039,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
-                                ty: self.parse_type(&field.ty)?,
+                                ty: self.parse_type(&field.ty, &None)?,
                                 idx: self.get_cell_idx(),
                             },
                         ))

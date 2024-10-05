@@ -287,7 +287,7 @@ fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
         inners.next().unwrap(),
     ];
     let name = raw_name.as_str();
-    let gen_params = gen_params.into_inner().map(|p| p.as_str().into()).collect();
+    let gen_params = gen_params.into_inner().next().map(|g_pair| g_pair.into_inner().map(|p| p.as_str().into()).collect()).unwrap_or_default();
     let params = params
         .into_inner()
         .next()

@@ -42,7 +42,7 @@ fn test_script(script_number: usize){
     }
 
     // we need to find the "main" function
-    let NamedItem::Overloads(main_overload) = scope.names.get("main").expect("main function nor found") else {
+    let NamedItem::Overloads(main_overload) = scope.names.get("main").expect("main function t found") else {
         panic!("main is not an overload");
     };
     let Overload{loc: main_loc, ..} = main_overload.overloads.iter().next().expect("main overload not found");

@@ -22,7 +22,6 @@ pub mod ty {
     use super::pairable::{Pairable, WithPair};
     #[derive(Debug, Clone)]
     pub enum Ty<'s> {
-        Ref(Cow<'s, str>),
         Tuple(Vec<TyWithPair<'s>>),
         Fn(FnTy<'s>),
         Specialized(SpecializedTy<'s>),
