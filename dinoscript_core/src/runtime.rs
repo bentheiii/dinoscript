@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Array
+    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Sequence
 };
 
 #[derive(Debug)]
@@ -459,7 +459,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match items.into_iter().collect(){
                     Err(_) => todo!(),
                     Ok(items) => {
-                        let seq: *const dyn ExtendedObject = Box::into_raw(Box::new(Array::new(items)));
+                        let seq: *const dyn ExtendedObject = Box::into_raw(Box::new(Sequence::new_array(items)));
                         let array = self.runtime.allocate(Ok(DinObject::Extended(seq)))?;
                         self.stack.push(StackItem::Value(array));
                         Ok(ControlFlow::Break(()))

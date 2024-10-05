@@ -7,7 +7,7 @@ use dinoscript_core::{
         CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::Array,
+    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::{Sequence},
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -513,17 +513,16 @@ ItemsBuilder<'a, 's>
                     let seq = unwrap_value!(frame.eval_pop()?);
                     let idx = unwrap_value!(frame.eval_pop()?);
 
-                    let seq_ptr = (*as_prim!(seq, Extended)) as *const Array;
+                    let seq_ptr = (*as_prim!(seq, Extended)) as *const Sequence;
                     let seq = unsafe{&*seq_ptr};
                     let idx = as_prim!(idx, Int);
-                    if *idx < 0{
+                    let Ok(idx) = usize::try_from(*idx) else {
                         return to_return_value(Ok(Err(())));
-                    }
-                    let idx = *idx as usize; 
-                    if idx >= seq.0.len(){
+                    };
+                    let Some(item_ref) = seq.get(idx) else {
                         return to_return_value(Ok(Err(())));
-                    }
-                    let ret = frame.runtime().clone_ref(&seq.0[idx])?;
+                    };
+                    let ret = frame.runtime().clone_ref(item_ref)?;
                     to_return_value(Ok(Ok(ret)))
                 })),
             ))
