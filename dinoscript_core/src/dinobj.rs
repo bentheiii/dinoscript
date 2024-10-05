@@ -14,7 +14,7 @@ pub enum DinObject<'s> {
     Variant(VariantObject<'s>),
     UserFn(UserFn<'s>),
     SourceFn(#[debug("<system_function>")] SourceFnFunc),
-    Extended(Box<dyn ExtendedObject<'s>>),
+    Extended(*const (dyn ExtendedObject + 's)),
     /// This is a special object, indicating that the frame's used function should be used as a value
     Tail,
 }
@@ -22,7 +22,9 @@ pub enum DinObject<'s> {
 impl<'s> DinObject<'s>{
     pub fn allocated_size(&self) -> usize {
         size_of::<Self>() + match self {
-            Self::Extended(e) => e.allocated_size(),
+            Self::Extended(e) => {
+                unsafe{(**e).allocated_size()}
+            },
             Self::Str(s) => s.len(),
             _ => 0,
         }
@@ -86,7 +88,7 @@ impl<'s> VariantObject<'s> {
     }
 }
 
-pub trait ExtendedObject<'s>: Debug {
+pub trait ExtendedObject: Debug {
     fn allocated_size(&self) -> usize;
 }
 
@@ -111,13 +113,12 @@ pub struct Pending<'s> {
 #[derive(Debug)]
 pub struct AllocatedObject<'s>{
     value: DinObject<'s>,
-    size: usize,
+    size: usize, // todo we shouldn't store this
     #[debug(skip)]
     runtime: Runtime<'s>,
 }
 
-impl<'s> AllocatedObject<'s>{
-    pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
+impl<'s> AllocatedObject<'s>{   pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
         let size = value.allocated_size();
         Self{value, size, runtime}
     }

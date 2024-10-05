@@ -7,7 +7,7 @@ use dinoscript_core::{
         CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned,
+    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::Array,
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -228,7 +228,7 @@ ItemsBuilder<'a, 's>
     // pragma:skip 1
     let mut builder = prepare_build();
     vec![
-        // region: int
+        // region:int
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -369,7 +369,7 @@ ItemsBuilder<'a, 's>
         )
         ,
         // endregion
-        // region: bool
+        // region:bool
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -471,7 +471,7 @@ ItemsBuilder<'a, 's>
         )
         ,
         // endregion bool
-        // region: str
+        // region:str
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -489,7 +489,7 @@ ItemsBuilder<'a, 's>
         )
         ,
         // endregion str
-        // region: float
+        // region:float
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -504,13 +504,27 @@ ItemsBuilder<'a, 's>
         )
         ,
         // endregion float
-        // region sequence
+        // region:sequence
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn lookup<T> (a: (Sequence<0>), idx: int) -> 0),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    todo!()
+                    let seq = unwrap_value!(frame.eval_pop()?);
+                    let idx = unwrap_value!(frame.eval_pop()?);
+
+                    let seq_ptr = (*as_prim!(seq, Extended)) as *const Array;
+                    let seq = unsafe{&*seq_ptr};
+                    let idx = as_prim!(idx, Int);
+                    if *idx < 0{
+                        return to_return_value(Ok(Err(())));
+                    }
+                    let idx = *idx as usize; 
+                    if idx >= seq.0.len(){
+                        return to_return_value(Ok(Err(())));
+                    }
+                    let ret = frame.runtime().clone_ref(&seq.0[idx])?;
+                    to_return_value(Ok(Ok(ret)))
                 })),
             ))
         )

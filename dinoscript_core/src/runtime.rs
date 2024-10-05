@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
+    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Array
 };
 
 #[derive(Debug)]
@@ -448,7 +448,23 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 todo!()
             }
             Command::Array(i) => {
-                todo!()
+                let mut items = Vec::with_capacity(*i);
+                for _ in 0..*i {
+                    self.eval_top(TailCallAvailability::Disallowed)?;
+                    let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                        unreachable!()
+                    };
+                    items.push(val);
+                }
+                match items.into_iter().collect(){
+                    Err(_) => todo!(),
+                    Ok(items) => {
+                        let seq: *const dyn ExtendedObject = Box::into_raw(Box::new(Array::new(items)));
+                        let array = self.runtime.allocate(Ok(DinObject::Extended(seq)))?;
+                        self.stack.push(StackItem::Value(array));
+                        Ok(ControlFlow::Break(()))
+                    }
+                }
             }
         }
     }
