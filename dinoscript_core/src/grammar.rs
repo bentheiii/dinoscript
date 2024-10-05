@@ -134,7 +134,7 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
                 let mut inner = inner.into_inner();
                 let [method_name, arg_pairs] = [inner.next().unwrap(), inner.next().unwrap()];
                 let mut args = Vec::new();
-                for arg in arg_pairs.into_inner() {
+                for arg in arg_pairs.into_inner().next().map(|p|p.into_inner().collect()).unwrap_or(Vec::new()) {
                     let expr = parse_expr(arg)?;
                     args.push(expr);
                 }
@@ -242,7 +242,6 @@ static BIN_PRATT: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
 
 fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression));
-    let pair_mark = input.clone();
     (*BIN_PRATT)
         .map_primary(parse_expr1)
         .map_infix(|lhs, op_pair, rhs| {

@@ -1,0 +1,12 @@
+struct Point (x: int, y:int)
+fn norm(p: Point) -> int {
+    let x = p::x;
+    let y = p::y;
+    x * x + y * y
+}
+
+fn main() -> bool {
+    let p = Point(3,4);
+    let z = p.norm();
+    assert(z == 25)
+}

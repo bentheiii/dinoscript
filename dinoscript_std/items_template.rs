@@ -220,6 +220,25 @@ ItemsBuilder<'a, 's>
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn div (a: int, b: int) -> float),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Float((*a as f64) / (*b as f64)))),
+                        _ => Ok(Err(())),
+                    })
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn eq (a: int, b: int) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let Ok(a) = frame.eval_pop()? else {
@@ -464,7 +483,25 @@ ItemsBuilder<'a, 's>
             ))
         )
         ,
-        // endregion
+        // endregion str
+        // region: float
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn floor (a: float) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match a.as_ref() {
+                        DinObject::Float(a) => frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))),
+                        _ => Ok(Err(())),
+                    })
+                })),
+            ))
+        )
+        ,
+        // endregion float
 
         // pragma:replace-start
         builder.build_source(
