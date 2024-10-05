@@ -18,29 +18,35 @@ pub mod pairable{
 pub mod ty {
 
     use std::borrow::Cow;
+
+    use super::pairable::{Pairable, WithPair};
     #[derive(Debug, Clone)]
     pub enum Ty<'s> {
         Ref(Cow<'s, str>),
-        Tuple(Vec<Ty<'s>>),
+        Tuple(Vec<TyWithPair<'s>>),
         Fn(FnTy<'s>),
         Specialized(SpecializedTy<'s>),
     }
 
+    impl<'s> Pairable<'s> for Ty<'s>{}
+
+    pub type TyWithPair<'s> = WithPair<'s, Ty<'s>>;
+
     #[derive(Debug, Clone)]
     pub struct FnTy<'s> {
-        pub args: Vec<Ty<'s>>,
-        pub ret: Box<Ty<'s>>,
+        pub args: Vec<TyWithPair<'s>>,
+        pub ret: Box<TyWithPair<'s>>,
     }
 
     #[derive(Debug, Clone)]
     pub struct SpecializedTy<'s> {
         pub name: Cow<'s, str>,
-        pub args: Vec<Ty<'s>>,
+        pub args: Vec<TyWithPair<'s>>,
     }
 }
 
 pub mod expression {
-    use super::{pairable::{Pairable, WithPair}, ty::Ty};
+    use super::{pairable::{Pairable, WithPair}, ty::TyWithPair};
     use std::borrow::Cow;
 
     pub type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
@@ -98,13 +104,13 @@ pub mod expression {
     #[derive(Debug, Clone)]
     pub struct Disambiguation<'s> {
         pub name: Cow<'s, str>,
-        pub arg_tys: Vec<Ty<'s>>,
+        pub arg_tys: Vec<TyWithPair<'s>>,
     }
 
     #[derive(Debug, Clone)]
     pub struct SpecializedFunctor<'s> {
         name: Cow<'s, str>,
-        args: Vec<Ty<'s>>,
+        args: Vec<TyWithPair<'s>>,
     }
 
     #[derive(Debug, Clone)]
@@ -190,7 +196,7 @@ pub mod statement {
 
     use super::expression::ExprWithPair;
     use super::pairable::{Pairable, WithPair};
-    use super::ty::Ty;
+    use super::ty::{Ty, TyWithPair};
     use std::borrow::Cow;
 
     pub type StmtWithPair<'s> = WithPair<'s, Stmt<'s>>;
@@ -207,7 +213,7 @@ pub mod statement {
     pub struct Type<'s> {
         name: Cow<'s, str>,
         generic_params: Vec<Cow<'s, str>>,
-        value: Ty<'s>,
+        value: TyWithPair<'s>,
     }
 
     pub struct Compound<'s> {
@@ -241,11 +247,11 @@ pub mod statement {
 
     pub struct Field<'s> {
         pub name: Cow<'s, str>,
-        pub ty: Ty<'s>,
+        pub ty: TyWithPair<'s>,
     }
 
     impl<'s> Field<'s> {
-        pub fn new(name: impl Into<Cow<'s, str>>, ty: Ty<'s>) -> Field<'s> {
+        pub fn new(name: impl Into<Cow<'s, str>>, ty: TyWithPair<'s>) -> Field<'s> {
             Field {
                 name: name.into(),
                 ty,
@@ -255,7 +261,7 @@ pub mod statement {
 
     pub struct Let<'s> {
         pub var: Cow<'s, str>,
-        pub ty: Option<Ty<'s>>,
+        pub ty: Option<TyWithPair<'s>>,
         pub expr: ExprWithPair<'s>,
     }
 
@@ -263,14 +269,14 @@ pub mod statement {
         pub name: Cow<'s, str>,
         pub generic_params: Vec<Cow<'s, str>>,
         pub args: Vec<FnArg<'s>>,
-        pub return_ty: Ty<'s>,
+        pub return_ty: TyWithPair<'s>,
         pub body: Vec<StmtWithPair<'s>>,
         pub ret: ExprWithPair<'s>,
     }
 
     pub struct FnArg<'s> {
         pub name: Cow<'s, str>,
-        pub ty: Ty<'s>,
+        pub ty: TyWithPair<'s>,
         pub default: Option<FnArgDefault<'s>>,
     }
 
@@ -283,7 +289,7 @@ pub mod statement {
     #[derive(Debug, Clone)]
     pub struct ResolveOverload<'s> {
         name: Cow<'s, str>,
-        arg_tys: Vec<Ty<'s>>,
-        ret_ty: Ty<'s>,
+        arg_tys: Vec<TyWithPair<'s>>,
+        ret_ty: TyWithPair<'s>,
     }
 }

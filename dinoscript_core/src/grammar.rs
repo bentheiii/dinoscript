@@ -8,15 +8,16 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty, TyWithPair}
 };
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct DinoParse;
 
-fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<Ty<'s>, ()> {
+fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<TyWithPair<'s>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::complete_type));
+    let input_marker = input.clone();
     let mut inner = input.into_inner();
     let first = inner.next().unwrap();
     match first.as_rule() {
@@ -29,7 +30,7 @@ fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<Ty<'s>, ()> {
                 let ty = parse_type(part)?;
                 parts.push(ty);
             }
-            return Ok(Ty::Tuple(parts));
+            return Ok(Ty::Tuple(parts).with_pair(input_marker));
         }
         _ => {
             // CNAME
@@ -42,7 +43,7 @@ fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<Ty<'s>, ()> {
             return Ok(Ty::Specialized(SpecializedTy {
                 name: name.into(),
                 args: generic_args,
-            }));
+            }).with_pair(input_marker));
         }
     }
 }

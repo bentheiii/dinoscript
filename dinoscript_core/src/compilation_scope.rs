@@ -7,12 +7,12 @@ use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Ty, T
 
 use crate::{
     ast::{
-        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::{Pairable, WithPair}, statement::{self, Compound, Let, Stmt, StmtWithPair}, ty::FnTy
+        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}
     }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::BindingResolution
 };
 
 pub mod ty {
-    use std::{borrow::Cow, collections::HashMap, fmt::Display, num::NonZero, sync::Arc};
+    use std::{borrow::Cow, fmt::Display, num::NonZero, sync::Arc};
     use indexmap::IndexMap;
 
     use crate::unique;
@@ -549,8 +549,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         self.gen_prim_type("Optional", vec![ty])
     }
 
-    fn parse_type<'c: 's>(&self, ty: &ast::ty::Ty<'c>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
-        match ty {
+    fn parse_type<'c: 's>(&self, ty: &ast::ty::TyWithPair<'c>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
+        match &ty.inner {
             ast::ty::Ty::Ref(name) => {
                 let item = self.get_named_item(name).unwrap();
                 match item {
@@ -578,7 +578,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
             ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
-                let item = self.get_named_item(name).unwrap();
+                let Some(item) = self.get_named_item(name) else {
+                    return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
+                };
                 match item {
                     RelativeNamedItem::Type(NamedType::Template(template)) => {
                         let args = args
@@ -646,10 +648,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             self.names
                 .insert(name, NamedItem::Type(NamedType::Concrete(Arc::new(Ty::Generic(Generic::new(i, self.id))))));
         }
-    }
-
-    fn set_tail(&mut self, parent_cell_idx: usize) {
-        // do nothing for now
     }
 
     fn feed_params<'c:'s>(
@@ -1008,7 +1006,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 
                 let mut subscope = self.child();
                 subscope.set_generics(generic_params.iter().cloned());
-                //subscope.set_tail(name.clone());
                 subscope.feed_params(
                     args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
                     &mut subscope_sink,

@@ -1,0 +1,7 @@
+fn echo<T>(cond:bool, on_ok: T) -> T {
+    on_ok
+}
+
+fn echo()->bool{
+    assert(echo(true, 55) == 55)
+}
