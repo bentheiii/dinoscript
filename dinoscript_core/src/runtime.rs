@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, sync::{Arc, Mutex, Weak}};
+use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
+    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
 };
 
 #[derive(Debug)]
@@ -214,10 +214,10 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    fn eval_top(&mut self) -> Result<(), RuntimeViolation> {
+    fn eval_top(&mut self, tca: TailCallAvailability) -> Result<ControlFlow<(), TailCall<'s>>, RuntimeViolation> {
         loop {
             match self.stack.last() {
-                Some(StackItem::Value(_)) => return Ok(()),
+                Some(StackItem::Value(_)) => return Ok(ControlFlow::Break(())),
                 Some(StackItem::Pending(..)) => {
                     let Some(StackItem::Pending(Pending { func, arguments })) = self.stack.pop() else {
                         unreachable!()
@@ -227,21 +227,20 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
                             let func = self.runtime.clone_ref(&func)?;
                             let mut child_frame = self.child(func);
-                            child_frame.stack.extend(arguments);
-                            for command in user_fn.commands.iter() {
-                                child_frame.execute(command)?;
-                            }
-                            let ret = child_frame.stack.pop().unwrap();
-                            let StackItem::Value(val) = ret else {
-                                dbg!(ret);
-                                todo!()
-                            };
+                            let val = child_frame.exec_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
-                            let mut frame = SystemRuntimeFrame::from_parent(&self, arguments);
+                            let mut frame = SystemRuntimeFrame::from_parent(&self, arguments, tca);
                             let ret = source_fn(&mut frame)?;
-                            self.stack.push(StackItem::Value(ret));
+                            match ret {
+                                ControlFlow::Break(val) => {
+                                    self.stack.push(StackItem::Value(val));
+                                }
+                                ControlFlow::Continue(cont) => {
+                                    return Ok(ControlFlow::Continue(cont));
+                                }
+                            }
                         }
                         _ => {
                             todo!() // err
@@ -262,63 +261,89 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    pub fn execute<'a: 's>(&mut self, command: &'a Command<'s>) -> Result<(), RuntimeViolation> {
+    pub fn exec_fn(&mut self, mut args: Vec<StackItem<'s>>) -> DinoResult<'s> {
+        'tail: loop {
+            let user_fn = self.user_fn.as_ref().unwrap();
+            match user_fn.as_ref() {
+                DinObject::UserFn(user_fn) => {
+                    self.stack.extend(args);
+                    for command in user_fn.commands.iter() {
+                        if let ControlFlow::Continue(new_args) = self.execute(command)?{
+                            args = new_args;
+                            self.stack.clear();
+                            // note: for now we also clear all the runtime cells, this is not necessary
+                            self.cells = Self::empty_cells(self.cells.len());
+                            continue 'tail;
+                        }
+                    }
+                    let ret = self.stack.pop().unwrap();
+                    let StackItem::Value(val) = ret else {
+                        todo!()
+                    };
+                    break Ok(val)
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    pub fn execute<'a: 's>(&mut self, command: &'a Command<'s>) -> Result<ControlFlow<(), TailCall<'s>>, RuntimeViolation> {
         match command {
             Command::PopToCell(i) => {
                 debug_assert!(matches!(self.cells[*i], RuntimeCell::Uninitialized));
-                self.eval_top()?;
+                self.eval_top(TailCallAvailability::Disallowed)?;
                 let StackItem::Value(val) = self.stack.pop().unwrap() else {
                     todo!()
                 };
                 match val {
                     Ok(val) => {
                         self.cells[*i] = RuntimeCell::Value(val);
-                        Ok(())
+                        Ok(ControlFlow::Break(()))
                     }
                     Err(_) => {
                         todo!() // exit the current frame
                     }
                 }
             }
-            Command::EvalTop => self.eval_top(),
+            Command::EvalTop => self.eval_top(TailCallAvailability::Allowed),
             Command::PushInt(i) => {
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Int(*i)))?));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushFloat(f) => {
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Float(*f)))?));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushBool(b) => {
                 self.stack
                     .push(StackItem::Value(Ok(self.runtime.bool(*b)?)));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushString(s) => {
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Str(s.clone())))?));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushFromCell(i) => {
                 match &self.cells[*i] {
                     RuntimeCell::Uninitialized => todo!(), // err
                     RuntimeCell::Value(val) => {
                         self.stack.push(StackItem::Value(DinoValue::Ok(self.runtime.clone_ref(val)?)));
-                        Ok(())
+                        Ok(ControlFlow::Break(()))
                     }
                 }
             }
             Command::PushFromSource(pfs) => {
                 let source_fn = self.runtime.clone_ref(&self.get_sources().sources[pfs.source][pfs.id])?;
                 self.stack.push(StackItem::Value(DinoValue::Ok(source_fn)));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushFromCapture(i) => {
                 let val = self.get_capture(*i)?;
                 self.stack.push(StackItem::Value(DinoValue::Ok(val)));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::PushGlobal(i) => {
                 let cell = &self.get_global_frame().cells[*i];
@@ -327,20 +352,20 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     RuntimeCell::Value(val) => {
                         let new_val = self.runtime.clone_ref(val)?;
                         self.stack.push(StackItem::Value(DinoValue::Ok(new_val)));
-                        Ok(())
+                        Ok(ControlFlow::Break(()))
                     }
                 }
             }
             Command::PushTail(i) => {
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Tail))?));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::MakeFunction(mfn) => {
                 let captures = {
                     let mut captures = Vec::with_capacity(mfn.n_captures);
                     for _ in 0..mfn.n_captures {
-                        self.eval_top()?; // NOTE: i think this is actually never needed, aren't captures always retrieved from cells?
+                        self.eval_top(TailCallAvailability::Disallowed)?; // NOTE: i think this is actually never needed, aren't captures always retrieved from cells?
                         let StackItem::Value(Ok(val)) = self.stack.pop().unwrap() else {
                             todo!()
                         };
@@ -356,20 +381,20 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 let value = self.runtime.allocate(Ok(DinObject::UserFn(user_fn)))?;
                 self.stack
                     .push(StackItem::Value(value));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::MakePending(n_args) => {
-                self.eval_top()?;
+                self.eval_top(TailCallAvailability::Disallowed)?;
                 let StackItem::Value(func) = self.stack.pop().unwrap() else {
                     unreachable!()
                 };
                 let Ok(func) = func else { todo!() };
                 let arguments = self.stack.drain(self.stack.len() - n_args..).collect();
                 self.stack.push(StackItem::Pending(Pending { func, arguments }));
-                Ok(())
+                Ok(ControlFlow::Break(()))
             }
             Command::Attr(i) => {
-                self.eval_top()?;
+                self.eval_top(TailCallAvailability::Disallowed)?;
                 let StackItem::Value(val) = self.stack.pop().unwrap() else {
                     unreachable!()
                 };
@@ -379,7 +404,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             DinObject::Struct(fields) => {
                                 let attr = &fields[*i];
                                 self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(attr)?)));
-                                Ok(())
+                                Ok(ControlFlow::Break(()))
                             }
                             _ => todo!()
                         }
@@ -390,7 +415,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             Command::Struct(i) => {
                 let mut fields = Vec::with_capacity(*i);
                 for _ in 0..*i {
-                    self.eval_top()?;
+                    self.eval_top(TailCallAvailability::Disallowed)?;
                     let StackItem::Value(val) = self.stack.pop().unwrap() else {
                         unreachable!()
                     };
@@ -401,7 +426,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     Ok(fields) => {
                         let struct_ = self.runtime.allocate(Ok(DinObject::Struct(fields)))?;
                         self.stack.push(StackItem::Value(struct_));
-                        Ok(())
+                        Ok(ControlFlow::Break(()))
                     }
                 }
             }
@@ -419,18 +444,20 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
 pub struct SystemRuntimeFrame<'p, 's, 'r>{
     pub stack: DinoStack<'s>,
     parent: &'p RuntimeFrame<'s, 'r>,
+    tca: TailCallAvailability,
 }
 
 impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
-    fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>) -> Self {
+    fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
         Self{
             stack,
             parent,
+            tca,
         }
     }
 
-    fn from_system_parent(parent: &'p SystemRuntimeFrame<'p, 's, 'r>, stack: DinoStack<'s>) -> Self {
-        Self::from_parent(parent.parent, stack)
+    fn from_system_parent(parent: &'p SystemRuntimeFrame<'p, 's, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
+        Self::from_parent(parent.parent, stack, parent.tca & tca)
     }
 
     pub fn runtime(&self) -> &'r Runtime<'s> {
@@ -438,26 +465,39 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
     }
 
     pub fn eval_pop(&mut self) -> DinoResult<'s> {
+        if let ControlFlow::Break(ret) = self.eval_pop_tca(TailCallAvailability::Disallowed)?{
+            Ok(ret)
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn eval_pop_tca(&mut self, tca: TailCallAvailability) -> SourceFnResult<'s> {
         loop {
             match self.stack.pop().unwrap(){
-                StackItem::Value(val) => return Ok(val),
+                StackItem::Value(val) => return Ok(ControlFlow::Break(val)),
                 StackItem::Pending(Pending {func, arguments}) => {
                     match func.as_ref(){
-                        DinObject::UserFn(user_fn) => {
+                        DinObject::UserFn(..) => {
+                            if tca.is_allowed() && self.tca.is_allowed() && self.parent.user_fn.as_ref().is_some_and(|t| Arc::ptr_eq(&func.0, &t.0)){
+                                return Ok(ControlFlow::Continue(arguments));
+                            }
                             let func = self.runtime().clone_ref(&func)?;
                             let mut new_frame = self.parent.child(func);
-                            new_frame.stack.extend(arguments);
-                            for command in user_fn.commands.iter(){
-                                new_frame.execute(command)?;
-                            }
-                            let ret = new_frame.stack.pop().unwrap();
-                            let StackItem::Value(val) = ret else {panic!()};
+                            let val = new_frame.exec_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
-                            let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments);
+                            let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments, tca);
                             let ret = source_fn(&mut new_frame)?;
-                            self.stack.push(StackItem::Value(ret));
+                            match ret{
+                                ControlFlow::Break(val) => {
+                                    self.stack.push(StackItem::Value(val));
+                                }
+                                cont @ ControlFlow::Continue(..) => {
+                                    return Ok(cont);
+                                }
+                            }
                         }
                         _ => {panic!()}
                     }

@@ -1,0 +1,7 @@
+fn foo(t: int, a: int) -> int {
+    if(t == 0, a, foo(t - 1, a+1))
+}
+
+fn main() -> bool {
+    assert(foo(1000, 0) == 1000)
+}

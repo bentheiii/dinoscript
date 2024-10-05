@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
     bytecode::{Command, SourceId},
     compilation_scope::{
@@ -6,7 +6,7 @@ use dinoscript_core::{
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
     },
-    dinobj::{DinObject},
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
     dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
 };
 // pragma: skip 2
@@ -177,6 +177,13 @@ pub(crate) fn pre_items_setup<'p, 's>(scope: &mut CompilationScope<'p, 's, Built
     Builtins { int, float, bool, str }
 }
 
+fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
+    match result {
+        Ok(v) => Ok(ControlFlow::Break(v)),
+        Err(e) => Err(e),
+    }
+}
+
 pub(crate)
 fn setup_items<'a, 's>()->
 // pragma:replace-start
@@ -190,6 +197,7 @@ ItemsBuilder<'a, 's>
     // pragma:skip 1
     let mut builder = prepare_build();
     vec![
+        // region: int
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -201,26 +209,10 @@ ItemsBuilder<'a, 's>
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match (a.as_ref(), b.as_ref()) {
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
                         (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a + b))),
                         _ => Ok(Err(())),
-                    }
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                signature_fn!(fn assert (a: bool) -> bool),
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    match a.as_ref() {
-                        DinObject::Bool(true) => Ok(Ok(frame.runtime().bool(true)?)),
-                        _ => Ok(Err(())),
-                    }
+                    })
                 })),
             ))
         )
@@ -236,29 +228,10 @@ ItemsBuilder<'a, 's>
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match (a.as_ref(), b.as_ref()) {
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
                         (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
                         _ => Ok(Err(())),
-                    }
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                signature_fn!(fn mul (a: int, b: int) -> int),
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a * b))),
-                        _ => Ok(Err(())),
-                    }
+                    })
                 })),
             ))
         )
@@ -274,15 +247,54 @@ ItemsBuilder<'a, 's>
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match (a.as_ref(), b.as_ref()) {
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
                         (DinObject::Int(a), DinObject::Int(b)) => {
                             if *b == 0{
-                                return Ok(Err(()));
+                                Ok(Err(()))
+                            } else {
+                                frame.runtime().allocate(Ok(DinObject::Int(a % b)))
                             }
-                            frame.runtime().allocate(Ok(DinObject::Int(a % b)))
                         },
                         _ => Ok(Err(())),
-                    }
+                    })
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn mul (a: int, b: int) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a * b))),
+                        _ => Ok(Err(())),
+                    })
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn sub (a: int, b: int) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a - b))),
+                        _ => Ok(Err(())),
+                    })
                 })),
             ))
         )
@@ -295,10 +307,28 @@ ItemsBuilder<'a, 's>
                     let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match a.as_ref() {
+                    to_return_value(match a.as_ref() {
                         DinObject::Int(a) => frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))),
                         _ => Ok(Err(())),
-                    }
+                    })
+                })),
+            ))
+        )
+        ,
+        // endregion
+        // region: bool
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn assert (a: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match a.as_ref() {
+                        DinObject::Bool(true) => Ok(Ok(frame.runtime().bool(true)?)),
+                        _ => Ok(Err(())),
+                    })
                 })),
             ))
         )
@@ -313,9 +343,8 @@ ItemsBuilder<'a, 's>
                     };
                     if let DinObject::Bool(false) = b.as_ref() {
                         let popped = frame.stack.pop().unwrap();
-                        println!("popping {:?}", popped);
                     }
-                    frame.eval_pop()
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
                 })),
             ))
         )
@@ -328,14 +357,14 @@ ItemsBuilder<'a, 's>
                     let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match a.as_ref() {
+                    to_return_value(match a.as_ref() {
                         DinObject::Bool(false) => {
                             frame.stack.pop().unwrap();
                             Ok(Ok(frame.runtime().bool(false)?))
                         },
                         DinObject::Bool(true) => frame.eval_pop(), // todo tail call
                         _ => Ok(Err(())),
-                    }
+                    })
                 })),
             ))
         )
@@ -351,14 +380,16 @@ ItemsBuilder<'a, 's>
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match (a.as_ref(), b.as_ref()) {
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
                         (DinObject::Bool(a), DinObject::Bool(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
                         _ => Ok(Err(())),
-                    }
+                    })
                 })),
             ))
         )
         ,
+        // endregion
+        // region: str
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -370,14 +401,16 @@ ItemsBuilder<'a, 's>
                     let Ok(b) = frame.eval_pop()? else {
                         todo!()
                     };
-                    match (a.as_ref(), b.as_ref()) {
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
                         (DinObject::Str(a), DinObject::Str(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
                         _ => Ok(Err(())),
-                    }
+                    })
                 })),
             ))
         )
         ,
+        // endregion
+
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id

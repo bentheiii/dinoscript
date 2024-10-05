@@ -251,7 +251,6 @@ pub enum NamedItem<'s> {
     Overloads(Overloads<'s>),
     Variable(Variable<'s>),
     Type(NamedType<'s>),
-    Tail,
 }
 
 #[derive(Debug, Clone)]
@@ -278,12 +277,6 @@ impl Display for NamedType<'_> {
 #[derive(Debug, Clone)]
 pub struct Overloads<'s> {
     pub overloads: Vec<Overload<'s>>,
-}
-
-impl<'s> Overloads<'s> {
-    fn extend(&mut self, other: &Overloads<'s>) {
-        self.overloads.extend(other.overloads.iter().cloned());
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -364,7 +357,6 @@ enum RelativeNamedItem<'p, 's> {
     Variable(RelativeNamedItemVariable<'s>),
     Type(&'p NamedType<'s>),
     Overloads(RelativeNamedItemOverloads<'p, 's>),
-    Tail(usize),
 }
 
 impl<'p, 's> RelativeNamedItem<'p, 's> {
@@ -385,7 +377,6 @@ impl<'p, 's> RelativeNamedItem<'p, 's> {
                     })
                     .collect(),
             }),
-            RelativeNamedItem::Tail(idx) => RelativeNamedItem::Tail(*idx + height),
         }
     }
 }
@@ -642,7 +633,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }))
             }
             Some(NamedItem::Type(ty)) => Some(RelativeNamedItem::Type(ty)),
-            Some(NamedItem::Tail) => Some(RelativeNamedItem::Tail(0)),
             None => match self.parent {
                 // todo increment the parent's cell indices
                 Some(parent) => parent.get_named_item(name),
@@ -658,8 +648,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn set_tail(&mut self, name: Cow<'s, str>) {
-        self.names.insert(name, NamedItem::Tail);
+    fn set_tail(&mut self, parent_cell_idx: usize) {
+        // do nothing for now
     }
 
     fn feed_params<'c:'s>(
@@ -777,7 +767,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         // todo we should also consider the case where the function is generic
                         Ok(fn_ty.return_ty.clone())
                     }
-                    _ => todo!(), // raise an error
+                    _ => Err(CompilationError::NotCallable { ty: ty.clone()}.with_pair(expr.pair.clone()))
                 }
             }
             Functor::Operator(op) => self.feed_call(
@@ -867,10 +857,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                     Some(RelativeNamedItem::Type(nt)) => {
                         Err(CompilationError::TypeUsedAsValue { ty:  nt.clone()}.with_pair(expr.pair.clone()))
-                    }
-                    Some(RelativeNamedItem::Tail(idx)) => {
-                        sink.push(Command::PushTail(idx));
-                        Ok(Arc::new(Ty::Tail))
                     }
                     None => {
                         return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(expr.pair.clone()));
@@ -991,20 +977,38 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }) => {
                 let mut subscope_sink = Vec::new();
                 let cell_idx = self.get_cell_idx();
-                let mut subscope = self.child();
+
                 let args = args
                     .into_iter()
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
                             fn_arg.name.clone(),
-                            subscope.parse_type(&fn_arg.ty)?,
+                            self.parse_type(&fn_arg.ty)?,
                             fn_arg.default.clone(),
                         ))
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let expected_return_ty = subscope.parse_type(return_ty)?;
+                    .collect::<Result<Vec<_>, _>>()?;                
+                let expected_return_ty = self.parse_type(return_ty)?;
+
+                // todo check that we don't shadow a variable
+                let new_overload = Overload {
+                    generic_params: None, // todo
+                    args: args
+                        .iter()
+                        .map(|(_name, ty, default)| OverloadArg {
+                            ty: ty.clone(),
+                            default: default.as_ref().map(|_| todo!()),
+                        })
+                        .collect(),
+                    return_ty: expected_return_ty,
+                    loc: OverloadLoc::Cell(cell_idx),
+                };
+                self.add_overload(name.clone(), new_overload);
+                
+                
+                let mut subscope = self.child();
                 subscope.set_generics(generic_params.iter().cloned());
-                subscope.set_tail(name.clone());
+                //subscope.set_tail(name.clone());
                 subscope.feed_params(
                     args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
                     &mut subscope_sink,
@@ -1020,21 +1024,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     n_cells: subscope.n_cells,
                     commands: subscope_sink,
                 }));
-                // todo check that we don't shadow a variable
-
-                let new_overload = Overload {
-                    generic_params: None, // todo
-                    args: args
-                        .into_iter()
-                        .map(|(_name, ty, default)| OverloadArg {
-                            ty: ty,
-                            default: default.map(|_| todo!()),
-                        })
-                        .collect(),
-                    return_ty: expected_return_ty,
-                    loc: OverloadLoc::Cell(cell_idx),
-                };
-                self.add_overload(name.clone(), new_overload);
+                
                 sink.push(Command::PopToCell(cell_idx));
                 Ok(())
             }

@@ -119,3 +119,18 @@ fn test_script_005(){
 fn test_script_006(){
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_007(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_008(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_009(){
+    test_script_from_name(function_name!());
+}

@@ -47,12 +47,9 @@ impl<'s> BindingResolution<'s> {
             Ty::Fn(assign_fn) => todo!(),
             Ty::Generic(Generic {idx, gen_id}) if self.gen_id.is_some_and(|gid| gen_id == gen_id)  => {
                 if let Some(bound_type) = &self.bound_generics[*idx]{
-                    println!("Combining {:?} and {:?}", bound_type, input_type);
                     self.bound_generics[*idx] = Some(combine_types(bound_type, input_type)?);
-                    println!("\tResult: {:?}", self.bound_generics[*idx]);
                     Ok(())
                 } else {
-                    println!("Assigning {:?} to {:?}", input_type, assign_type);
                     self.bound_generics[*idx] = Some(input_type.clone());
                     Ok(())
                 }

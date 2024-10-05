@@ -1,6 +1,6 @@
 use derive_more::Debug;
 
-use std::{borrow::Cow, ops::Deref, sync::Arc, mem::size_of};
+use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc};
 
 use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{Runtime, RuntimeFrame, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
 
@@ -34,7 +34,27 @@ pub enum TailCallAvailability {
     Disallowed,
 }
 
-pub type SourceFnFunc = Box<dyn for<'s, 'r> Fn(&mut SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s>>;
+impl TailCallAvailability {
+    pub fn is_allowed(&self) -> bool {
+        matches!(self, Self::Allowed)
+    }
+}
+
+impl BitAnd for TailCallAvailability {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Allowed, Self::Allowed) => Self::Allowed,
+            _ => Self::Disallowed,
+        }
+    }
+}
+
+pub type TailCall<'s> = Vec<StackItem<'s>>;
+pub type SourceFnResult<'s> = Result<ControlFlow<DinoValue<'s>, TailCall<'s>>, RuntimeViolation>;
+
+pub type SourceFnFunc = Box<dyn for<'s, 'r> Fn(&mut SystemRuntimeFrame<'_, 's, '_>) -> SourceFnResult<'s>>;
 
 #[derive(Debug)]
 pub struct UserFn<'s> {

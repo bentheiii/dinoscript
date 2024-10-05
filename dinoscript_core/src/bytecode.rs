@@ -3,7 +3,7 @@ use std::borrow::Cow;
 #[derive(Debug)]
 pub enum Command<'s> {
     PopToCell(usize), // POP
-    EvalTop,          // EVL
+    EvalTop,          // EVL // this is always for a return
 
     PushInt(i64),                   // PIC
     PushFloat(f64),                 // PFC

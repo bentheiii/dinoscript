@@ -35,6 +35,9 @@ pub enum CompilationError<'c, 's> {
         name: Cow<'s, str>,
         arg_types: Vec<Arc<Ty<'s>>>,
     },
+    NotCallable {
+        ty: Arc<Ty<'s>>,
+    },
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -105,6 +108,7 @@ impl Display for CompilationError<'_, '_> {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            CompilationError::NotCallable { ty } => write!(f, "Object of type {} is not callable", ty),
         }
     }
 }
