@@ -1,0 +1,10 @@
+fn main() -> bool{
+    let x = [5, 16, 8, 4, 2, 1];
+    
+    assert(x[0] == 5)
+    && assert(x[1] == 16)
+    && assert(x[2] == 8)
+    && assert(x[3] == 4)
+    && assert(x[4] == 2)
+    && assert(x[5] == 1)
+}

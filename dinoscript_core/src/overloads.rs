@@ -62,7 +62,7 @@ impl<'s> BindingResolution<'s> {
     }
 }
 
-fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>, ()>{
+pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>, ()>{
     match (a.as_ref(),b.as_ref()) {
         (Ty::Specialized(a_spec), Ty::Specialized(b_spec)) => {
             let a_templ = &a_spec.template;

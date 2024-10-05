@@ -35,7 +35,7 @@ expression3 = {
     | FORMATTED_STRING
     | bool
     | NUMBER_ANY
-    //| container
+    | container
     | "(" ~ expression ~ ")"
     //| lambda_func
     | tuple
@@ -43,7 +43,7 @@ expression3 = {
     //| dyn_bind_cname
     | CNAME
 }
- //container = { "[" ~ container_elements? ~ ","? ~ "]" }
+ container = { "[" ~ container_elements? ~ ","? ~ "]" }
   container_elements = {expression ~ (","~expression)*}
  tuple = {
    "(" ~ container_elements? ~ ","? ~ ")"

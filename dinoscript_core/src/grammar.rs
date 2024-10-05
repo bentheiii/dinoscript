@@ -117,6 +117,10 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             let name = inner.as_str();
             return Ok(Expr::Ref(name.into()).with_pair(inner));
         }
+        Rule::container =>{
+            let ret = inner.clone().into_inner().next().map(|p|p.into_inner().map(parse_expr).collect::<Result<Vec<_>, _>>()).transpose()?.unwrap_or_default();
+            return Ok(Expr::Array(ret).with_pair(inner));
+        }
         _ => {
             unreachable!()
         }

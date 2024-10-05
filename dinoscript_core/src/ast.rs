@@ -66,6 +66,7 @@ pub mod expression {
         Call(Call<'s>),
         Formatted(Vec<FormattedPart<'s>>),
         Lookup(Lookup<'s>),
+        Array(Vec<ExprWithPair<'s>>),
     }
 
     impl<'s> Pairable<'s> for Expr<'s>{}

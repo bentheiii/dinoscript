@@ -22,6 +22,7 @@ pub enum Command<'s> {
     Struct(usize),     // STR
     Variant(usize),    // VAR
     VariantOpt(usize), // VOP
+    Array(usize),      // ARR
 }
 
 impl<'s> Command<'s> {
@@ -48,6 +49,7 @@ impl<'s> Command<'s> {
             Command::Struct(structure)=>format!("{indent}dinoscript_core::bytecode::Command::Struct({})",structure),
             Command::Variant(variant)=>format!("{indent}dinoscript_core::bytecode::Command::Variant({})",variant),
             Command::VariantOpt(variant_opt)=>format!("{indent}dinoscript_core::bytecode::Command::VariantOpt({})",variant_opt),
+            Command::Array(array)=>format!("{indent}dinoscript_core::bytecode::Command::Array({})",array),
         }
     }
 }

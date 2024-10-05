@@ -3,10 +3,10 @@ use dinoscript_core::{
     bytecode::{Command, SourceId},
     compilation_scope::{
         self,
-        ty::{BuiltinTemplate, Ty, TyTemplate},
+        ty::{BuiltinTemplate, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
     },
-    dinobj::{DinObject, DinoResult, DinoValue, SourceFnResult, TailCallAvailability},
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
     dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned,
 };
 // pragma: skip 2
@@ -18,6 +18,7 @@ pub struct Builtins<'s> {
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
     pub str: Arc<Ty<'s>>,
+    pub Sequence: Arc<TyTemplate<'s>>,
 }
 
 impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
@@ -36,6 +37,10 @@ impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
     fn str(&self) -> Arc<Ty<'s>> {
         self.str.clone()
     }
+
+    fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.Sequence.instantiate(vec![ty])
+    }
 }
 
 macro_rules! get_type {
@@ -44,6 +49,9 @@ macro_rules! get_type {
     };
     ($b:ident, $gens:expr, $g_id:literal) => {
         $gens[$g_id].clone()
+    };
+    ($b:ident, $gens:expr, ($ty_name:ident<$($gen_params:tt),*>)) => {
+        $b.$ty_name.instantiate(vec![$(get_type!($b, $gens, $gen_params)),*])
     };
 }
 
@@ -161,21 +169,24 @@ pub(crate) fn pre_items_setup<'p, 's>(scope: &mut CompilationScope<'p, 's, Built
         scope: &mut CompilationScope<'p, 's, B>,
         name: &'s str,
         template: TyTemplate<'s>,
-    ) -> Arc<Ty<'s>> {
+    ) -> Arc<TyTemplate<'s>> {
         let template = Arc::new(template);
-        let ret = template.instantiate(vec![]);
         scope
-            .names
-            .insert(name.into(), NamedItem::Type(NamedType::Template(template)));
-        ret
+        .names
+        .insert(name.into(), NamedItem::Type(NamedType::Template(template.clone())));
+        template
     }
 
-    let int = register_type(scope, "int", TyTemplate::Builtin(BuiltinTemplate::primitive("int")));
-    let float = register_type(scope, "float", TyTemplate::Builtin(BuiltinTemplate::primitive("float")));
-    let bool = register_type(scope, "bool", TyTemplate::Builtin(BuiltinTemplate::primitive("bool")));
-    let str = register_type(scope, "str", TyTemplate::Builtin(BuiltinTemplate::primitive("str")));
+    let int = register_type(scope, "int", TyTemplate::Builtin(BuiltinTemplate::primitive("int"))).instantiate(vec![]);
+    let float = register_type(scope, "float", TyTemplate::Builtin(BuiltinTemplate::primitive("float"))).instantiate(vec![]);
+    let bool = register_type(scope, "bool", TyTemplate::Builtin(BuiltinTemplate::primitive("bool"))).instantiate(vec![]);
+    let str = register_type(scope, "str", TyTemplate::Builtin(BuiltinTemplate::primitive("str"))).instantiate(vec![]);
+    let sequence = register_type(scope, "Sequence", TyTemplate::Builtin(BuiltinTemplate::new(
+        "Sequence",
+        TemplateGenericSpecs::new(GenericSetId::unique(), 1)
+    )));
 
-    Builtins { int, float, bool, str }
+    Builtins { int, float, bool, str, Sequence: sequence }
 }
 
 fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
@@ -493,7 +504,18 @@ ItemsBuilder<'a, 's>
         )
         ,
         // endregion float
-
+        // region sequence
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn lookup<T> (a: (Sequence<0>), idx: int) -> 0),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    todo!()
+                })),
+            ))
+        )
+        ,
+        // endregion sequence
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id

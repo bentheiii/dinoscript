@@ -38,6 +38,10 @@ pub enum CompilationError<'c, 's> {
     NotCallable {
         ty: Arc<Ty<'s>>,
     },
+    ArrayItemTypeMismatch {
+        expected_ty: Arc<Ty<'s>>,
+        actual_ty: Arc<Ty<'s>>,
+    },
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -109,6 +113,14 @@ impl Display for CompilationError<'_, '_> {
                     .join(", ")
             ),
             CompilationError::NotCallable { ty } => write!(f, "Object of type {} is not callable", ty),
+            CompilationError::ArrayItemTypeMismatch {
+                expected_ty,
+                actual_ty,
+            } => write!(
+                f,
+                "Type mismatch in array: expected item type {}, got {}",
+                expected_ty, actual_ty
+            ),
         }
     }
 }

@@ -447,6 +447,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             Command::VariantOpt(i) => {
                 todo!()
             }
+            Command::Array(i) => {
+                todo!()
+            }
         }
     }
 }

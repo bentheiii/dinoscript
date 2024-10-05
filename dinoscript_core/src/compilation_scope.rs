@@ -1,5 +1,5 @@
 use std::{
-    borrow::Cow, collections::{hash_map::Entry, HashMap}, fmt::Display, sync::Arc
+    borrow::Cow, collections::{hash_map::Entry, HashMap}, fmt::Display, sync::Arc, vec
 };
 
 use indexmap::IndexMap;
@@ -7,8 +7,8 @@ use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Templ
 
 use crate::{
     ast::{
-        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}
-    }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::BindingResolution
+        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}
+    }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::{combine_types, BindingResolution}
 };
 
 pub mod ty {
@@ -82,6 +82,13 @@ pub mod ty {
             Self {
                 name: name.into(),
                 generics: None,
+            }
+        }
+
+        pub fn new(name: impl Into<Cow<'static, str>>, generics: TemplateGenericSpecs) -> Self {
+            Self {
+                name: name.into(),
+                generics: Some(generics),
             }
         }
     }
@@ -442,6 +449,7 @@ pub trait Builtins<'s> {
     fn float(&self) -> Arc<Ty<'s>>;
     fn bool(&self) -> Arc<Ty<'s>>;
     fn str(&self) -> Arc<Ty<'s>>;
+    fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
 }
 
 pub struct CompilationScope<'p, 's, B> {
@@ -522,20 +530,24 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         template.instantiate(args)
     }
 
-    fn int(&self) -> Arc<Ty<'s>> {
+    fn int_ty(&self) -> Arc<Ty<'s>> {
         self.builtins.as_ref().unwrap().int()
     }
 
-    fn float(&self) -> Arc<Ty<'s>> {
+    fn float_ty(&self) -> Arc<Ty<'s>> {
         self.builtins.as_ref().unwrap().float()
     }
 
-    fn bool(&self) -> Arc<Ty<'s>> {
+    fn bool_ty(&self) -> Arc<Ty<'s>> {
         self.builtins.as_ref().unwrap().bool()
     }
 
-    fn str(&self) -> Arc<Ty<'s>> {
+    fn str_ty(&self) -> Arc<Ty<'s>> {
         self.builtins.as_ref().unwrap().str()
+    }
+
+    fn sequence_ty(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.builtins.as_ref().unwrap().sequence(ty)
     }
 
     fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
@@ -793,19 +805,19 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         match &expr.inner {
             Expr::LitInt(value) => {
                 sink.push(Command::PushInt(*value));
-                Ok(self.int())
+                Ok(self.int_ty())
             }
             Expr::LitFloat(value) => {
                 sink.push(Command::PushFloat(*value));
-                Ok(self.float())
+                Ok(self.float_ty())
             }
             Expr::LitBool(value) => {
                 sink.push(Command::PushBool(*value));
-                Ok(self.bool())
+                Ok(self.bool_ty())
             }
             Expr::LitString(value) => {
                 sink.push(Command::PushString(value.clone()));
-                Ok(self.str())
+                Ok(self.str_ty())
             }
             Expr::Ref(name) => {
                 match self.get_named_item(name) {
@@ -916,8 +928,31 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let args = std::iter::once(obj.as_ref()).chain(args.iter());
                 self.feed_call(&Functor::Expr(Box::new(Expr::Ref(name.clone()).with_pair(expr.pair.clone()))), args, sink)
             }
+            Expr::Array(items)=>{
+                let mut arr_ty = None;
+                for item in items.iter().rev() {
+                    let item_ty = self.feed_expression(item, sink)?;
+                    if let Some(ty) = arr_ty.as_ref() {
+                        match combine_types(ty, &item_ty){
+                            Ok(combined) => arr_ty = Some(combined),
+                            Err(_) => return Err(CompilationError::ArrayItemTypeMismatch { expected_ty: ty.clone(), actual_ty: item_ty}.with_pair(expr.pair.clone()))
+                        }
+                    }
+                    else {
+                        arr_ty = Some(item_ty);
+                    }
+                }
+                let arr_ty = arr_ty.unwrap();
+                sink.push(Command::Array(items.len()));
+                Ok(self.sequence_ty(arr_ty))
+            }
+            Expr::Lookup(Lookup { obj, keys }) => {
+                let mut args = vec![obj.as_ref()];
+                args.extend(keys.iter());
+                self.feed_call(&Functor::Expr(Box::new(Expr::Ref(Cow::Borrowed("lookup")).with_pair(expr.pair.clone()))), args.into_iter(), sink)
+            }
 
-            _ => todo!(),
+            _ => todo!("handle expression {:?}", expr.inner),
         }
     }
 
