@@ -6,7 +6,7 @@ use dinoscript_core::{
         ty::{BuiltinTemplate, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
     },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
+    dinobj::{DinObject, DinoResult, DinoValue, SourceFnResult, TailCallAvailability},
     dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
 };
 // pragma: skip 2
@@ -184,6 +184,25 @@ fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
     }
 }
 
+macro_rules! unwrap_value {
+    ($evaled:expr) => {
+        match $evaled {
+            Ok(v) => v,
+            Err(e) => return to_return_value(Ok(Err(e))),
+        }
+    };
+}
+
+macro_rules! as_prim {
+    ($ref:expr, $variant:ident) => {
+        if let DinObject::$variant(v) = $ref.as_ref() {
+            v
+        } else {
+            return to_return_value(Ok(Err(())));
+        }
+    };
+}
+
 pub(crate)
 fn setup_items<'a, 's>()->
 // pragma:replace-start
@@ -203,16 +222,12 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn add (a: int, b: int) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a + b))),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a + b))))
                 })),
             ))
         )
@@ -222,15 +237,15 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn div (a: int, b: int) -> float),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Float((*a as f64) / (*b as f64)))),
-                        _ => Ok(Err(())),
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(if *b == 0{
+                        Ok(Err(()))
+                    } else {
+                        frame.runtime().allocate(Ok(DinObject::Float((*a as f64) / (*b as f64))))
                     })
                 })),
             ))
@@ -241,16 +256,12 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn eq (a: int, b: int) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
                 })),
             ))
         )
@@ -260,16 +271,12 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn gte (a: int, b: int) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(frame.runtime().bool(a>=b)?)),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(Ok(Ok(frame.runtime().bool(a >= b)?)))
                 })),
             ))
         )
@@ -279,21 +286,15 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn mod (a: int, b: int) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => {
-                            if *b == 0{
-                                Ok(Err(()))
-                            } else {
-                                frame.runtime().allocate(Ok(DinObject::Int(a % b)))
-                            }
-                        },
-                        _ => Ok(Err(())),
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(if *b == 0{
+                        Ok(Err(()))
+                    } else {
+                        frame.runtime().allocate(Ok(DinObject::Int(a % b)))
                     })
                 })),
             ))
@@ -304,16 +305,12 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn mul (a: int, b: int) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a * b))),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a * b))))
                 })),
             ))
         )
@@ -323,16 +320,12 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn sub (a: int, b: int) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Int(a), DinObject::Int(b)) => frame.runtime().allocate(Ok(DinObject::Int(a - b))),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    let b = as_prim!(b, Int);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a - b))))
                 })),
             ))
         )
@@ -342,13 +335,10 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn to_str (a: int) -> str),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match a.as_ref() {
-                        DinObject::Int(a) => frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))))
                 })),
             ))
         )
@@ -360,16 +350,14 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn and (a: bool, b: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    match a.as_ref() {
-                        DinObject::Bool(false) => {
-                            frame.stack.pop().unwrap();
-                            to_return_value(Ok(Ok(a)))
-                        },
-                        DinObject::Bool(true) => frame.eval_pop_tca(TailCallAvailability::Allowed),
-                        _ => to_return_value(Ok(Err(()))),
+                    let a_ref = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a_ref, Bool);
+                    if !a{
+                        to_return_value(Ok(Ok(a_ref)))
+                    }
+                    else{
+                        frame.eval_pop_tca(TailCallAvailability::Allowed)
                     }
                 })),
             ))
@@ -380,12 +368,14 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn assert (a: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match a.as_ref() {
-                        DinObject::Bool(true) => Ok(Ok(frame.runtime().bool(true)?)),
-                        _ => Ok(Err(())),
+                    let a_ref = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a_ref, Bool);
+                    to_return_value(if *a{
+                        Ok(Ok(a_ref))
+                    }
+                    else{
+                        Ok(Err(()))
                     })
                 })),
             ))
@@ -396,10 +386,11 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn if <T> (b: bool, t: 0, e: 0) -> 0),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    if let DinObject::Bool(false) = b.as_ref() {
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let b = as_prim!(b, Bool);
+                    
+                    if !b {
                         frame.stack.pop().unwrap();
                     }
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
@@ -412,16 +403,13 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn eq (a: bool, b: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Bool(a), DinObject::Bool(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Bool);
+                    let b = as_prim!(b, Bool);
+
+                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
                 })),
             ))
         )
@@ -431,13 +419,10 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn not (a: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match a.as_ref() {
-                        DinObject::Bool(a) => Ok(Ok(frame.runtime().bool(!a)?)),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Bool);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Bool(!a))))
                 })),
             ))
         )
@@ -447,16 +432,14 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn or (a: bool, b: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    match a.as_ref() {
-                        DinObject::Bool(true) => {
-                            frame.stack.pop().unwrap();
-                            to_return_value(Ok(Ok(a)))
-                        },
-                        DinObject::Bool(false) => frame.eval_pop_tca(TailCallAvailability::Allowed),
-                        _ => to_return_value(Ok(Err(()))),
+                    let a_ref = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a_ref, Bool);
+                    if *a{
+                        to_return_value(Ok(Ok(a_ref)))
+                    }
+                    else{
+                        frame.eval_pop_tca(TailCallAvailability::Allowed)
                     }
                 })),
             ))
@@ -469,16 +452,13 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn eq (a: str, b: str) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    let Ok(b) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match (a.as_ref(), b.as_ref()) {
-                        (DinObject::Str(a), DinObject::Str(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+                    let b = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Str);
+                    let b = as_prim!(b, Str);
+                    
+                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
                 })),
             ))
         )
@@ -490,13 +470,10 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn floor (a: float) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match a.as_ref() {
-                        DinObject::Float(a) => frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))),
-                        _ => Ok(Err(())),
-                    })
+                    let a = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Float);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))))
                 })),
             ))
         )
@@ -508,7 +485,7 @@ ItemsBuilder<'a, 's>
             // pragma:replace-id
             "abs",
             r#"fn abs(x: int)->int{
-                x
+                if(x>=0, x, -x)
             }"#
         )
         // pragma:replace-end

@@ -97,6 +97,10 @@ fn apply_template<R: BufRead, W: Write>(mut write: W, read: R, replacements: &Ha
                     let initial_indent = first_line.chars().take_while(|c| c.is_whitespace()).collect::<String>();
                     loop {
                         let raw_line = lines.next().unwrap().unwrap();
+                        if raw_line.chars().all(char::is_whitespace) {
+                            write.write_all(b"\n").unwrap();
+                            continue;
+                        } 
                         let without_indent = raw_line.strip_prefix(&initial_indent).unwrap();
                         let first_char = without_indent.chars().next().unwrap();
                         if first_char.is_whitespace() {

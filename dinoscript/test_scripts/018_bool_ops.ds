@@ -1,0 +1,14 @@
+fn main()->bool{
+    assert(true && true)
+    && assert(!(true && false))
+    && assert(!(false && true))
+    && assert(!(false && false))
+
+    && assert(true || true)
+    && assert(true || false)
+    && assert(false || true)
+    && assert(!(false || false))
+
+    && assert(!false)
+    && assert(!!true)
+}
