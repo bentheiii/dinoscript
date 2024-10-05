@@ -365,7 +365,7 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()> {
                 "union" => CompoundKind::Union,
                 _ => unreachable!(),
             };
-            let gen_params = gen_params.into_inner().map(|p| todo!()).collect();
+            let gen_params = gen_params.into_inner().next().map(|p| p.into_inner().map(|p| p.as_str().into()).collect()).unwrap_or_default();
             let fields = fields
                 .into_inner()
                 .map(|field|{

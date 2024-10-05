@@ -1,0 +1,11 @@
+struct Pair<T>(a: T, b:T)
+
+fn choose<T>(pair: Pair<T>, choice: int) -> T {
+    if(choice == 0, pair::a, pair::b)
+}
+
+fn main() -> bool {
+    let x = Pair('yes', 'no');
+    assert(choose(x, 0) == 'yes')
+    && assert(choose(x, 1) == 'no')
+}

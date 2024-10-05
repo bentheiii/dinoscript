@@ -3,7 +3,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Ty, TyTemplate};
+use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate};
 
 use crate::{
     ast::{
@@ -24,7 +24,7 @@ pub mod ty {
     }
 
     impl TemplateGenericSpecs {
-        fn new(n_generics: usize) -> Self {
+        pub fn new(n_generics: usize) -> Self {
             Self {
                 id: GenericSetId::unique(),
                 n_generics: NonZero::new(n_generics).unwrap(),
@@ -1041,10 +1041,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 Ok(())
             }
             Stmt::Compound(compound) => {
-                let generics = if compound.generic_params.is_empty() {
-                    None
+                let (generics, ov) = if compound.generic_params.is_empty() {
+                    (None, None)
                 } else {
-                    todo!()
+                    (Some(TemplateGenericSpecs::new(compound.generic_params.len())), Some(OverloadGenericParams::new(GenericSetId::unique(), compound.generic_params.iter().map(|p| p.clone()).collect())))
                 };
                 let fields = compound
                     .fields
@@ -1054,7 +1054,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
-                                ty: self.parse_type(&field.ty, &None)?,
+                                ty: self.parse_type(&field.ty, &ov)?,
                                 idx: self.get_cell_idx(),
                             },
                         ))
