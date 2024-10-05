@@ -239,6 +239,25 @@ ItemsBuilder<'a, 's>
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn gte (a: int, b: int) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => Ok(Ok(frame.runtime().bool(a>=b)?)),
+                        _ => Ok(Err(())),
+                    })
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn mod (a: int, b: int) -> int),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let Ok(a) = frame.eval_pop()? else {
@@ -320,6 +339,26 @@ ItemsBuilder<'a, 's>
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn and (a: bool, b: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match a.as_ref() {
+                        DinObject::Bool(false) => {
+                            frame.stack.pop().unwrap();
+                            to_return_value(Ok(Ok(a)))
+                        },
+                        DinObject::Bool(true) => frame.eval_pop_tca(TailCallAvailability::Allowed),
+                        _ => to_return_value(Ok(Err(()))),
+                    }
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn assert (a: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let Ok(a) = frame.eval_pop()? else {
@@ -342,29 +381,9 @@ ItemsBuilder<'a, 's>
                         todo!()
                     };
                     if let DinObject::Bool(false) = b.as_ref() {
-                        let popped = frame.stack.pop().unwrap();
+                        frame.stack.pop().unwrap();
                     }
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                signature_fn!(fn and (a: bool, b: bool) -> bool),
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let Ok(a) = frame.eval_pop()? else {
-                        todo!()
-                    };
-                    to_return_value(match a.as_ref() {
-                        DinObject::Bool(false) => {
-                            frame.stack.pop().unwrap();
-                            Ok(Ok(frame.runtime().bool(false)?))
-                        },
-                        DinObject::Bool(true) => frame.eval_pop(), // todo tail call
-                        _ => Ok(Err(())),
-                    })
                 })),
             ))
         )
@@ -388,7 +407,43 @@ ItemsBuilder<'a, 's>
             ))
         )
         ,
-        // endregion
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn not (a: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    to_return_value(match a.as_ref() {
+                        DinObject::Bool(a) => Ok(Ok(frame.runtime().bool(!a)?)),
+                        _ => Ok(Err(())),
+                    })
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn or (a: bool, b: bool) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match a.as_ref() {
+                        DinObject::Bool(true) => {
+                            frame.stack.pop().unwrap();
+                            to_return_value(Ok(Ok(a)))
+                        },
+                        DinObject::Bool(false) => frame.eval_pop_tca(TailCallAvailability::Allowed),
+                        _ => to_return_value(Ok(Err(()))),
+                    }
+                })),
+            ))
+        )
+        ,
+        // endregion bool
         // region: str
         // pragma:unwrap
         builder.add_item(

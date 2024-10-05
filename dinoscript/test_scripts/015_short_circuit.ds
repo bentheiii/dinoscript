@@ -1,0 +1,10 @@
+fn is_even(x: int) -> bool {
+    x >= 0 && (x==0 || is_even(x-2))
+}
+
+fn main()->bool{
+    assert(is_even(6))
+    && assert(!is_even(5))
+    && assert(is_even(0))
+    && assert(is_even(1000))
+}
