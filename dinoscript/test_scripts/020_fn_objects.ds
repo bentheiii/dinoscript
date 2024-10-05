@@ -1,0 +1,11 @@
+fn foo(a: int)->int{
+    a*a
+}
+
+fn bar(a: int, fn_foo: (int)->(int))->int{
+    fn_foo(a)
+}
+
+fn main() -> bool{
+    assert(bar(5, foo) == 25)
+}

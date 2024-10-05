@@ -186,3 +186,18 @@ fn test_script_018(){
 fn test_script_019(){
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_020(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_021(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_022(){
+    test_script_from_name(function_name!());
+}

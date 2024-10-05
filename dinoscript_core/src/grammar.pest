@@ -99,7 +99,7 @@ function = { "fn " ~ CNAME ~ generic_signature_opt ~ "(" ~ function_parameters_o
  }
  expr_default = { "=" ~ expression }
  resolve_default = { "~=" ~ resolution }
-    resolution = {CNAME ~ "(" ~ param_specs_opt ~ ")" ~ "->" ~ "(" ~ complete_type ~ ")"}
+    resolution = {CNAME}
 
 compound_def = { compound_kind ~ CNAME ~ generic_signature_opt ~ "(" ~ compound_parameters ~ ")"}
  compound_kind = {"struct" | "union"}

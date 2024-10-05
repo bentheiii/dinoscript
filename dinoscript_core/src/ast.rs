@@ -37,6 +37,15 @@ pub mod ty {
         pub ret: Box<TyWithPair<'s>>,
     }
 
+    impl<'s> FnTy<'s> {
+        pub fn new(args: Vec<TyWithPair<'s>>, ret: TyWithPair<'s>) -> Self {
+            FnTy {
+                args,
+                ret: Box::new(ret),
+            }
+        }
+    }
+
     #[derive(Debug, Clone)]
     pub struct SpecializedTy<'s> {
         pub name: Cow<'s, str>,

@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use crate::compilation_scope::ty::{Generic, GenericSetId, Specialized, Ty};
+use crate::compilation_scope::ty::{Fn, Generic, GenericSetId, Specialized, Ty};
 
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,
@@ -44,7 +44,17 @@ impl<'s> BindingResolution<'s> {
                     Err(())
                 }
             }
-            Ty::Fn(assign_fn) => todo!(),
+            Ty::Fn(assign_fn) => {
+                if let Ty::Fn(inp_fn) = input_type.as_ref(){
+                    if assign_fn.args.len() != inp_fn.args.len(){
+                        return Err(())
+                    }
+                    assign_fn.args.iter().zip(inp_fn.args.iter()).map(|(a,i)| self.assign(a,i)).collect::<Result<Vec<_>,_>>()?;
+                    self.assign(&assign_fn.return_ty, &inp_fn.return_ty)
+                } else {
+                    Err(())
+                }
+            }
             Ty::Generic(Generic {idx, gen_id}) if self.gen_id.is_some_and(|gid| gen_id == gen_id)  => {
                 if let Some(bound_type) = &self.bound_generics[*idx]{
                     self.bound_generics[*idx] = Some(combine_types(bound_type, input_type)?);
@@ -91,7 +101,12 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
             Ok(Arc::new(Ty::Tuple(tup)))
         }
         (Ty::Fn(a_fn), Ty::Fn(b_fn)) => {
-            todo!()
+            if a_fn.args.len() != b_fn.args.len(){
+                return Err(())
+            }
+            let args = a_fn.args.iter().zip(b_fn.args.iter()).map(|(a,b)| combine_types(a,b)).collect::<Result<Vec<_>,_>>()?;
+            let ret = combine_types(&a_fn.return_ty, &b_fn.return_ty)?;
+            Ok(Arc::new(Ty::Fn(Fn::new(args, ret))))
         }
         (Ty::Generic(a_gen), Ty::Generic(b_gen)) => {
             dbg!(a_gen, b_gen);

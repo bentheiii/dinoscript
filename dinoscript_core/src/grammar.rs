@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{SpecializedTy, Ty, TyWithPair}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
 };
 
 #[derive(Parser)]
@@ -22,7 +22,12 @@ fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<TyWithPair<'s>, ()> {
     let first = inner.next().unwrap();
     match first.as_rule() {
         Rule::signature => {
-            todo!()
+            let mut inner = first.into_inner();
+            let [args, out] = [inner.next().unwrap(), inner.next().unwrap()];
+            let args = args.into_inner().next().map(|p| p.into_inner().map(|p| parse_type(p)).collect::<Result<_,_>>()).transpose()?.unwrap_or_default();
+            let out = parse_type(out)?;
+            let fn_ty = FnTy::new(args, out);
+            return Ok(Ty::Fn(fn_ty).with_pair(input_marker));
         }
         Rule::tup_type => {
             let mut parts = Vec::new();

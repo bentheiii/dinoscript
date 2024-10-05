@@ -3,6 +3,7 @@ use crate::dinobj::{AllocatedRef, ExtendedObject};
 #[derive(Debug)]
 pub enum Sequence<'s>{
     Array(Vec<AllocatedRef<'s>>),
+    Concat(Vec<AllocatedRef<'s>>),
 }
 
 impl<'s> Sequence<'s> {
@@ -13,6 +14,7 @@ impl<'s> Sequence<'s> {
     pub fn get(&self, index: usize) -> Option<&AllocatedRef<'s>> {
         match self {
             Self::Array(array) => array.get(index),
+            Self::Concat(array) => todo!(),
         }
     }
 }
