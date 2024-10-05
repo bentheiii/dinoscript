@@ -11,6 +11,8 @@ use glob::glob;
 use itertools::Itertools;
 use stdext::function_name;
 
+const SHOW_COMMANDS: bool = false;
+
 fn test_script(script_number: usize){
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
     let file_path = glob(&file_pattern)
@@ -48,26 +50,38 @@ fn test_script(script_number: usize){
         panic!("main overload is not a cell");
     };
     let main_cell = *main_cell;
-
-    let push_command = Command::PushFromCell(main_cell);
-    let runtime = Runtime::new();
-    let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
-    core_pack.setup_runtime(&mut runtime_frame);
-    for com in commands.iter() {
-        runtime_frame.execute(com).unwrap();
-    }
-    // we artificially run the main cell
-    runtime_frame.execute(&push_command).unwrap();
-    runtime_frame.execute(&Command::MakePending(0)).unwrap();
-    runtime_frame.execute(&Command::EvalTop).unwrap();
     
-    // result of main should now be on top of the stack
-    let popped = runtime_frame.stack.pop().unwrap();
-    let StackItem::Value(Ok(result_ref)) = popped else {
-        panic!("main did not return a value, got {:?}", popped);
-    };
-    let DinObject::Bool(true) = result_ref.as_ref() else {
-        panic!("main did not return true, got {:?}", result_ref);
+    {
+        let push_command = Command::PushFromCell(main_cell);
+        let runtime = Runtime::new();
+        let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
+        core_pack.setup_runtime(&mut runtime_frame);
+        for com in commands.iter() {
+            if SHOW_COMMANDS {
+                println!("{:?}", com);
+            }
+            runtime_frame.execute(com).unwrap();
+        }
+        // we artificially run the main cell
+        runtime_frame.execute(&push_command).unwrap();
+        runtime_frame.execute(&Command::MakePending(0)).unwrap();
+        runtime_frame.execute(&Command::EvalTop).unwrap();
+        
+        // result of main should now be on top of the stack
+        let popped = runtime_frame.stack.pop().unwrap();
+        let StackItem::Value(Ok(result_ref)) = popped else {
+            panic!("main did not return a value, got {:?}", popped);
+        };
+        let DinObject::Bool(true) = result_ref.as_ref() else {
+            panic!("main did not return true, got {:?}", result_ref);
+        };
+        if !runtime_frame.stack.is_empty() {
+            panic!("stack is not empty after main execution, got {:?}", runtime_frame.stack);
+        }
+        println!("----script {} passed----", script_number);
+        drop(runtime_frame);
+        println!("----dropped root frame----");
+        drop(runtime);
     };
 }
 
@@ -98,5 +112,10 @@ fn test_script_004(){
 
 #[test]
 fn test_script_005(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_006(){
     test_script_from_name(function_name!());
 }

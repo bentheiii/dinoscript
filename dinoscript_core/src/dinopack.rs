@@ -99,6 +99,10 @@ pub mod utils {
             Self { name, ty }
         }
 
+        pub fn name(&self) -> &Cow<'s, str> {
+            &self.name
+        }
+
         pub fn to_overload_arg(&self) -> OverloadArg<'s> {
             OverloadArg {
                 ty: self.ty.clone(),

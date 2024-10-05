@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, sync::{Arc, Mutex}};
+use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, sync::{Arc, Mutex, Weak}};
 
 use crate::{
     bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, Pending, SourceFnFunc, StackItem, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned
@@ -20,26 +20,35 @@ struct SharedRuntime<'s> {
     nil: Option<AllocatedRef<'s>>,
 }
 
+pub(crate) const REPORT_MEMORY_USAGE: bool = false;
+pub(crate) const INTERN_CONSTS: bool = true;
+
 impl<'s> SharedRuntime<'s>{
 
     fn clone_ref(&mut self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        {
-            self.allocated_space += AllocatedRef::SIZE;
-            // todo check against max size
+        self.allocated_space += AllocatedRef::SIZE;
+        // todo check against max size
+        if REPORT_MEMORY_USAGE {
+            println!("cloning ref ({} bytes) to {:?}", AllocatedRef::SIZE, obj);
+            println!("total allocated space: {} bytes", self.allocated_space);
         }
-        Ok(obj.clone())
+        Ok(unsafe{obj.clone()})
     }
 
     fn clone_true(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        assert!(INTERN_CONSTS);
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
-        Ok(self.true_.as_ref().unwrap().clone())
+        let r = self.true_.as_ref().unwrap();
+        Ok(unsafe{r.clone()})
     }
 
     fn clone_false(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        assert!(INTERN_CONSTS);
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
-        Ok(self.false_.as_ref().unwrap().clone())
+        let r = self.false_.as_ref().unwrap();
+        Ok(unsafe{r.clone()})
     }
 }
 
@@ -54,6 +63,10 @@ impl<'s> Runtime<'s> {
         {
             let mut rt = self.0.lock().unwrap();
             rt.allocated_space += size + AllocatedRef::SIZE;
+            if REPORT_MEMORY_USAGE {
+                println!("allocating {} bytes for {:?}", size + AllocatedRef::SIZE, obj);
+                println!("total allocated space: {} bytes", rt.allocated_space);
+            }
         }
         let allocated_object = AllocatedObject::new(obj, self.clone());
         // todo check against max size
@@ -73,25 +86,30 @@ impl<'s> Runtime<'s> {
         let true_ = ret.allocate(Ok(DinObject::Bool(true))).unwrap().unwrap();
         let false_ = ret.allocate(Ok(DinObject::Bool(false))).unwrap().unwrap();
         let nil = ret.allocate(Ok(DinObject::Struct(vec![]))).unwrap().unwrap();
-        let null = ret.allocate(Ok(DinObject::Variant(VariantObject::new(0, nil.clone())))).unwrap().unwrap();
-
-        {
+        let null = ret.allocate(Ok(DinObject::Variant(VariantObject::new(0, ret.clone_ref(&nil).unwrap())))).unwrap().unwrap();
+        
+        if INTERN_CONSTS{
             let mut rt = ret.0.lock().unwrap();
             rt.true_ = Some(true_);
             rt.false_ = Some(false_);
-            rt.null = Some(null);
             rt.nil = Some(nil);
+            rt.null = Some(null);
         }
         
         ret
     }
 
     pub fn bool(&self, b: bool) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        let mut rt = self.0.lock().unwrap();
-        if b {
-            rt.clone_true()
-        } else {
-            rt.clone_false()
+        if INTERN_CONSTS{
+            let mut rt = self.0.lock().unwrap();
+            if b {
+                rt.clone_true()
+            } else {
+                rt.clone_false()
+            }
+        }
+        else{
+            self.allocate(Ok(DinObject::Bool(b)))?
         }
     }
 
@@ -108,8 +126,15 @@ impl<'s> Runtime<'s> {
     }
 
     pub fn deallocate(&self, size: usize) {
-        let mut x = self.0.lock().unwrap();
-        x.allocated_space -= size;
+        let mut rt = self.0.lock().unwrap();
+        rt.allocated_space -= size;
+        if REPORT_MEMORY_USAGE {
+            println!("total allocated space: {} bytes", rt.allocated_space);
+        }
+    }
+
+    pub fn into_weak(self) -> Weak<Mutex<impl Sized + 's>>{
+        Arc::downgrade(&self.0)
     }
 }
 
@@ -200,7 +225,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     match func.as_ref() {
                         DinObject::UserFn(user_fn) => {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
-                            let mut child_frame = self.child(func.clone());
+                            let func = self.runtime.clone_ref(&func)?;
+                            let mut child_frame = self.child(func);
                             child_frame.stack.extend(arguments);
                             for command in user_fn.commands.iter() {
                                 child_frame.execute(command)?;
@@ -229,14 +255,14 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    fn get_capture<'a>(&'a mut self, i: usize) -> AllocatedRef<'s> {
+    fn get_capture<'a>(&'a mut self, i: usize) -> Result<AllocatedRef<'s>, RuntimeViolation> {
         match self.user_fn.as_ref().unwrap().as_ref() {
-            DinObject::UserFn(user_fn) => user_fn.captures[i].clone(),
+            DinObject::UserFn(user_fn) => self.runtime.clone_ref(&user_fn.captures[i]),
             _ => unreachable!(),
         }
     }
 
-    pub fn execute<'a>(&mut self, command: &'s Command<'s>) -> Result<(), RuntimeViolation> {
+    pub fn execute<'a: 's>(&mut self, command: &'a Command<'s>) -> Result<(), RuntimeViolation> {
         match command {
             Command::PopToCell(i) => {
                 debug_assert!(matches!(self.cells[*i], RuntimeCell::Uninitialized));
@@ -279,18 +305,18 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match &self.cells[*i] {
                     RuntimeCell::Uninitialized => todo!(), // err
                     RuntimeCell::Value(val) => {
-                        self.stack.push(StackItem::Value(DinoValue::Ok(val.clone())));
+                        self.stack.push(StackItem::Value(DinoValue::Ok(self.runtime.clone_ref(val)?)));
                         Ok(())
                     }
                 }
             }
             Command::PushFromSource(pfs) => {
-                let source_fn = self.get_sources().sources[pfs.source][pfs.id].clone();
+                let source_fn = self.runtime.clone_ref(&self.get_sources().sources[pfs.source][pfs.id])?;
                 self.stack.push(StackItem::Value(DinoValue::Ok(source_fn)));
                 Ok(())
             }
             Command::PushFromCapture(i) => {
-                let val = self.get_capture(*i);
+                let val = self.get_capture(*i)?;
                 self.stack.push(StackItem::Value(DinoValue::Ok(val)));
                 Ok(())
             }
@@ -418,7 +444,8 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                 StackItem::Pending(Pending {func, arguments}) => {
                     match func.as_ref(){
                         DinObject::UserFn(user_fn) => {
-                            let mut new_frame = self.parent.child(func.clone());
+                            let func = self.runtime().clone_ref(&func)?;
+                            let mut new_frame = self.parent.child(func);
                             new_frame.stack.extend(arguments);
                             for command in user_fn.commands.iter(){
                                 new_frame.execute(command)?;

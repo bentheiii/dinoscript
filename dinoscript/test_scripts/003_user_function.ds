@@ -1,9 +1,8 @@
-fn digits(tens: int, ones: int)->int{
-    tens*10 + ones
+fn double(x: int) -> int{
+    x+x
 }
 
-fn main()->bool{
+fn main() -> bool {
     let x = 5;
-    let y = 1;
-    assert(digits(x, y) == 51)
+    assert(double(x) == 10)
 }

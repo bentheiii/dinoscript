@@ -2,7 +2,7 @@ use derive_more::Debug;
 
 use std::{borrow::Cow, ops::Deref, sync::Arc, mem::size_of};
 
-use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{Runtime, RuntimeFrame, SystemRuntimeFrame}};
+use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{Runtime, RuntimeFrame, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -104,6 +104,9 @@ impl<'s> AllocatedObject<'s>{
 
 impl<'s> Drop for AllocatedObject<'s>{
     fn drop(&mut self) {
+        if REPORT_MEMORY_USAGE {
+            println!("Deallocating ({} bytes) {:?}", self.size, self.value);
+        }
         self.runtime.deallocate(self.size);
     }
 }
@@ -119,13 +122,16 @@ impl<'s> AllocatedRef<'s>{
 
     // this is purposefully not an implementation of Clone
     // so that we can control the allocation and deallocation
-    pub(crate) fn clone(&self) -> Self {
+    pub(crate) unsafe fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
 impl<'s> Drop for AllocatedRef<'s>{
     fn drop(&mut self) {
+        if REPORT_MEMORY_USAGE {
+            println!("Deallocating ref ({} bytes, {} refs remaining) {:?}", Self::SIZE, Arc::strong_count(&self.0)-1, self.0.value);
+        }
         self.0.runtime.deallocate(Self::SIZE);
     }
 }

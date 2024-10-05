@@ -1,13 +1,13 @@
-struct Foo (
-    x: int,
-    y: int,
-)
+struct Point (x: int, y:int)
 
-fn foo(f: Foo)->int{
-    f::x*10 + f::y
+fn norm(p: Point) -> int {
+    let x = p::x;
+    let y = p::y;
+    x * x + y * y
 }
 
-fn main()->bool{
-    let f: Foo = Foo(5, 1);
-    assert(foo(f) == 51)
+fn main() -> bool {
+    let p = Point(3,4);
+    let z = norm(p);
+    assert(z == 25)
 }

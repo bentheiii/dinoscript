@@ -87,7 +87,7 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             return Ok(Expr::LitInt(n).with_pair(inner));
         }
         Rule::expression => {
-            todo!()
+            return parse_expr(inner);
         }
         Rule::tuple => {
             let pair_mark = inner.clone();

@@ -698,23 +698,34 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 if let Expr::Ref(name) = &expr.as_ref().inner {
                     let named_item = self.get_named_item(name);
                     if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = named_item{
-                        // TODO: do we want to process this flow if there's only one overload? For now it's fine
+                        
+                        let is_one_option = overloads.len() == 1;
                         let mut resolved_overloads = Vec::new();
                         'outer: for rel_overload in overloads {
                             if arg_types.len() != rel_overload.overload.args.len() {
+                                if is_one_option {
+                                    // if there's only one overload, we can raise a better error here
+                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), expected_n: rel_overload.overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
+                                }
                                 continue;
                             }
                             let mut resolution = BindingResolution::new(None, 0);
-                            for (param, arg_ty) in rel_overload.overload.args.iter().zip(arg_types.iter()) {
+                            for (i,(param, arg_ty)) in rel_overload.overload.args.iter().zip(arg_types.iter()).enumerate() {
                                 if let Err(_) = resolution.assign(&param.ty, arg_ty){
-                                    // todo report the error?
+                                    if is_one_option {
+                                        // if there's only one overload, we can raise a better error here
+                                        return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
+                                    }
                                     continue 'outer;
                                 }
                             }
                             resolved_overloads.push(rel_overload);
                         }
-                        if resolved_overloads.len() != 1 {
-                            todo!("no single overload for {:?} ({:?})", name, arg_types);
+                        if resolved_overloads.is_empty() {
+                            return Err(CompilationError::NoOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
+                        }
+                        else if resolved_overloads.len() > 1 {
+                            return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
                         }
                         let resolved_overload = resolved_overloads.into_iter().next().unwrap();
                         let fn_ty = resolved_overload.overload.get_type();
@@ -731,7 +742,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
                         if let TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Struct, generics, fields , name: struct_name}) = template_arc.as_ref(){
                             if fields.len() != arg_types.len() {
-                                return Err(CompilationError::StructInstantiationFieldsMismatch { struct_name: struct_name.clone(), expected_num_fields: fields.len(), actual_num_fields: arg_types.len()}.with_pair(expr.pair.clone()));
+                                return Err(CompilationError::ArgumentCountMismatch { func_name: struct_name.clone(), expected_n: fields.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
                             }
                             let mut resolution = BindingResolution::new(generics.as_ref().map(|g| g.id), generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default());
                             for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
@@ -852,8 +863,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         Ok(Arc::new(Ty::Tail))
                     }
                     None => {
-                        dbg!(name);
-                        todo!() // raise an error
+                        return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(expr.pair.clone()));
                     }
                 }
             }

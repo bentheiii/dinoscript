@@ -1,0 +1,9 @@
+fn fizzbuzz(x:int) -> str {
+    if(x % 15 == 0, 'FizzBuzz', if(x % 3 == 0, 'Fizz', if(x % 5 == 0, 'Buzz', to_str(x))))
+}
+
+fn main() -> bool {
+    assert(fizzbuzz(8) == '8') && assert(fizzbuzz(9) == 'Fizz')
+    && assert(fizzbuzz(20) == 'Buzz')
+    && assert(fizzbuzz(30) == 'FizzBuzz')
+}

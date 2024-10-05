@@ -240,13 +240,73 @@ ItemsBuilder<'a, 's>
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn mod (a: int, b: int) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Int(a), DinObject::Int(b)) => {
+                            if *b == 0{
+                                return Ok(Err(()));
+                            }
+                            frame.runtime().allocate(Ok(DinObject::Int(a % b)))
+                        },
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn to_str (a: int) -> str),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match a.as_ref() {
+                        DinObject::Int(a) => frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn if (b: bool, t: str, e: str) -> str),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    if let DinObject::Bool(false) = b.as_ref() {
+                        let popped = frame.stack.pop().unwrap();
+                        println!("popping {:?}", popped);
+                    }
+                    frame.eval_pop()
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn and (a: bool, b: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let Ok(a) = frame.eval_pop()? else {
                         todo!()
                     };
                     match a.as_ref() {
-                        DinObject::Bool(false) => Ok(Ok(frame.runtime().bool(false)?)),
+                        DinObject::Bool(false) => {
+                            frame.stack.pop().unwrap();
+                            Ok(Ok(frame.runtime().bool(false)?))
+                        },
                         DinObject::Bool(true) => frame.eval_pop(), // todo tail call
                         _ => Ok(Err(())),
                     }
@@ -273,12 +333,31 @@ ItemsBuilder<'a, 's>
             ))
         )
         ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn eq (a: str, b: str) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let Ok(a) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    let Ok(b) = frame.eval_pop()? else {
+                        todo!()
+                    };
+                    match (a.as_ref(), b.as_ref()) {
+                        (DinObject::Str(a), DinObject::Str(b)) => Ok(Ok(frame.runtime().bool(a==b)?)),
+                        _ => Ok(Err(())),
+                    }
+                })),
+            ))
+        )
+        ,
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id
-            "double",
-            r#"fn double(x: int)->int{
-                x+x
+            "abs",
+            r#"fn abs(x: int)->int{
+                x
             }"#
         )
         // pragma:replace-end

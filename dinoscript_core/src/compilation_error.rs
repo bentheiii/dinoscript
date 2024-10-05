@@ -12,10 +12,10 @@ pub enum CompilationError<'c, 's> {
     TypeUsedAsValue {
         ty: NamedType<'s>,
     },
-    StructInstantiationFieldsMismatch {
-        struct_name: Cow<'s, str>,
-        expected_num_fields: usize,
-        actual_num_fields: usize,
+    ArgumentCountMismatch {
+        func_name: Cow<'s, str>,
+        expected_n: usize,
+        actual_n: usize,
     },
     ArgumentTypeMismatch {
         func_name: Cow<'s, str>,
@@ -23,6 +23,17 @@ pub enum CompilationError<'c, 's> {
         param_name: Option<Cow<'s, str>>,
         expected_ty: Arc<Ty<'s>>,
         actual_ty: Arc<Ty<'s>>,
+    },
+    NameNotFound {
+        name: Cow<'c, str>,
+    },
+    NoOverloads {
+        name: Cow<'s, str>,
+        arg_types: Vec<Arc<Ty<'s>>>,
+    },
+    AmbiguousOverloads {
+        name: Cow<'s, str>,
+        arg_types: Vec<Arc<Ty<'s>>>,
     },
 }
 
@@ -47,14 +58,14 @@ impl Display for CompilationError<'_, '_> {
             CompilationError::TypeUsedAsValue { ty } => {
                 write!(f, "Type {} cannot be used as a value", ty)
             },
-            CompilationError::StructInstantiationFieldsMismatch {
-                struct_name,
-                expected_num_fields,
-                actual_num_fields,
+            CompilationError::ArgumentCountMismatch {
+                func_name: struct_name,
+                expected_n,
+                actual_n,
             } => write!(
                 f,
-                "Struct {} expects {} fields, got {}",
-                struct_name, expected_num_fields, actual_num_fields
+                "Callable {} expects {} arguments, got {}",
+                struct_name, expected_n, actual_n
             ),
             CompilationError::ArgumentTypeMismatch {
                 func_name,
@@ -72,7 +83,28 @@ impl Display for CompilationError<'_, '_> {
                     "Type mismatch in callable {}: param {} ({}) expects {}, got {}",
                     func_name, param_n, param_name, expected_ty, actual_ty
                 )
-            }
+            },
+            CompilationError::NameNotFound { name } => write!(f, "Unknown name: {}", name),
+            CompilationError::NoOverloads { name, arg_types } => write!(
+                f,
+                "No overloads found for callable {} with arguments {}",
+                name,
+                arg_types
+                    .iter()
+                    .map(|ty| ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            CompilationError::AmbiguousOverloads { name, arg_types } => write!(
+                f,
+                "Ambiguous overloads found for callable {} with arguments {}",
+                name,
+                arg_types
+                    .iter()
+                    .map(|ty| ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
