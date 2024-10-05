@@ -24,9 +24,9 @@ pub mod ty {
     }
 
     impl TemplateGenericSpecs {
-        pub fn new(n_generics: usize) -> Self {
+        pub fn new(gen_id: GenericSetId, n_generics: usize) -> Self {
             Self {
-                id: GenericSetId::unique(),
+                id: gen_id,
                 n_generics: NonZero::new(n_generics).unwrap(),
             }
         }        
@@ -84,13 +84,6 @@ pub mod ty {
                 generics: None,
             }
         }
-
-        pub fn generic(name: impl Into<Cow<'static, str>>, n_generics: usize) -> Self {
-            Self {
-                name: name.into(),
-                generics: Some(TemplateGenericSpecs::new(n_generics)),
-            }
-        }
     }
 
     #[derive(Debug)]
@@ -120,7 +113,7 @@ pub mod ty {
 
     #[derive(Debug, Clone)]
     pub struct Field<'s> {
-        pub ty: Arc<Ty<'s>>,
+        pub raw_ty: Arc<Ty<'s>>,
         pub idx: usize,
     }
 
@@ -239,7 +232,7 @@ pub mod ty {
                 _ => None,
             };
             raw.map(|field| Field {
-                ty: field.ty.resolve(Some(tail), &self.args, self.template.generic_id()),
+                raw_ty: field.raw_ty.resolve(Some(tail), &self.args, self.template.generic_id()),
                 idx: field.idx,
             })
         }
@@ -739,8 +732,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             }
                             let mut resolution = BindingResolution::new(generics.as_ref().map(|g| g.id), generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default());
                             for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
-                                if let Err(_) = resolution.assign(&field.ty, arg_ty){
-                                    return Err(CompilationError::ArgumentTypeMismatch { func_name: struct_name.clone(), param_n: i, param_name: Some(name.clone()), expected_ty: field.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
+                                if let Err(_) = resolution.assign(&field.raw_ty, arg_ty){
+                                    return Err(CompilationError::ArgumentTypeMismatch { func_name: struct_name.clone(), param_n: i, param_name: Some(name.clone()), expected_ty: field.raw_ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
                                 }
                             }
                             let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect());
@@ -867,7 +860,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             todo!()
                         }; // raise an error
                         sink.push(Command::Attr(field.idx));
-                        Ok(field.ty)
+                        let resolved_type = field.raw_ty.resolve(Some(&obj_type), &specialized.args, specialized.template.generic_id());
+                        Ok(resolved_type)
                     }
                     Ty::Tuple(tup) => {
                         let Some(idx) = name.strip_prefix("item").and_then(|idx| idx.parse().ok()) else {
@@ -899,7 +893,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             todo!()
                         }; // raise an error
                         sink.push(Command::Variant(field.idx));
-                        Ok(field.ty)
+                        Ok(field.raw_ty)
                     }
                     _ => todo!(), // raise an error
                 }
@@ -912,7 +906,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             todo!()
                         }; // raise an error
                         sink.push(Command::VariantOpt(field.idx));
-                        Ok(self.optional(field.ty))
+                        Ok(self.optional(field.raw_ty))
                     }
                     _ => todo!(), // raise an error
                 }
@@ -1044,7 +1038,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let (generics, ov) = if compound.generic_params.is_empty() {
                     (None, None)
                 } else {
-                    (Some(TemplateGenericSpecs::new(compound.generic_params.len())), Some(OverloadGenericParams::new(GenericSetId::unique(), compound.generic_params.iter().map(|p| p.clone()).collect())))
+                    let id = GenericSetId::unique();
+                    (Some(TemplateGenericSpecs::new(id, compound.generic_params.len())), Some(OverloadGenericParams::new(id, compound.generic_params.iter().map(|p| p.clone()).collect())))
                 };
                 let fields = compound
                     .fields
@@ -1054,7 +1049,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
-                                ty: self.parse_type(&field.ty, &ov)?,
+                                raw_ty: self.parse_type(&field.ty, &ov)?,
                                 idx: self.get_cell_idx(),
                             },
                         ))

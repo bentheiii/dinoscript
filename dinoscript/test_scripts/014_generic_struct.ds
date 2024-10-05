@@ -1,0 +1,11 @@
+struct Pair<T>(a: T, b:T)
+
+fn replace<T>(pair: Pair<T>, new: T, choice: int) -> Pair<T> {
+    if(choice == 0, Pair(new, pair::b), Pair(pair::a, new))
+}
+
+fn main() -> bool {
+    let x = Pair('yes', 'no');
+    assert(replace(x, 'maybe', 0)::a == 'maybe')
+    && assert(replace(x, 'yea', 1)::a == 'yes')
+}
