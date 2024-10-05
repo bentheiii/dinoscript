@@ -30,11 +30,11 @@ impl DinoPack for StdPack {
             ret
         };
 
-        for item in setup_items() {
-            item.push_to_compilation(scope, &builtins, source_id, &mut get_id);
-        }
-
         scope.builtins = Some(MaybeOwned::Owned(builtins));
+        
+        for item in setup_items() {
+            item.push_to_compilation(scope, source_id, &mut get_id);
+        }
     }
 
     fn setup_runtime(&self, frame: &mut RuntimeFrame) {

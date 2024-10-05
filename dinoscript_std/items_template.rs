@@ -7,7 +7,7 @@ use dinoscript_core::{
         CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject, DinoResult, DinoValue, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
+    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned,
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -77,7 +77,6 @@ macro_rules! signature_fn {
 // pragma:replace-start
 pub(crate) struct ItemsBuilder<'p, 's> {
     scope: CompilationScope<'p, 's, Builtins<'s>>,
-    builtins: Builtins<'s>,
     source_id: SourceId,
     next_id: usize,
     pub(crate) replacements: HashMap<&'static str, String>
@@ -112,9 +111,8 @@ fn get_signature_from_code(code: &'static str)->&'static str{
 }
 
 impl<'p, 's> ItemsBuilder<'p, 's> {
-    fn add_item<'c>(&'c mut self, item: SetupItem<'s, &'c Builtins<'s>>) -> () {
-        let builtins = &self.builtins;
-        item.push_to_compilation(&mut self.scope, builtins, self.source_id, || {
+    fn add_item<'c>(&'c mut self, item: SetupItem<'s, Builtins<'s>>) -> () {
+        item.push_to_compilation(&mut self.scope, self.source_id, || {
             let ret = self.next_id;
             self.next_id += 1;
             ret
@@ -124,7 +122,9 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
     fn build_source<'c>(&'c mut self, replacement_name: &'static str, code: &'static str) -> () {
         let func_stmt = dinoscript_core::grammar::parse_raw_function(code).unwrap();
         let mut sink = Vec::new();
-        self.scope.feed_statement(&func_stmt, &mut sink).unwrap();
+        if let Err(err) =self.scope.feed_statement(&func_stmt, &mut sink){
+            panic!("compilation error (building {}): {}", replacement_name, err);
+        }
         // the sink should now have two items, the first is the actual function, the second is popping it to some cell (that we don't care about)
         // in the future, the sink might also include default values and the like, but it will never include captures since these are globals functions
         assert!(matches!(sink.pop(), Some(Command::PopToCell(_))));  // remove the pop command
@@ -149,7 +149,8 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
 fn prepare_build<'p>()->ItemsBuilder<'p, 'static>{
     let mut scope = CompilationScope::root();
     let builtins = pre_items_setup(&mut scope);
-    ItemsBuilder{scope, builtins, source_id: SOURCE_ID, next_id: 0, replacements: HashMap::new()}
+    scope.builtins = Some(MaybeOwned::Owned(builtins));
+    ItemsBuilder{scope, source_id: SOURCE_ID, next_id: 0, replacements: HashMap::new()}
 }
 // pragma:replace-with-raw
 // pragma:replace-end
@@ -209,7 +210,7 @@ fn setup_items<'a, 's>()->
 ItemsBuilder<'a, 's>
 // pragma:replace-with-raw
 /*
- Vec<SetupItem<'s, &'a Builtins<'s>>>
+ Vec<SetupItem<'s, Builtins<'s>>>
 */
 // pragma:replace-end
 {
@@ -311,6 +312,19 @@ ItemsBuilder<'a, 's>
                     let a = as_prim!(a, Int);
                     let b = as_prim!(b, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a * b))))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                signature_fn!(fn neg (a: int) -> int),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = unwrap_value!(frame.eval_pop()?);
+
+                    let a = as_prim!(a, Int);
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(-a))))
                 })),
             ))
         )

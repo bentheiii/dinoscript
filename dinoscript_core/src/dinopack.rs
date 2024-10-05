@@ -19,16 +19,15 @@ pub mod utils {
     }
 
     impl<'s, C> SetupItem<'s, C> {
-        pub fn push_to_compilation<'p, B>(
+        pub fn push_to_compilation<'p>(
             self,
-            scope: &mut CompilationScope<'p, 's, B>,
-            c: C,
+            scope: &mut CompilationScope<'p, 's, C>,
             source: SourceId,
             mut id_generator: impl FnMut() -> usize,
         ) {
             match self {
                 SetupItem::Function(f) => {
-                    let (name, overload) = f.to_overload(c, SystemLoc::new(source, id_generator()));
+                    let (name, overload) = f.to_overload(scope.builtins.as_ref().unwrap().as_ref(), SystemLoc::new(source, id_generator()));
                     scope.add_overload(name, overload);
                 }
             }
@@ -42,16 +41,16 @@ pub mod utils {
     }
 
     pub struct SetupFunction<'s, C> {
-        pub sig: fn(C)->Signature<'s>,
+        pub sig: fn(&C)->Signature<'s>,
         pub body: SetupFunctionBody<'s>,
     }
 
     impl<'s, C> SetupFunction<'s, C> {
-        pub fn new(sig: fn(C)->Signature<'s>, body: SetupFunctionBody<'s>) -> Self {
+        pub fn new(sig: fn(&C)->Signature<'s>, body: SetupFunctionBody<'s>) -> Self {
             Self { sig, body }
         }
 
-        pub fn to_overload(self, c: C, loc: SystemLoc) -> (Cow<'s, str>, Overload<'s>) {
+        pub fn to_overload(self, c: &C, loc: SystemLoc) -> (Cow<'s, str>, Overload<'s>) {
             let sig = (self.sig)(c);
             (sig.name.clone(), sig.to_overload(loc))
         }
