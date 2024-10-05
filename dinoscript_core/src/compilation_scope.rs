@@ -632,7 +632,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             Some(NamedItem::Type(ty)) => Some(RelativeNamedItem::Type(ty)),
             None => match self.parent {
                 // todo increment the parent's cell indices
-                Some(parent) => parent.get_named_item(name),
+                Some(parent) => parent.get_named_item(name).map(|n| n.add_height(1)),
                 None => None,
             },
         }
@@ -719,7 +719,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 }
                             }
                             let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
-                            resolved_overloads.push((rel_overload, output_type));
+                            resolved_overloads.push((rel_overload.loc, output_type));
                         }
                         if resolved_overloads.is_empty() {
                             return Err(CompilationError::NoOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
@@ -727,8 +727,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         else if resolved_overloads.len() > 1 {
                             return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
                         }
-                        let (resolved_overload, out_ty) = resolved_overloads.into_iter().next().unwrap();
-                        self.feed_relative_location(&resolved_overload.loc, sink);
+                        let (loc, out_ty) = resolved_overloads.into_iter().next().unwrap();
+                        self.feed_relative_location(&loc, sink);
                         sink.push(Command::MakePending(arg_types.len()));
                         return Ok(out_ty)
                     }
@@ -968,7 +968,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 body,
                 ret,
             }) => {
-                let mut subscope_sink = Vec::new();
                 let cell_idx = self.get_cell_idx();
                 let gen_params = if generic_params.is_empty() {
                     None
@@ -1005,6 +1004,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 
                 
                 let mut subscope = self.child();
+                assert!(!subscope.is_root());
+                let mut subscope_sink = Vec::new();
                 subscope.set_generics(generic_params.iter().cloned());
                 subscope.feed_params(
                     args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
@@ -1015,10 +1016,19 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }
                 let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
                 // todo check that return_tys match
-                // todo populate the pending captures
+                let n_captures = subscope.pending_captures.len();
+                let n_cells = subscope.n_cells;
+                for PendingCapture{ancestor_height, cell_idx} in subscope.pending_captures.iter() {
+                    if *ancestor_height == 1 {
+                        sink.push(Command::PushFromCell(*cell_idx));
+                    }
+                    else {
+                        self.pending_captures.push(PendingCapture{ancestor_height: *ancestor_height - 1, cell_idx: *cell_idx});
+                    }
+                }
                 sink.push(Command::MakeFunction(MakeFunction {
-                    n_captures: subscope.pending_captures.len(),
-                    n_cells: subscope.n_cells,
+                    n_captures,
+                    n_cells,
                     commands: subscope_sink,
                 }));
                 

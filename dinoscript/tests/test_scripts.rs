@@ -50,6 +50,11 @@ fn test_script(script_number: usize){
         panic!("main overload is not a cell");
     };
     let main_cell = *main_cell;
+
+    if SHOW_COMMANDS {
+        println!("----commands for {}----", script_number);
+        println!("{:#?}", commands);
+    }
     
     {
         let push_command = Command::PushFromCell(main_cell);
@@ -57,9 +62,6 @@ fn test_script(script_number: usize){
         let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
         core_pack.setup_runtime(&mut runtime_frame);
         for com in commands.iter() {
-            if SHOW_COMMANDS {
-                println!("{:?}", com);
-            }
             runtime_frame.execute(com).unwrap();
         }
         // we artificially run the main cell

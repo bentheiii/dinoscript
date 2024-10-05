@@ -248,7 +248,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
                 None => {
-                    todo!() // very error
+                    panic!("the stack is empty!") // very error
                 }
             }
         }
@@ -328,7 +328,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             }
             Command::PushFromCell(i) => {
                 match &self.cells[*i] {
-                    RuntimeCell::Uninitialized => todo!(), // err
+                    RuntimeCell::Uninitialized => panic!("cell {i} is uninitialized"), // err
                     RuntimeCell::Value(val) => {
                         self.stack.push(StackItem::Value(DinoValue::Ok(self.runtime.clone_ref(val)?)));
                         Ok(ControlFlow::Break(()))
@@ -499,7 +499,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                                 }
                             }
                         }
-                        _ => {panic!()}
+                        _ => {panic!("unexpected function: {:?}", func)}
                     }
                 }
             }
