@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, Let, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
 };
 
 #[derive(Parser)]
@@ -307,13 +307,26 @@ fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
                     let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
                     let name = name.as_str();
                     let ty = parse_type(ty)?;
-                    if let Some(default) = inner.next() {
-                        todo!()
-                    }
+                    let default = if let Some(default) = inner.next() {
+                        match default.as_rule() {
+                            Rule::expr_default => {
+                                let expr_pair = default.into_inner().next().unwrap();
+                                Some(FnArgDefault::Value(parse_expr(expr_pair)?))
+                            },
+                            Rule::resolve_default => {
+                                todo!()
+                            },
+                            _ => {
+                                unreachable!()
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     Ok(FnArg {
                         name: name.into(),
                         ty,
-                        default: None,
+                        default,
                     })
                 })
                 .collect()

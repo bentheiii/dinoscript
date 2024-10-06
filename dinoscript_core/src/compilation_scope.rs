@@ -1,5 +1,5 @@
 use std::{
-    borrow::Cow, collections::{hash_map::Entry, HashMap}, fmt::Display, sync::Arc, vec
+    borrow::Cow, collections::{hash_map::Entry, HashMap}, fmt::Display, iter::repeat, sync::Arc, vec
 };
 
 use indexmap::IndexMap;
@@ -7,7 +7,7 @@ use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Templ
 
 use crate::{
     ast::{
-        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant}, pairable::Pairable, statement::{self, Let, Stmt, StmtWithPair}
+        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant}, pairable::Pairable, statement::{self, FnArgDefault, Let, Stmt, StmtWithPair}
     }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::{combine_types, BindingResolution}
 };
 
@@ -294,10 +294,11 @@ impl<'s> OverloadGenericParams<'s> {
 // todo why is this clone?
 #[derive(Debug, Clone)]
 pub struct Overload<'s> {
-    pub generic_params: Option<OverloadGenericParams<'s>>,
-    pub args: Vec<OverloadArg<'s>>,
-    pub return_ty: Arc<Ty<'s>>,
-    pub loc: OverloadLoc,
+    generic_params: Option<OverloadGenericParams<'s>>,
+    args: Vec<OverloadArg<'s>>,
+    return_ty: Arc<Ty<'s>>,
+    loc: OverloadLoc,
+    min_args_n: usize,
 }
 
 impl<'s> Overload<'s> {
@@ -306,6 +307,30 @@ impl<'s> Overload<'s> {
             self.args.iter().map(|arg| arg.ty.clone()).collect(),
             self.return_ty.clone(),
         )))
+    }
+
+    fn min_args_n(&self) -> usize {
+        self.min_args_n
+    }
+
+    pub fn new(
+        generic_params: Option<OverloadGenericParams<'s>>,
+        args: Vec<OverloadArg<'s>>,
+        return_ty: Arc<Ty<'s>>,
+        loc: OverloadLoc,
+    ) -> Self {
+        let min_args_n = args.iter().take_while(|arg| arg.default.is_none()).count();
+        Self {
+            generic_params,
+            args,
+            return_ty,
+            loc,
+            min_args_n,
+        }
+    }
+
+    pub fn loc(&self) -> &OverloadLoc {
+        &self.loc
     }
 }
 
@@ -336,14 +361,16 @@ pub struct OverloadArg<'s> {
 
 #[derive(Debug, Clone)]
 pub enum OverloadArgDefault<'s> {
-    Expr(Expr<'s>),
+    Value(
+        // this is the cell idx relative to the overload location
+        usize
+    ),
     OverloadResolve(OverloadResolve<'s>),
 }
 
 #[derive(Debug, Clone)]
-struct OverloadResolve<'s> {
+pub struct OverloadResolve<'s> {
     name: Cow<'s, str>,
-    args: Vec<Ty<'s>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -390,14 +417,6 @@ enum RelativeLocation {
 }
 
 impl RelativeLocation {
-    fn from_cell_idx<'p, 's, B>(scope: &CompilationScope<'s, 'p, B>, cell_idx: usize) -> Self {
-        if scope.is_root() {
-            RelativeLocation::Global(cell_idx)
-        } else {
-            RelativeLocation::Local(cell_idx)
-        }
-    }
-
     fn add_height(&self, height: usize) -> Self {
         match self {
             RelativeLocation::Local(cell_idx) => RelativeLocation::Capture(RelativeLocationCapture {
@@ -411,6 +430,22 @@ impl RelativeLocation {
             RelativeLocation::Global(cell_idx) => RelativeLocation::Global(*cell_idx),
             RelativeLocation::System(system_loc) => RelativeLocation::System(system_loc.clone()),
         }
+    }
+
+    /// "retarget" a relative location to another cell/id on the same level
+    fn retarget(&self, new_idx: usize) -> Self {
+        match self {
+            RelativeLocation::Local(_) => RelativeLocation::Local(new_idx),
+            RelativeLocation::Capture(capture) => RelativeLocation::Capture(RelativeLocationCapture {
+                ancestor_height: capture.ancestor_height,
+                cell_idx: new_idx,
+            }),
+            RelativeLocation::Global(_) => RelativeLocation::Global(new_idx),
+            RelativeLocation::System(system_loc) => RelativeLocation::System(SystemLoc {
+                source: system_loc.source,
+                id: new_idx,
+            }),
+        }        
     }
 }
 
@@ -693,38 +728,63 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     arg_sinks.push(arg_sink);
                 }
 
-                for arg_sink in arg_sinks.into_iter().rev() {
-                    sink.extend(arg_sink);
-                }
-
                 if let Expr::Ref(name) = &expr.as_ref().inner {
                     let named_item = self.get_named_item(name);
                     if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = named_item{
+                        struct OverloadCandidate<'s> {
+                            loc: RelativeLocation,
+                            output_ty: Arc<Ty<'s>>,
+                            additional_params: Vec<AdditionalParam>,
+                        }
+
+                        enum AdditionalParam{
+                            Value(usize),
+                        }
                         
                         let is_one_option = overloads.len() == 1;
                         let mut resolved_overloads = Vec::new();
                         'outer: for rel_overload in overloads {
                             let overload = rel_overload.overload;
-                            if arg_types.len() != overload.args.len() {
+                            if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
                                 if is_one_option {
                                     // if there's only one overload, we can raise a better error here
-                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), expected_n: overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
+                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), min_n: overload.min_args_n(), max_n: overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
                                 }
                                 continue;
                             }
                             let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
                             let mut resolution = BindingResolution::new(overload.generic_params.as_ref().map(|g| g.gen_id), overload.generic_params.as_ref().map(|g| g.generic_params.len()).unwrap_or_default());
-                            for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter()).enumerate() {
-                                if let Err(_) = resolution.assign(&param.ty, arg_ty){
-                                    if is_one_option {
-                                        // if there's only one overload, we can raise a better error here
-                                        return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
+                            let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
+                            for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter().map(Some).chain(repeat(None))).enumerate() {
+                                if let Some(arg_ty) = arg_ty {
+                                    if let Err(_) = resolution.assign(&param.ty, arg_ty){
+                                        if is_one_option {
+                                            // if there's only one overload, we can raise a better error here
+                                            return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
+                                        }
+                                        continue 'outer;
                                     }
-                                    continue 'outer;
+                                } else {
+                                    if let Some(default) = &param.default {
+                                        match default {
+                                            OverloadArgDefault::Value(cell_idx) => {
+                                                additional_params.push(AdditionalParam::Value(*cell_idx));
+                                            },
+                                            OverloadArgDefault::OverloadResolve(..) => {
+                                                todo!()
+                                            }
+                                        }
+                                    } else {
+                                        unreachable!()
+                                    }
                                 }
                             }
                             let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
-                            resolved_overloads.push((rel_overload.loc, output_type));
+                            resolved_overloads.push(OverloadCandidate {
+                                loc: rel_overload.loc,
+                                output_ty: output_type,
+                                additional_params,
+                            });
                         }
                         if resolved_overloads.is_empty() {
                             return Err(CompilationError::NoOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
@@ -732,15 +792,25 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         else if resolved_overloads.len() > 1 {
                             return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
                         }
-                        let (loc, out_ty) = resolved_overloads.into_iter().next().unwrap();
+                        let OverloadCandidate{loc, output_ty, additional_params} = resolved_overloads.into_iter().next().unwrap();
+                        for param in additional_params.iter().rev() {
+                            match param {
+                                AdditionalParam::Value(cell_idx) => {
+                                    self.feed_relative_location(&loc.retarget(*cell_idx), sink);
+                                }
+                            }
+                        }
+                        for arg_sink in arg_sinks.into_iter().rev() {
+                            sink.extend(arg_sink);
+                        }
                         self.feed_relative_location(&loc, sink);
-                        sink.push(Command::MakePending(arg_types.len()));
-                        return Ok(out_ty)
+                        sink.push(Command::MakePending(arg_types.len() + additional_params.len()));
+                        return Ok(output_ty)
                     }
                     if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
                         if let TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Struct, generics, fields , name: struct_name}) = template_arc.as_ref(){
                             if fields.len() != arg_types.len() {
-                                return Err(CompilationError::ArgumentCountMismatch { func_name: struct_name.clone(), expected_n: fields.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
+                                return Err(CompilationError::ArgumentCountMismatch { func_name: struct_name.clone(), min_n: fields.len(), max_n:fields.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
                             }
                             let mut resolution = BindingResolution::new(generics.as_ref().map(|g| g.id), generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default());
                             for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
@@ -749,14 +819,21 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 }
                             }
                             let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect());
+                            
+
+                            for arg_sink in arg_sinks.into_iter().rev() {
+                                sink.extend(arg_sink);
+                            }
                             sink.push(Command::Struct(fields.len()));
                             return Ok(resolved_ty);
                         }
                     }
                 }
 
+                for arg_sink in arg_sinks.into_iter().rev() {
+                    sink.extend(arg_sink);
+                }
                 let ty = self.feed_expression(expr.as_ref(), sink)?;
-
                 // todo check that the args match
                 sink.push(Command::MakePending(arg_types.len()));
 
@@ -1004,7 +1081,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     Some(OverloadGenericParams::new(GenericSetId::unique(), generic_params.iter().map(|p| p.clone()).collect()))
                 };
 
-                let args = args
+                let raw_args = args
                     .into_iter()
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
@@ -1016,19 +1093,42 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     .collect::<Result<Vec<_>, _>>()?;                
                 let expected_return_ty = self.parse_type(return_ty, &gen_params)?;
 
-                // todo check that we don't shadow a variable
-                let new_overload = Overload {
-                    generic_params: gen_params, // todo
-                    args: args
-                        .iter()
-                        .map(|(_name, ty, default)| OverloadArg {
-                            ty: ty.clone(),
-                            default: default.as_ref().map(|_| todo!()),
+                let mut args = Vec::with_capacity(raw_args.len());
+                let mut first_default = None;
+                for (name, ty, default) in raw_args.iter() {
+                    let default = if let Some(default) = default {
+                        if first_default.is_none() {
+                            first_default = Some(name);
+                        }
+
+                        Some(match default{
+                            FnArgDefault::Value(expr) => {
+                                let default_cell_idx = self.get_cell_idx();
+                                let default_ty = self.feed_expression(expr, sink)?;
+                                // todo check that default_ty is a subtype of ty
+                                sink.push(Command::PopToCell(default_cell_idx));
+                                OverloadArgDefault::Value(default_cell_idx)
+                            }
+                            FnArgDefault::ResolveOverload(_) => {
+                                todo!()
+                            }
                         })
-                        .collect(),
-                    return_ty: expected_return_ty,
-                    loc: OverloadLoc::Cell(fn_cell_idx),
-                };
+                    } else {
+                        if first_default.is_some(){
+                            return Err(CompilationError::ParameterWithoutDefaultAfterDefault { param_name: name.clone(), default_param_name: first_default.cloned().unwrap() }.with_pair(stmt.pair.clone()));
+                        }
+                        None
+                    };
+                    args.push(
+                        OverloadArg {
+                            ty: ty.clone(),
+                            default,
+                        }
+                    );
+                }
+
+                // todo check that we don't shadow a variable
+                let new_overload = Overload::new(gen_params, args, expected_return_ty, OverloadLoc::Cell(fn_cell_idx));
                 self.add_overload(name.clone(), new_overload);
                 
                 
@@ -1037,7 +1137,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let mut subscope_sink = Vec::new();
                 subscope.set_generics(generic_params.iter().cloned());
                 subscope.feed_params(
-                    args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
+                    raw_args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
                     &mut subscope_sink,
                 );
                 for body_stmt in body {

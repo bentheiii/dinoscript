@@ -14,7 +14,8 @@ pub enum CompilationError<'c, 's> {
     },
     ArgumentCountMismatch {
         func_name: Cow<'s, str>,
-        expected_n: usize,
+        min_n: usize,
+        max_n: usize,
         actual_n: usize,
     },
     ArgumentTypeMismatch {
@@ -42,6 +43,10 @@ pub enum CompilationError<'c, 's> {
         expected_ty: Arc<Ty<'s>>,
         actual_ty: Arc<Ty<'s>>,
     },
+    ParameterWithoutDefaultAfterDefault{
+        param_name: Cow<'s, str>,
+        default_param_name: Cow<'s, str>,
+    },
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -67,13 +72,21 @@ impl Display for CompilationError<'_, '_> {
             },
             CompilationError::ArgumentCountMismatch {
                 func_name: struct_name,
-                expected_n,
+                min_n,
+                max_n,
                 actual_n,
-            } => write!(
+            } => if min_n == max_n{
+                write!(
                 f,
                 "Callable {} expects {} arguments, got {}",
-                struct_name, expected_n, actual_n
-            ),
+                struct_name, min_n, actual_n
+            )} else {
+                write!(
+                f,
+                "Callable {} expects between {} and {} arguments, got {}",
+                struct_name, min_n, max_n, actual_n
+            )
+            },
             CompilationError::ArgumentTypeMismatch {
                 func_name,
                 param_n,
@@ -120,6 +133,14 @@ impl Display for CompilationError<'_, '_> {
                 f,
                 "Type mismatch in array: expected item type {}, got {}",
                 expected_ty, actual_ty
+            ),
+            CompilationError::ParameterWithoutDefaultAfterDefault{
+                param_name,
+                default_param_name,
+            } => write!(
+                f,
+                "Parameter {} cannot be declared without a default value after parameter {}, that has a default value",
+                param_name, default_param_name
             ),
         }
     }

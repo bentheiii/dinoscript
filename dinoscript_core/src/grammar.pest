@@ -93,11 +93,11 @@ function = { "fn " ~ CNAME ~ generic_signature_opt ~ "(" ~ function_parameters_o
  function_parameters_opt = { function_parameters? }
  function_parameters = {(parameter ~ ",")* ~ parameter}
  parameter = {CNAME ~ ":" ~ complete_type ~ default_value?}
- default_value = {
+ default_value = _{
     expr_default
     | resolve_default
  }
- expr_default = { "=" ~ expression }
+ expr_default = { "?=" ~ expression }
  resolve_default = { "~=" ~ resolution }
     resolution = {CNAME}
 

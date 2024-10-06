@@ -45,7 +45,7 @@ fn test_script(script_number: usize){
     let NamedItem::Overloads(main_overload) = scope.names.get("main").expect("main function t found") else {
         panic!("main is not an overload");
     };
-    let Overload{loc: main_loc, ..} = main_overload.overloads.iter().next().expect("main overload not found");
+    let main_loc = main_overload.overloads.iter().next().expect("main overload not found").loc();
     let OverloadLoc::Cell(main_cell) = main_loc else {
         panic!("main overload is not a cell");
     };

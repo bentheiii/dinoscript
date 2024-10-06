@@ -1,0 +1,9 @@
+fn foo(a: int ?= 2, b: int ?= 3)->int{
+    a*10 + b
+}
+
+fn main() -> bool{
+    assert(foo() == 23)
+    && assert(foo(5) == 53)
+    && assert(foo(5, 7) == 57)
+}

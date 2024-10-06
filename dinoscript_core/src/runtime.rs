@@ -253,8 +253,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             let val = new_frame.exec_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
-                        _ => {
-                            todo!() // err
+                        other => {
+                            unreachable!("attempted to call object {:?}", other) // err
                         }
                     }
                 }
