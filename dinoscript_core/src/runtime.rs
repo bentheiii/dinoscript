@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, mem::MaybeUninit, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
+use std::{collections::HashMap, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnFunc, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Sequence
+    bytecode::{Command, SourceId}, dinobj::{Allocatable, AllocatedObject, AllocatedRef, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Sequence
 };
 
 #[derive(Debug)]
@@ -35,20 +35,20 @@ impl<'s> SharedRuntime<'s>{
         Ok(unsafe{obj.clone()})
     }
 
-    fn clone_true(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+    fn clone_true(&mut self) -> DinoResult<'s> {
         assert!(INTERN_CONSTS);
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.true_.as_ref().unwrap();
-        Ok(unsafe{r.clone()})
+        Ok(Ok(unsafe{r.clone()}))
     }
 
-    fn clone_false(&mut self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+    fn clone_false(&mut self) -> DinoResult<'s> {
         assert!(INTERN_CONSTS);
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.false_.as_ref().unwrap();
-        Ok(unsafe{r.clone()})
+        Ok(Ok(unsafe{r.clone()}))
     }
 }
 
@@ -58,20 +58,20 @@ pub struct Runtime<'s>(Arc<Mutex<SharedRuntime<'s>>>);
 
 impl<'s> Runtime<'s> {
     pub fn allocate(&self, obj: Result<DinObject<'s>, RuntimeError>) -> DinoResult<'s> {
-        let Ok(obj) = obj else {todo!()};
-        let size = obj.allocated_size();
+        let size = obj.as_ref().map_or_else(|e| e.allocated_size(), |o| o.allocated_size());
         {
             let mut rt = self.0.lock().unwrap();
             rt.allocated_space += size + AllocatedRef::SIZE;
+            // todo check against max size
             if REPORT_MEMORY_USAGE {
                 println!("allocating {} bytes for {:?}", size + AllocatedRef::SIZE, obj);
                 println!("total allocated space: {} bytes", rt.allocated_space);
             }
         }
-        let allocated_object = AllocatedObject::new(obj, self.clone());
-        // todo check against max size
-        let ptr = AllocatedRef::new(Arc::new(allocated_object));
-        Ok(Ok(ptr))
+        let ptr = obj
+            .map(|o| o.allocate(self.clone()))
+            .map_err(|e| e.allocate(self.clone()));
+        Ok(ptr)
     }
 
     pub fn new() -> Self {
@@ -99,7 +99,7 @@ impl<'s> Runtime<'s> {
         ret
     }
 
-    pub fn bool(&self, b: bool) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+    pub fn bool(&self, b: bool) -> DinoResult<'s> {
         if INTERN_CONSTS{
             let mut rt = self.0.lock().unwrap();
             if b {
@@ -109,7 +109,7 @@ impl<'s> Runtime<'s> {
             }
         }
         else{
-            self.allocate(Ok(DinObject::Bool(b)))?
+            self.allocate(Ok(DinObject::Bool(b)))
         }
     }
 
@@ -329,7 +329,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             }
             Command::PushBool(b) => {
                 self.stack
-                    .push(StackItem::Value(Ok(self.runtime.bool(*b)?)));
+                    .push(StackItem::Value(self.runtime.bool(*b)?));
                 Ok(ControlFlow::Break(()))
             }
             Command::PushString(s) => {

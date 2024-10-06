@@ -1,13 +1,10 @@
 use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
-    bytecode::{Command, SourceId},
-    compilation_scope::{
+    bytecode::{Command, SourceId}, compilation_scope::{
         self,
         ty::{BuiltinTemplate, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate},
         CompilationScope, NamedItem, NamedType,
-    },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::{Sequence},
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, errors::RuntimeError, maybe_owned::MaybeOwned, sequence::Sequence
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -210,7 +207,8 @@ macro_rules! as_prim {
         if let DinObject::$variant(v) = $ref.as_ref() {
             v
         } else {
-            return to_return_value(Ok(Err(())));
+            let err = format!("Expected {} got {:?}", stringify!($variant), $ref);
+            return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
         }
     };
 }
@@ -264,7 +262,7 @@ ItemsBuilder<'a, 's>
                     let a = as_prim!(a, Int);
                     let b = as_prim!(b, Int);
                     to_return_value(if *b == 0{
-                        Ok(Err(()))
+                        frame.runtime().allocate(Err("Division by zero".into()))
                     } else {
                         frame.runtime().allocate(Ok(DinObject::Float((*a as f64) / (*b as f64))))
                     })
@@ -282,7 +280,7 @@ ItemsBuilder<'a, 's>
 
                     let a = as_prim!(a, Int);
                     let b = as_prim!(b, Int);
-                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
+                    to_return_value(frame.runtime().bool(a == b))
                 })),
             ))
         )
@@ -297,7 +295,7 @@ ItemsBuilder<'a, 's>
 
                     let a = as_prim!(a, Int);
                     let b = as_prim!(b, Int);
-                    to_return_value(Ok(Ok(frame.runtime().bool(a >= b)?)))
+                    to_return_value(frame.runtime().bool(a >= b))
                 })),
             ))
         )
@@ -313,7 +311,7 @@ ItemsBuilder<'a, 's>
                     let a = as_prim!(a, Int);
                     let b = as_prim!(b, Int);
                     to_return_value(if *b == 0{
-                        Ok(Err(()))
+                        frame.runtime().allocate(Err("Division by zero".into()))
                     } else {
                         frame.runtime().allocate(Ok(DinObject::Int(a % b)))
                     })
@@ -402,6 +400,7 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 signature_fn!(fn assert (a: bool) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
+                    // todo: if the value is a pending, maybe we can add it to the error message?
                     let a_ref = unwrap_value!(frame.eval_pop()?);
 
                     let a = as_prim!(a_ref, Bool);
@@ -409,7 +408,7 @@ ItemsBuilder<'a, 's>
                         Ok(Ok(a_ref))
                     }
                     else{
-                        Ok(Err(()))
+                        frame.runtime().allocate(Err("Assertion is false".into()))
                     })
                 })),
             ))
@@ -443,7 +442,7 @@ ItemsBuilder<'a, 's>
                     let a = as_prim!(a, Bool);
                     let b = as_prim!(b, Bool);
 
-                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
+                    to_return_value(frame.runtime().bool(a == b))
                 })),
             ))
         )
@@ -492,7 +491,7 @@ ItemsBuilder<'a, 's>
                     let a = as_prim!(a, Str);
                     let b = as_prim!(b, Str);
                     
-                    to_return_value(Ok(Ok(frame.runtime().bool(a == b)?)))
+                    to_return_value(frame.runtime().bool(a == b))
                 })),
             ))
         )
@@ -525,10 +524,10 @@ ItemsBuilder<'a, 's>
                     let seq = as_ext!(seq, Sequence);
                     let idx = as_prim!(idx, Int);
                     let Ok(idx) = usize::try_from(*idx) else {
-                        return to_return_value(Ok(Err(())));
+                        return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                     };
                     let Some(item_ref) = seq.get(idx) else {
-                        return to_return_value(Ok(Err(())));
+                        return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                     };
                     let ret = frame.runtime().clone_ref(item_ref)?;
                     to_return_value(Ok(Ok(ret)))

@@ -1,8 +1,8 @@
 use derive_more::Debug;
 
-use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc};
+use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, process::Output, sync::Arc};
 
-use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{Runtime, RuntimeFrame, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
+use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{self, Runtime, RuntimeFrame, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -103,7 +103,7 @@ pub trait ExtendedObject: Debug {
 }
 
 
-pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedRuntimeError>;
+pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedRuntimeError<'s>>;
 pub type DinoResult<'s> = Result<DinoValue<'s>, RuntimeViolation>;
 
 #[derive(Debug)]
@@ -128,7 +128,8 @@ pub struct AllocatedObject<'s>{
     runtime: Runtime<'s>,
 }
 
-impl<'s> AllocatedObject<'s>{   pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
+impl<'s> AllocatedObject<'s>{   
+    pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
         let size = value.allocated_size();
         Self{value, size, runtime}
     }
@@ -157,6 +158,10 @@ impl<'s> AllocatedRef<'s>{
     pub(crate) unsafe fn clone(&self) -> Self {
         Self(self.0.clone())
     }
+
+    pub fn runtime(&self) -> &Runtime<'s> {
+        &self.0.runtime
+    }
 }
 
 impl<'s> Drop for AllocatedRef<'s>{
@@ -179,5 +184,26 @@ impl<'s> Deref for AllocatedRef<'s>{
 impl<'s> AsRef<DinObject<'s>> for AllocatedRef<'s> {
     fn as_ref(&self) -> &DinObject<'s> {
         &self.0.as_ref().value
+    }
+}
+
+pub trait Allocatable<'s>{
+    type Output: Sized;
+    fn allocated_size(&self) -> usize {
+        size_of::<Self::Output>() + self.obj_size()
+    }
+
+    fn obj_size(&self) -> usize;
+    fn allocate(self, runtime: Runtime<'s>) -> Self::Output;
+}
+
+impl<'s> Allocatable<'s> for DinObject<'s>{
+    type Output = AllocatedRef<'s>;
+    fn obj_size(&self) -> usize {
+        size_of::<AllocatedObject<'s>>()
+    }
+
+    fn allocate(self, runtime: Runtime<'s>) -> Self::Output {
+        AllocatedRef::new(Arc::new(AllocatedObject::new(self, runtime)))
     }
 }
