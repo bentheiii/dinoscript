@@ -955,9 +955,18 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     Some(RelativeNamedItem::Overloads(overloads)) => {
                         let OverloadCandidate{loc, output_ty, additional_params} = self.resolve_overloads(name, overloads.overloads, &arg_tys, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
                         if additional_params.len() != 0 {
-                            todo!()
+                            for param in additional_params.iter().rev() {
+                                match param {
+                                    AdditionalParam::Value(cell_idx) => {
+                                        self.feed_relative_location(&loc.retarget(*cell_idx), sink);
+                                    }
+                                }
+                            }
                         }
                         self.feed_relative_location(&loc, sink);
+                        if additional_params.len() != 0 {
+                            sink.push(Command::BindBack(additional_params.len()));
+                        }
                         let fn_type = Arc::new(Ty::Fn(Fn::new(arg_tys, output_ty)));
                         Ok(fn_type)
                     }

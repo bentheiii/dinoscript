@@ -17,6 +17,7 @@ pub enum Command<'s> {
 
     MakeFunction(MakeFunction<'s>), // MFN
     MakePending(usize),             // MPE
+    BindBack(usize),                // BKB
 
     Attr(usize),       // ATR
     Struct(usize),     // STR
@@ -50,6 +51,7 @@ impl<'s> Command<'s> {
             Command::Variant(variant)=>format!("{indent}dinoscript_core::bytecode::Command::Variant({})",variant),
             Command::VariantOpt(variant_opt)=>format!("{indent}dinoscript_core::bytecode::Command::VariantOpt({})",variant_opt),
             Command::Array(array)=>format!("{indent}dinoscript_core::bytecode::Command::Array({})",array),
+            Command::BindBack(bind_back)=>format!("{indent}dinoscript_core::bytecode::Command::BindBack({})",bind_back),
         }
     }
 }

@@ -1,8 +1,8 @@
 use derive_more::Debug;
 
-use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, process::Output, sync::Arc};
+use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc};
 
-use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, runtime::{self, Runtime, RuntimeFrame, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
+use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeViolation}, runtime::{Runtime, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -14,6 +14,7 @@ pub enum DinObject<'s> {
     Variant(VariantObject<'s>),
     UserFn(UserFn<'s>),
     SourceFn(#[debug("<system_function>")] SourceFnFunc),
+    BindBack(BindBack<'s>),
     Extended(*const (dyn ExtendedObject + 's)),
     /// This is a special object, indicating that the frame's used function should be used as a value
     Tail,
@@ -83,6 +84,18 @@ impl<'s> UserFn<'s> {
             n_cells,
             commands,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct BindBack<'s> {
+    pub func: AllocatedRef<'s>,
+    pub defaults: Vec<AllocatedRef<'s>>,
+}
+
+impl<'s> BindBack<'s> {
+    pub fn new(func: AllocatedRef<'s>, defaults: Vec<AllocatedRef<'s>>) -> Self {
+        Self { func, defaults }
     }
 }
 
