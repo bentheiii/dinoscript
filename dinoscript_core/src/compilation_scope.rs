@@ -7,7 +7,7 @@ use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Templ
 
 use crate::{
     ast::{
-        self, expression::{Attr, Call, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant}, pairable::Pairable, statement::{self, FnArgDefault, Let, Stmt, StmtWithPair}
+        self, expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant}, pairable::Pairable, statement::{self, FnArgDefault, Let, Stmt, StmtWithPair}
     }, bytecode::{Command, MakeFunction, PushFromSource, SourceId}, compilation_error::{CompilationError, CompilationErrorWithPair}, maybe_owned::MaybeOwned, overloads::{combine_types, BindingResolution}
 };
 
@@ -486,6 +486,15 @@ pub trait Builtins<'s> {
     fn str(&self) -> Arc<Ty<'s>>;
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
 }
+enum AdditionalParam{
+    Value(usize),
+}
+
+struct OverloadCandidate<'s> {
+    loc: RelativeLocation,
+    output_ty: Arc<Ty<'s>>,
+    additional_params: Vec<AdditionalParam>,
+}
 
 pub struct CompilationScope<'p, 's, B> {
     id: GenericSetId, // the scope id, used to differentiate between generic params of scopes
@@ -590,6 +599,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     }
 
     fn parse_type<'c: 's>(&self, ty: &ast::ty::TyWithPair<'c>, gen_params: &Option<OverloadGenericParams>) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
+        // todo gen-aprams should be option<&...>, not &option<...>
         match &ty.inner {
             ast::ty::Ty::Tuple(inners) => {
                 let inners = inners
@@ -702,6 +712,66 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             self.names.insert(name, NamedItem::Variable(variable));
         }
     }
+    
+    fn resolve_overloads<'a, 'c: 's>(&'a self, name: &Cow<'c, str>, overloads: Vec<RelativeOverload<'p, 's>>, arg_types: &Vec<Arc<Ty<'s>>>, binding: Option<()>)->Result<OverloadCandidate<'s>, CompilationError<'c, 's>>{
+        // TODO we only need the name in this function for error reporting, we should remove it
+        if let Some(binding) = binding {
+            todo!()
+        }
+        let is_one_option = overloads.len() == 1;
+        let mut resolved_overloads = Vec::new();
+        'outer: for rel_overload in overloads {
+            let overload = rel_overload.overload;
+            if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
+                if is_one_option {
+                    // if there's only one overload, we can raise a better error here
+                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), min_n: overload.min_args_n(), max_n: overload.args.len(), actual_n: arg_types.len()});
+                }
+                continue;
+            }
+            let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
+            let mut resolution = BindingResolution::new(overload.generic_params.as_ref().map(|g| g.gen_id), overload.generic_params.as_ref().map(|g| g.generic_params.len()).unwrap_or_default());
+            let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
+            for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter().map(Some).chain(repeat(None))).enumerate() {
+                if let Some(arg_ty) = arg_ty {
+                    if let Err(_) = resolution.assign(&param.ty, arg_ty){
+                        if is_one_option {
+                            // if there's only one overload, we can raise a better error here
+                            return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()});
+                        }
+                        continue 'outer;
+                    }
+                } else {
+                    if let Some(default) = &param.default {
+                        match default {
+                            OverloadArgDefault::Value(cell_idx) => {
+                                additional_params.push(AdditionalParam::Value(*cell_idx));
+                            },
+                            OverloadArgDefault::OverloadResolve(name) => {
+                                todo!()
+                            }
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+            }
+            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
+            resolved_overloads.push(OverloadCandidate {
+                loc: rel_overload.loc,
+                output_ty: output_type,
+                additional_params,
+            });
+        };
+        if resolved_overloads.is_empty() {
+            return Err(CompilationError::NoOverloads { name: name.clone(), arg_types: arg_types.clone()});
+        }
+        else if resolved_overloads.len() > 1 {
+            return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types: arg_types.clone()});
+        }
+        Ok(resolved_overloads.into_iter().next().unwrap())
+    }
+
 
     fn feed_call<'a, 'c: 's>(
         &mut self,
@@ -728,71 +798,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     arg_sinks.push(arg_sink);
                 }
 
+                let n_args = arg_types.len();
+
                 if let Expr::Ref(name) = &expr.as_ref().inner {
                     let named_item = self.get_named_item(name);
-                    if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads {overloads})) = named_item{
-                        struct OverloadCandidate<'s> {
-                            loc: RelativeLocation,
-                            output_ty: Arc<Ty<'s>>,
-                            additional_params: Vec<AdditionalParam>,
-                        }
-
-                        enum AdditionalParam{
-                            Value(usize),
-                        }
-                        
-                        let is_one_option = overloads.len() == 1;
-                        let mut resolved_overloads = Vec::new();
-                        'outer: for rel_overload in overloads {
-                            let overload = rel_overload.overload;
-                            if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
-                                if is_one_option {
-                                    // if there's only one overload, we can raise a better error here
-                                    return Err(CompilationError::ArgumentCountMismatch { func_name: name.clone(), min_n: overload.min_args_n(), max_n: overload.args.len(), actual_n: arg_types.len()}.with_pair(expr.pair.clone()));
-                                }
-                                continue;
-                            }
-                            let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
-                            let mut resolution = BindingResolution::new(overload.generic_params.as_ref().map(|g| g.gen_id), overload.generic_params.as_ref().map(|g| g.generic_params.len()).unwrap_or_default());
-                            let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
-                            for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter().map(Some).chain(repeat(None))).enumerate() {
-                                if let Some(arg_ty) = arg_ty {
-                                    if let Err(_) = resolution.assign(&param.ty, arg_ty){
-                                        if is_one_option {
-                                            // if there's only one overload, we can raise a better error here
-                                            return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
-                                        }
-                                        continue 'outer;
-                                    }
-                                } else {
-                                    if let Some(default) = &param.default {
-                                        match default {
-                                            OverloadArgDefault::Value(cell_idx) => {
-                                                additional_params.push(AdditionalParam::Value(*cell_idx));
-                                            },
-                                            OverloadArgDefault::OverloadResolve(..) => {
-                                                todo!()
-                                            }
-                                        }
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                            }
-                            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
-                            resolved_overloads.push(OverloadCandidate {
-                                loc: rel_overload.loc,
-                                output_ty: output_type,
-                                additional_params,
-                            });
-                        }
-                        if resolved_overloads.is_empty() {
-                            return Err(CompilationError::NoOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
-                        }
-                        else if resolved_overloads.len() > 1 {
-                            return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types}.with_pair(expr.pair.clone()));
-                        }
-                        let OverloadCandidate{loc, output_ty, additional_params} = resolved_overloads.into_iter().next().unwrap();
+                    if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) = named_item{
+                        let OverloadCandidate{loc, output_ty, additional_params} = self.resolve_overloads(name, overloads, &arg_types, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
                         for param in additional_params.iter().rev() {
                             match param {
                                 AdditionalParam::Value(cell_idx) => {
@@ -804,7 +815,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             sink.extend(arg_sink);
                         }
                         self.feed_relative_location(&loc, sink);
-                        sink.push(Command::MakePending(arg_types.len() + additional_params.len()));
+                        sink.push(Command::MakePending(n_args + additional_params.len()));
                         return Ok(output_ty)
                     }
                     if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
@@ -938,8 +949,23 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                 }
             }
-            Expr::Disambiguation(..) => {
-                todo!()
+            Expr::Disambiguation(Disambiguation{name, arg_tys}) => {
+                let arg_tys = arg_tys.iter().map(|ty| self.parse_type(ty, &None)).collect::<Result<Vec<_>, _>>()?;
+                match self.get_named_item(name) {
+                    Some(RelativeNamedItem::Overloads(overloads)) => {
+                        let OverloadCandidate{loc, output_ty, additional_params} = self.resolve_overloads(name, overloads.overloads, &arg_tys, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
+                        if additional_params.len() != 0 {
+                            todo!()
+                        }
+                        self.feed_relative_location(&loc, sink);
+                        let fn_type = Arc::new(Ty::Fn(Fn::new(arg_tys, output_ty)));
+                        Ok(fn_type)
+                    }
+                    None => {
+                        return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(expr.pair.clone()));
+                    }
+                    _ => todo!(), // error?
+                }
             }
             Expr::Attr(Attr { obj, name }) => {
                 let obj_type = self.feed_expression(obj, sink)?;
@@ -1109,8 +1135,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 sink.push(Command::PopToCell(default_cell_idx));
                                 OverloadArgDefault::Value(default_cell_idx)
                             }
-                            FnArgDefault::ResolveOverload(_) => {
-                                todo!()
+                            FnArgDefault::ResolveOverload(res) => {
+                                // todo check that the  type is a function
+                                OverloadArgDefault::OverloadResolve(OverloadResolve{name: res.name.clone()})
                             }
                         })
                     } else {

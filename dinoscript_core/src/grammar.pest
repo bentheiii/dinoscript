@@ -39,7 +39,7 @@ expression3 = {
     | "(" ~ expression ~ ")"
     //| lambda_func
     | tuple
-    | turbofish_cname
+    | disambiguation
     //| dyn_bind_cname
     | CNAME
 }
@@ -49,7 +49,7 @@ expression3 = {
    "(" ~ container_elements? ~ ","? ~ ")"
  }
  bool = @{"true"|"false"}
- turbofish_cname = {CNAME ~ "{" ~ param_specs_opt ~ "}"}
+ disambiguation = {CNAME ~ "{" ~ param_specs_opt ~ "}"}
  //dyn_bind_cname = {CNAME ~ "<" ~ complete_type ~ (","~complete_type)* ~ ">"}
 // lambda_func = { "(" ~ function_parameters_opt ~ ")" ~ "->" ~ function_body }
 

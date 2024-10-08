@@ -1,11 +1,8 @@
-* overloads
 * proper errors
-* user types
-* default arguments
-* arguments
+* default arguments in std
 * captures
 * lambdas
-* generics
 * piping
 * generic specialization
-* short-circuiting
+* intern zero and one
+* limit resolution default? we can probably make an infinite loop with this

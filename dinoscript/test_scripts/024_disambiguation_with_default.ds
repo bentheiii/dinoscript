@@ -1,0 +1,13 @@
+fn foo(x: int ?= 5, y: int ?= 7)->int{
+    x*10 + y
+}
+
+fn main() -> bool{
+    let f1 = foo{};
+    let f2 = foo{int};
+    let f3 = foo{int, int};
+
+    assert(f1() == 57)
+    && assert(f2(1) == 17)
+    && assert(f3(1, 2) == 12)
+}

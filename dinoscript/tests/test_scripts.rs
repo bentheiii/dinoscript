@@ -201,3 +201,13 @@ fn test_script_021(){
 fn test_script_022(){
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_023(){
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_024(){
+    test_script_from_name(function_name!());
+}

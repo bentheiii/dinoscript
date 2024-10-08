@@ -99,6 +99,7 @@ impl<'s> VariantObject<'s> {
 }
 
 pub trait ExtendedObject: Debug {
+    fn type_name(&self) -> &'static str;
     fn allocated_size(&self) -> usize;
 }
 

@@ -1,0 +1,27 @@
+fn foo(x: bool)->int{
+    1
+}
+
+fn foo(x: int)->int{
+    2
+}
+
+fn foo()->int{
+    3
+}
+
+fn foo(x: int, y: int)->int{
+    4
+}
+
+fn main() -> bool{
+    let f1 = foo{bool};
+    let f2 = foo{int};
+    let f3 = foo{};
+    let f4 = foo{int, int};
+
+    assert(f1(true) == 1)
+    && assert(f2(1) == 2)
+    && assert(f3() == 3)
+    && assert(f4(1, 2) == 4)
+}

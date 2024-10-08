@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use crate::compilation_scope::ty::{Fn, Generic, GenericSetId, Specialized, Ty};
+use crate::compilation_scope::{ty::{Fn, Generic, GenericSetId, Specialized, Ty}, CompilationScope};
 
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,

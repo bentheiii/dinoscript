@@ -297,8 +297,12 @@ pub mod statement {
 
     #[derive(Debug, Clone)]
     pub struct ResolveOverload<'s> {
-        name: Cow<'s, str>,
-        arg_tys: Vec<TyWithPair<'s>>,
-        ret_ty: TyWithPair<'s>,
+        pub name: Cow<'s, str>,
+    }
+
+    impl<'s> ResolveOverload<'s> {
+        pub fn new(name: impl Into<Cow<'s, str>>) -> ResolveOverload<'s> {
+            ResolveOverload { name: name.into() }
+        }
     }
 }

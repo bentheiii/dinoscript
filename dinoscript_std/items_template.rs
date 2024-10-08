@@ -134,6 +134,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         // in the future, the sink might also include default values and the like, but it will never include captures since these are globals functions
         assert!(matches!(sink.pop(), Some(Command::PopToCell(_))));  // remove the pop command
         let Command::MakeFunction(mk_func) = sink.pop().unwrap() else { panic!("Expected a MakeFunction command") };
+        assert!(sink.is_empty());
         assert!(mk_func.n_captures == 0);
         let n_cells = mk_func.n_cells;
         let commands = to_in_code(&mk_func.commands, "                    ");
@@ -216,7 +217,13 @@ macro_rules! as_prim {
 macro_rules! as_ext {
     ($ref:expr, $ty:ident) => {
         {
-            let ptr = (*as_prim!($ref, Extended)) as *const $ty;
+            let ptr = (*as_prim!($ref, Extended));
+            let tn = (unsafe{&*ptr}).type_name();
+            if tn != $ty::EXPECTED_TYPE_NAME {
+                let err = format!("Expected {} got {:?}", $ty::EXPECTED_TYPE_NAME, tn);
+                return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
+            } 
+            let ptr = ptr as *const $ty;
             unsafe{&*ptr}
         }
     };

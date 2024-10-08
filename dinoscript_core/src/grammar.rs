@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
 };
 
 #[derive(Parser)]
@@ -104,12 +104,12 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             }
             return Ok(Expr::Tuple(parts).with_pair(pair_mark));
         }
-        Rule::turbofish_cname => {
+        Rule::disambiguation => {
             let pair_mark = inner.clone();
             let mut child = inner.into_inner();
             let name = child.next().unwrap().as_str();
             let mut args = Vec::new();
-            for arg in child.next().unwrap().into_inner() {
+            for arg in child.next().unwrap().into_inner().next().map(|p| p.into_inner()).into_iter().flatten() {
                 let ty = parse_type(arg)?;
                 args.push(ty);
             }
@@ -314,7 +314,8 @@ fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
                                 Some(FnArgDefault::Value(parse_expr(expr_pair)?))
                             },
                             Rule::resolve_default => {
-                                todo!()
+                                let name = default.into_inner().next().unwrap().as_str();
+                                Some(FnArgDefault::ResolveOverload(ResolveOverload::new(name)))
                             },
                             _ => {
                                 unreachable!()

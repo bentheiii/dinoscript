@@ -7,6 +7,8 @@ pub enum Sequence<'s>{
 }
 
 impl<'s> Sequence<'s> {
+    pub const EXPECTED_TYPE_NAME: &'static str = "Sequence";
+
     pub fn new_array(array: Vec<AllocatedRef<'s>>) -> Self {
         Self::Array(array)
     }
@@ -20,6 +22,9 @@ impl<'s> Sequence<'s> {
 }
 
 impl<'s> ExtendedObject for Sequence<'s> {
+    fn type_name(&self) -> &'static str {
+        Self::EXPECTED_TYPE_NAME
+    }
     fn allocated_size(&self) -> usize {
         size_of::<Self>()
     }
