@@ -2,7 +2,7 @@ use std::{borrow::Cow, error::Error, fmt::Display, sync::Arc};
 
 use crate::{ast::pairable::{Pairable, WithPair}, compilation_scope::{ty::Ty, NamedType}};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CompilationError<'c, 's> {
     LetTypeMismatch {
         var: Cow<'c, str>,
@@ -46,6 +46,11 @@ pub enum CompilationError<'c, 's> {
     ParameterWithoutDefaultAfterDefault{
         param_name: Cow<'s, str>,
         default_param_name: Cow<'s, str>,
+    },
+    FailedDefaultResolution{
+        fn_name: Cow<'s, str>,
+        param_n: usize,
+        overload_name: Cow<'s, str>,
     },
 }
 
@@ -141,6 +146,15 @@ impl Display for CompilationError<'_, '_> {
                 f,
                 "Parameter {} cannot be declared without a default value after parameter {}, that has a default value",
                 param_name, default_param_name
+            ),
+            CompilationError::FailedDefaultResolution{
+                fn_name,
+                param_n,
+                overload_name,
+            } => write!(
+                f,
+                "Failed to resolve default value for parameter {} in function {} overload {}",
+                param_n, fn_name, overload_name
             ),
         }
     }

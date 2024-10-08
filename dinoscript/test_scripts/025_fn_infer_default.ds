@@ -2,6 +2,14 @@ fn foo(a: int)->int{
     a*a
 }
 
+fn foo(a: int, b: int)->int{
+    a*b
+}
+
+fn foo(b: bool)->int{
+    0
+}
+
 fn bar<T>(a: T, fn_foo: (T)->(T) ~= foo)->T{
     fn_foo(a)
 }

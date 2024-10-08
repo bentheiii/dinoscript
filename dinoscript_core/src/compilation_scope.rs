@@ -486,14 +486,15 @@ pub trait Builtins<'s> {
     fn str(&self) -> Arc<Ty<'s>>;
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
 }
-enum AdditionalParam{
+enum AdditionalParam<'s>{
     Value(usize),
+    OverloadResolve(OverloadResolve<'s>),
 }
 
 struct OverloadCandidate<'s> {
     loc: RelativeLocation,
     output_ty: Arc<Ty<'s>>,
-    additional_params: Vec<AdditionalParam>,
+    additional_params: Vec<AdditionalParam<'s>>,
 }
 
 pub struct CompilationScope<'p, 's, B> {
@@ -747,7 +748,33 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             OverloadArgDefault::Value(cell_idx) => {
                                 additional_params.push(AdditionalParam::Value(*cell_idx));
                             },
-                            OverloadArgDefault::OverloadResolve(name) => {
+                            OverloadArgDefault::OverloadResolve(OverloadResolve{name: ov_name}) => {
+                                let Ty::Fn(expected_signature ) = param.ty.as_ref() else {
+                                    unreachable!()
+                                };
+                                // todo avoid infinite recursion (note that it might be a double recursion)
+                                let candidate = match self.get_named_item(ov_name) {
+                                    Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
+                                        self.resolve_overloads(ov_name, overloads, &expected_signature.args, Some(()))
+                                    }
+                                    Some(_) => {
+                                        todo!()
+                                    }
+                                    None => {
+                                      todo!()  
+                                    }
+                                };
+                                let candidate = match candidate{
+                                    Ok(candidate) => candidate,
+                                    Err(err) => {
+                                        if is_one_option {
+                                            // if there's only one overload, we can raise a better error here
+                                            return Err(CompilationError::FailedDefaultResolution { fn_name: name.clone(), param_n: i, overload_name: ov_name.clone()});
+                                        }
+                                        continue 'outer;
+                                    }
+                                };
+
                                 todo!()
                             }
                         }
@@ -772,6 +799,44 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         Ok(resolved_overloads.into_iter().next().unwrap())
     }
 
+    fn feed_additional_param<'c: 's>(&mut self, main_loc: &RelativeLocation, param: AdditionalParam<'s>, sink: &mut Vec<Command<'c>>) {
+        match param {
+            AdditionalParam::Value(cell_idx) => {
+                self.feed_relative_location(&main_loc.retarget(cell_idx), sink);
+            }
+            _ => todo!()
+        }
+    }
+
+    fn feed_overload_candidate_as_value<'c: 's>(&mut self, candidate: OverloadCandidate<'s>, sink: &mut Vec<Command<'c>>) -> Arc<Ty<'s>> {
+        let OverloadCandidate{loc, output_ty, additional_params} = candidate;
+        // TODO I'm pretty sure we can do away with reversing here
+        let n_additional_params = additional_params.len();
+        for param in additional_params.into_iter().rev() {
+            self.feed_additional_param(&loc, param, sink);
+        }
+        self.feed_relative_location(&loc, sink);
+        if n_additional_params != 0 {
+            sink.push(Command::BindBack(n_additional_params));
+        }
+        output_ty
+    }
+
+    fn feed_overload_candidate_as_call<'c: 's>(&mut self, candidate: OverloadCandidate<'s>, arg_sinks: Vec<Vec<Command<'c>>>, sink: &mut Vec<Command<'c>>) -> Arc<Ty<'s>> {
+        let OverloadCandidate{loc, output_ty, additional_params} = candidate;
+        let n_args = arg_sinks.len();
+        let n_additional_params = additional_params.len();
+        // TODO I'm pretty sure we can do away with reversing here
+        for param in additional_params.into_iter().rev() {
+            self.feed_additional_param(&loc, param, sink);
+        }
+        for arg_sink in arg_sinks.into_iter().rev() {
+            sink.extend(arg_sink);
+        }
+        self.feed_relative_location(&loc, sink);
+        sink.push(Command::MakePending(n_args + n_additional_params));
+        output_ty
+    }
 
     fn feed_call<'a, 'c: 's>(
         &mut self,
@@ -798,24 +863,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     arg_sinks.push(arg_sink);
                 }
 
-                let n_args = arg_types.len();
-
                 if let Expr::Ref(name) = &expr.as_ref().inner {
                     let named_item = self.get_named_item(name);
                     if let Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) = named_item{
-                        let OverloadCandidate{loc, output_ty, additional_params} = self.resolve_overloads(name, overloads, &arg_types, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
-                        for param in additional_params.iter().rev() {
-                            match param {
-                                AdditionalParam::Value(cell_idx) => {
-                                    self.feed_relative_location(&loc.retarget(*cell_idx), sink);
-                                }
-                            }
-                        }
-                        for arg_sink in arg_sinks.into_iter().rev() {
-                            sink.extend(arg_sink);
-                        }
-                        self.feed_relative_location(&loc, sink);
-                        sink.push(Command::MakePending(n_args + additional_params.len()));
+                        let cand = self.resolve_overloads(name, overloads, &arg_types, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
+                        let output_ty = self.feed_overload_candidate_as_call(cand, arg_sinks, sink);
                         return Ok(output_ty)
                     }
                     if let Some(RelativeNamedItem::Type(NamedType::Template(template_arc))) = named_item {
@@ -830,8 +882,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 }
                             }
                             let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect());
-                            
-
                             for arg_sink in arg_sinks.into_iter().rev() {
                                 sink.extend(arg_sink);
                             }
@@ -953,20 +1003,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let arg_tys = arg_tys.iter().map(|ty| self.parse_type(ty, &None)).collect::<Result<Vec<_>, _>>()?;
                 match self.get_named_item(name) {
                     Some(RelativeNamedItem::Overloads(overloads)) => {
-                        let OverloadCandidate{loc, output_ty, additional_params} = self.resolve_overloads(name, overloads.overloads, &arg_tys, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
-                        if additional_params.len() != 0 {
-                            for param in additional_params.iter().rev() {
-                                match param {
-                                    AdditionalParam::Value(cell_idx) => {
-                                        self.feed_relative_location(&loc.retarget(*cell_idx), sink);
-                                    }
-                                }
-                            }
-                        }
-                        self.feed_relative_location(&loc, sink);
-                        if additional_params.len() != 0 {
-                            sink.push(Command::BindBack(additional_params.len()));
-                        }
+                        let candidate = self.resolve_overloads(name, overloads.overloads, &arg_tys, None).map_err(|e| e.with_pair(expr.pair.clone()))?;
+                        let output_ty = self.feed_overload_candidate_as_value(candidate, sink);
                         let fn_type = Arc::new(Ty::Fn(Fn::new(arg_tys, output_ty)));
                         Ok(fn_type)
                     }
