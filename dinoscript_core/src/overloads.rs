@@ -4,14 +4,14 @@ use crate::compilation_scope::{ty::{Fn, Generic, GenericSetId, Specialized, Ty},
 
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,
-    pub bound_generics: Vec<Option<Arc<Ty<'s>>>>
+    pub bound_generics: Vec<Arc<Ty<'s>>>
 }
 
 impl<'s> BindingResolution<'s> {
     pub fn new(gen_id: Option<GenericSetId>, n_generics: usize) -> Self {
         BindingResolution {
             gen_id,
-            bound_generics: vec![None; n_generics],
+            bound_generics: vec![Ty::unknown(); n_generics],
         }
     }
 
@@ -56,18 +56,15 @@ impl<'s> BindingResolution<'s> {
                 }
             }
             Ty::Generic(Generic {idx, gen_id}) if self.gen_id.is_some_and(|gid| gen_id == gen_id)  => {
-                if let Some(bound_type) = &self.bound_generics[*idx]{
-                    self.bound_generics[*idx] = Some(combine_types(bound_type, input_type)?);
-                    Ok(())
-                } else {
-                    self.bound_generics[*idx] = Some(input_type.clone());
-                    Ok(())
-                }
+                let bound_type = &self.bound_generics[*idx];
+                self.bound_generics[*idx] = combine_types(bound_type, input_type)?;
+                Ok(())
             }
             Ty::Generic(_) =>{
                 todo!()
             }
-            Ty::Tail => unreachable!()
+            Ty::Unknown => unreachable!(),
+            Ty::Tail => unreachable!(),
         }
     }
 }
@@ -117,6 +114,8 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
             }
         }
         (Ty::Tail, Ty::Tail) => Ok(a.clone()),
+        (Ty::Unknown, _) => Ok(b.clone()),
+        (_, Ty::Unknown) => Ok(a.clone()),
         _ => Err(())
     }
 }

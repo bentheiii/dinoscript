@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub mod ty {
-    use std::{borrow::Cow, fmt::Display, num::NonZero, sync::Arc};
+    use std::{borrow::Cow, fmt::Display, num::NonZero, sync::{Arc, LazyLock}};
     use indexmap::IndexMap;
 
     use crate::unique;
@@ -148,7 +148,7 @@ pub mod ty {
         Generic(Generic),
         // only applicable inside compound templates
         Tail,
-        // todo the never type
+        Unknown
     }
 
     impl<'s> Ty<'s> {
@@ -168,9 +168,14 @@ pub mod ty {
                     fn_ty.return_ty.resolve(tail, generic_args, gen_id),
                 ))),
                 Ty::Generic(gen) if gen_id.is_some_and(|gid| gen.gen_id == gid) => generic_args[gen.idx].clone(),
-                Ty::Generic(_) => self.clone(),
+                Ty::Generic(_) | Ty::Unknown => self.clone(),
                 Ty::Tail => tail.unwrap().clone(),
             }
+        }
+
+        pub fn unknown() -> Arc<Self> {
+            static UNKNOWN_LZ: LazyLock<Arc<Ty<'static>>> = LazyLock::new(|| Arc::new(Ty::Unknown));
+            UNKNOWN_LZ.clone()
         }
     }
 
@@ -195,6 +200,9 @@ pub mod ty {
                 },
                 Ty::Tail => {
                     write!(f, "...")
+                }
+                Ty::Unknown => {
+                    write!(f, "?")
                 }
             }
         }
@@ -488,7 +496,7 @@ pub trait Builtins<'s> {
 }
 enum AdditionalParam<'s>{
     Value(usize),
-    OverloadResolve(OverloadResolve<'s>),
+    OverloadResolve(OverloadCandidate<'s>),
 }
 
 struct OverloadCandidate<'s> {
@@ -749,13 +757,14 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 additional_params.push(AdditionalParam::Value(*cell_idx));
                             },
                             OverloadArgDefault::OverloadResolve(OverloadResolve{name: ov_name}) => {
-                                let Ty::Fn(expected_signature ) = param.ty.as_ref() else {
+                                let resolved_ty = param.ty.resolve(None, &resolution.bound_generics, gen_id);
+                                let Ty::Fn(expected_signature ) = resolved_ty.as_ref() else {
                                     unreachable!()
                                 };
                                 // todo avoid infinite recursion (note that it might be a double recursion)
                                 let candidate = match self.get_named_item(ov_name) {
                                     Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
-                                        self.resolve_overloads(ov_name, overloads, &expected_signature.args, Some(()))
+                                        self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
                                     }
                                     Some(_) => {
                                         todo!()
@@ -766,16 +775,16 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 };
                                 let candidate = match candidate{
                                     Ok(candidate) => candidate,
-                                    Err(err) => {
+                                    Err(_) => {
                                         if is_one_option {
                                             // if there's only one overload, we can raise a better error here
+                                            // todo work the error into the error type
                                             return Err(CompilationError::FailedDefaultResolution { fn_name: name.clone(), param_n: i, overload_name: ov_name.clone()});
                                         }
                                         continue 'outer;
                                     }
                                 };
-
-                                todo!()
+                                additional_params.push(AdditionalParam::OverloadResolve(candidate));
                             }
                         }
                     } else {
@@ -783,7 +792,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                 }
             }
-            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect(), gen_id);
+            // todo assert that all generics are resolved (not unknown)
+            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics, gen_id);
             resolved_overloads.push(OverloadCandidate {
                 loc: rel_overload.loc,
                 output_ty: output_type,
@@ -804,7 +814,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             AdditionalParam::Value(cell_idx) => {
                 self.feed_relative_location(&main_loc.retarget(cell_idx), sink);
             }
-            _ => todo!()
+            AdditionalParam::OverloadResolve(candidate) => {
+                self.feed_overload_candidate_as_value(candidate, sink);
+            }
         }
     }
 
@@ -881,7 +893,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     return Err(CompilationError::ArgumentTypeMismatch { func_name: struct_name.clone(), param_n: i, param_name: Some(name.clone()), expected_ty: field.raw_ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
                                 }
                             }
-                            let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().map(|ty| ty.unwrap()).collect());
+                            // todo assert all types are resolved (not unknown)
+                            let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().collect());
                             for arg_sink in arg_sinks.into_iter().rev() {
                                 sink.extend(arg_sink);
                             }

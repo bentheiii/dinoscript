@@ -20,6 +20,6 @@ fn other_foo(a: int)->int{
 
 fn main() -> bool{
     assert(bar(5) == 25)
-    && assert(bar(5, foo) == 25)
+    && assert(bar(5, foo{int}) == 25)
     && assert(bar(5, other_foo) == 125)
 }
