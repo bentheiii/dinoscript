@@ -39,6 +39,7 @@ impl<'s> Sequence<'s> {
             let part_seq: &'a Sequence<'s> = as_ext!(part, Sequence).unwrap();
             match part_seq {
                 Sequence::Concat(parts) => Box::new(parts.iter().map(|part| &part.part)),
+                Sequence::Array(arr) if arr.is_empty() => Box::new(std::iter::empty()),
                 _ => Box::new(std::iter::once(part)),
             }
         }
@@ -203,5 +204,28 @@ mod tests {
         assert_eq!(get(17), Some(2));
         assert_eq!(get(18), Some(99));
         assert_eq!(get(19), None);
+    }
+
+    #[test]
+    fn test_make_concat(){
+        let runtime = Runtime::new();
+        let part1 = array_from_vec(&runtime, vec![3, 1, 0, 9]);
+        let part2 = array_from_vec(&runtime, vec![5, 92]);
+        let con1 = runtime.allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2]).unwrap()).unwrap().unwrap();
+        let part3 = array_from_vec(&runtime, vec![3, 45, 16]);
+        let part4 = array_from_vec(&runtime, vec![]);
+        let part5 = array_from_vec(&runtime, vec![4, 39, 24]);
+
+        let seq = Sequence::new_concat(&runtime, vec![con1, part3, part4, part5]).unwrap();
+        assert_eq!(seq.len(), 12);
+        let get = |idx| seq.get(idx).and_then(|r| as_prim!(r, Int).cloned());
+
+        assert_eq!(get(0), Some(3));
+        assert_eq!(get(5), Some(92));
+        assert_eq!(get(6), Some(3));
+        assert_eq!(get(8), Some(16));
+        assert_eq!(get(10), Some(39));
+        let Sequence::Concat(parts) = seq else { panic!() };
+        assert_eq!(parts.len(), 4);
     }
 }
