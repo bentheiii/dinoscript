@@ -27,6 +27,28 @@ pub mod ty {
         Specialized(SpecializedTy<'s>),
     }
 
+    impl<'s> Ty<'s> {
+        pub fn to_in_code(&self)->String{
+            match self {
+                Ty::Tuple(tys) => {
+                    format!("({})", tys.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", "))
+                },
+                Ty::Fn(fn_ty) => {
+                    let args = fn_ty.args.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", ");
+                    let ret = fn_ty.ret.inner.to_in_code();
+                    format!("({}) -> ({})", args, ret)
+                },
+                Ty::Specialized(specialized_ty) => {
+                    if specialized_ty.args.is_empty(){
+                        return specialized_ty.name.to_string();
+                    }
+                    let args = specialized_ty.args.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", ");
+                    format!("{}<{}>", specialized_ty.name, args)
+                }
+            }
+        }
+    } 
+
     impl<'s> Pairable<'s> for Ty<'s>{}
 
     pub type TyWithPair<'s> = WithPair<'s, Ty<'s>>;
@@ -210,6 +232,7 @@ pub mod statement {
 
     pub type StmtWithPair<'s> = WithPair<'s, Stmt<'s>>;
 
+    #[derive(Debug)]
     pub enum Stmt<'s> {
         Let(Let<'s>),
         Fn(Fn<'s>),
@@ -219,12 +242,14 @@ pub mod statement {
 
     impl<'s> Pairable<'s> for Stmt<'s>{}
 
+    #[derive(Debug)]
     pub struct Type<'s> {
         name: Cow<'s, str>,
         generic_params: Vec<Cow<'s, str>>,
         value: TyWithPair<'s>,
     }
 
+    #[derive(Debug)]
     pub struct Compound<'s> {
         pub name: Cow<'s, str>,
         pub kind: CompoundKind,
@@ -254,6 +279,7 @@ pub mod statement {
         Union,
     }
 
+    #[derive(Debug)]
     pub struct Field<'s> {
         pub name: Cow<'s, str>,
         pub ty: TyWithPair<'s>,
@@ -268,12 +294,14 @@ pub mod statement {
         }
     }
 
+    #[derive(Debug)]
     pub struct Let<'s> {
         pub var: Cow<'s, str>,
         pub ty: Option<TyWithPair<'s>>,
         pub expr: ExprWithPair<'s>,
     }
 
+    #[derive(Debug)]
     pub struct Fn<'s> {
         pub name: Cow<'s, str>,
         pub generic_params: Vec<Cow<'s, str>>,
@@ -283,6 +311,7 @@ pub mod statement {
         pub ret: ExprWithPair<'s>,
     }
 
+    #[derive(Debug)]
     pub struct FnArg<'s> {
         pub name: Cow<'s, str>,
         pub ty: TyWithPair<'s>,

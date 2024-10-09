@@ -8,10 +8,10 @@ pub trait DinoPack {
 }
 
 pub mod utils {
-    use std::{borrow::Cow, sync::Arc};
+    use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
     use crate::{
-        bytecode::SourceId, compilation_scope::{ty::{GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
+        ast::statement::Stmt, bytecode::SourceId, compilation_scope::{ty::{Generic, GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, OverloadResolve, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
     };
 
     pub enum SetupItem<'s, C> {
@@ -68,11 +68,22 @@ pub mod utils {
     pub struct SignatureGen<'s> {
         id: GenericSetId,
         generic_params: Vec<Cow<'s, str>>,
+        gen_tys: HashMap<Cow<'s, str>, Arc<Ty<'s>>>,
     }
 
     impl<'s> SignatureGen<'s> {
-        pub fn new(id: GenericSetId, generic_params: Vec<Cow<'s, str>>) -> Self {
-            Self { id, generic_params }
+        pub fn new(generic_params: Vec<impl Into<Cow<'s, str>>>) -> Self {
+            let id = GenericSetId::unique();
+            let generic_params: Vec<_> = generic_params.into_iter().map(|s| s.into()).collect();
+            let gen_tys = generic_params.iter().enumerate().map(|(i, k)| (k.clone(), Arc::new(Ty::Generic(Generic::new(i, id))))).collect();
+            Self { id, generic_params,  gen_tys}
+        }
+
+        pub fn get_gen(&self, name: &str) -> Arc<Ty<'s>> {
+            match self.gen_tys.get(name) {
+                None => panic!("generic type {} not found (found: {:?})", name, self.generic_params),
+                Some(ty) => ty.clone(),
+            }
         }
     }
 
@@ -84,25 +95,44 @@ pub mod utils {
     }
 
     impl<'s> Signature<'s> {
-        pub fn new(name: Cow<'s, str>, generic: Option<SignatureGen<'s>>, args: Vec<Arg<'s>>, ret: Arc<Ty<'s>>) -> Self {
-            Self { name, generic, args, ret }
+        pub fn new(name: impl Into<Cow<'s, str>>, args: Vec<Arg<'s>>, ret: Arc<Ty<'s>>) -> Self {
+            Self { name: name.into(), generic:None, args, ret }
+        }
+
+        pub fn new_generic(name: impl Into<Cow<'s, str>>, args: Vec<Arg<'s>>, ret: Arc<Ty<'s>>, generic: SignatureGen<'s>) -> Self {
+            Self { name: name.into(), generic:Some(generic), args, ret }
         }
 
         pub fn to_overload(&self, loc: SystemLoc) -> Overload<'s> {
             let gen_params = self.generic.as_ref().map(|gen| OverloadGenericParams::new(gen.id, gen.generic_params.clone()));
             Overload::new(gen_params, self.args.iter().map(Arg::to_overload_arg).collect(), self.ret.clone(), OverloadLoc::System(loc))
         }
+
+        pub fn from_statement(stmt: &Stmt<'s>)->Self{
+            let Stmt::Fn(func) = stmt else {
+                panic!("expected function statement, got {:?}", stmt);
+            };
+            todo!()
+        }
     }
 
     pub struct Arg<'s> {
         name: Cow<'s, str>,
         ty: Arc<Ty<'s>>,
-        // todo default
+        default: Option<ArgDefault<'s>>,
+    }
+
+    pub enum ArgDefault<'s> {
+        Resolve(Cow<'s, str>),
     }
 
     impl<'s> Arg<'s> {
-        pub fn new(name: Cow<'s, str>, ty: Arc<Ty<'s>>) -> Self {
-            Self { name, ty }
+        pub fn new(name: impl Into<Cow<'s, str>>, ty: Arc<Ty<'s>>) -> Self {
+            Self { name: name.into(), ty, default: None }
+        }
+
+        pub fn with_default_resolve(name: impl Into<Cow<'s, str>>, ty: Arc<Ty<'s>>, default: impl Into<Cow<'s, str>>) -> Self {
+            Self { name: name.into(), ty, default: Some(ArgDefault::Resolve(default.into())) }
         }
 
         pub fn name(&self) -> &Cow<'s, str> {
@@ -112,7 +142,10 @@ pub mod utils {
         pub fn to_overload_arg(&self) -> OverloadArg<'s> {
             OverloadArg {
                 ty: self.ty.clone(),
-                default: None,
+                default: match &self.default {
+                    Some(ArgDefault::Resolve(name)) => Some(crate::compilation_scope::OverloadArgDefault::OverloadResolve(OverloadResolve::new(name.clone()))),
+                    None => None,
+                },
             }
         }
     }

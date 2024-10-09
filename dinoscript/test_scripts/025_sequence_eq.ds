@@ -1,0 +1,15 @@
+fn my_eq(a: int, b: int) -> bool{
+    (a%3) == (b%3)
+}
+
+fn main() -> bool{
+    let a = [5, 16, 8, 4, 2, 1];
+    let b = [5, 16, 8, 4, 2, 1];
+
+    assert(eq(a, b, eq{int, int}))
+    && assert(a == b)
+    && assert(a != [5, 16, 8, 4, 2, 1, 0])
+    && assert(a != [5, 16, 8, 4, 2])
+    && assert(a != [5, 16, 8, 4, 2, 2])
+    && assert(eq(a, [5, 16, 8, 4, 2, 4], my_eq))
+}

@@ -132,10 +132,6 @@ impl<'s> Runtime<'s> {
             println!("total allocated space: {} bytes", rt.allocated_space);
         }
     }
-
-    pub fn into_weak(self) -> Weak<Mutex<impl Sized + 's>>{
-        Arc::downgrade(&self.0)
-    }
 }
 
 pub struct Sources<'s> {
@@ -236,7 +232,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
                             let func = self.runtime.clone_ref(&func_ref)?;
                             let mut child_frame = self.child(func);
-                            let val = child_frame.exec_fn(arguments)?;
+                            let val = child_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
@@ -258,7 +254,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             };
                             let func = self.runtime.clone_ref(&user_fn)?;
                             let mut new_frame = self.child(func);
-                            let val = new_frame.exec_fn(arguments)?;
+                            let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         other => {
@@ -280,7 +276,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
         }
     }
 
-    pub fn exec_fn(&mut self, mut args: Vec<StackItem<'s>>) -> DinoResult<'s> {
+    pub fn exec_self_fn(&mut self, mut args: Vec<StackItem<'s>>) -> DinoResult<'s> {
         'tail: loop {
             let user_fn = self.user_fn.as_ref().unwrap();
             match user_fn.as_ref() {
@@ -532,6 +528,45 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
         }
     }
 
+    pub fn call(&self, func: &AllocatedRef<'s>, arguments: Vec<AllocatedRef<'s>>) -> DinoResult<'s> {
+        let (func_ref, arguments) = if let DinObject::BindBack(bind_back) = func.as_ref() {
+            (&bind_back.func, bind_back.defaults.iter().map(|d| {
+                Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?)))
+            }).chain(arguments.into_iter().map(|a| Ok(StackItem::Value(Ok(a))))).collect::<Result<Vec<_>,_>>()?)
+        } else {
+            (func, arguments.into_iter().map(|a| StackItem::Value(Ok(a))).collect())
+        };
+        match func_ref.as_ref(){
+            DinObject::UserFn(..) => {
+                let func = self.runtime().clone_ref(&func_ref)?;
+                let mut new_frame = self.parent.child(func);
+                new_frame.exec_self_fn(arguments)
+            }
+            DinObject::SourceFn(source_fn) => {
+                let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments, TailCallAvailability::Disallowed);
+                let ret = source_fn(&mut new_frame)?;
+                match ret{
+                    ControlFlow::Break(val) => {
+                        Ok(val)
+                    }
+                    ControlFlow::Continue(..) => {
+                        unreachable!()
+                    }
+                }
+            }
+            DinObject::Tail => {
+                // this is a similar case to user functions, but we use the frame's user_fn
+                let Some(user_fn) = self.parent.user_fn.as_ref() else {
+                    panic!("tail call with no user function")
+                };
+                let func = self.runtime().clone_ref(&user_fn)?;
+                let mut new_frame = self.parent.child(func);
+                new_frame.exec_self_fn(arguments)
+            }
+            _ => {panic!("unexpected function: {:?}", func_ref)}
+        }
+    }
+
     pub fn eval_pop_tca(&mut self, tca: TailCallAvailability) -> SourceFnResult<'s> {
         loop {
             match self.stack.pop().unwrap(){
@@ -552,7 +587,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             }
                             let func = self.runtime().clone_ref(&func_ref)?;
                             let mut new_frame = self.parent.child(func);
-                            let val = new_frame.exec_fn(arguments)?;
+                            let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
@@ -577,7 +612,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             }
                             let func = self.runtime().clone_ref(&user_fn)?;
                             let mut new_frame = self.parent.child(func);
-                            let val = new_frame.exec_fn(arguments)?;
+                            let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         _ => {panic!("unexpected function: {:?}", func_ref)}

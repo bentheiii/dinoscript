@@ -381,6 +381,12 @@ pub struct OverloadResolve<'s> {
     name: Cow<'s, str>,
 }
 
+impl<'s> OverloadResolve<'s> {
+    pub fn new(name: Cow<'s, str>) -> Self {
+        Self { name }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct PendingCapture {
     ancestor_height: usize,
