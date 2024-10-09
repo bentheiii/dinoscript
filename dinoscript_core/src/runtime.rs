@@ -74,6 +74,11 @@ impl<'s> Runtime<'s> {
         Ok(ptr)
     }
 
+    pub fn allocate_ext<T: ExtendedObject + 's>(&self, obj: T) -> DinoResult<'s> {
+        let ptr: *const dyn ExtendedObject = Box::into_raw(Box::new(obj));
+        self.allocate(Ok(DinObject::Extended(ptr)))
+    }
+
     pub fn new() -> Self {
         let shared_runtime = SharedRuntime{
             allocated_space: 0,
@@ -463,8 +468,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match items.into_iter().collect(){
                     Err(_) => todo!(),
                     Ok(items) => {
-                        let seq: *const dyn ExtendedObject = Box::into_raw(Box::new(Sequence::new_array(items)));
-                        let array = self.runtime.allocate(Ok(DinObject::Extended(seq)))?;
+                        let array = self.runtime.allocate_ext(Sequence::new_array(items))?;
                         self.stack.push(StackItem::Value(array));
                         Ok(ControlFlow::Break(()))
                     }

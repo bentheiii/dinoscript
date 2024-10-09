@@ -25,16 +25,19 @@ impl<'s> BindingResolution<'s> {
     pub fn assign(&mut self, assign_type: &Arc<Ty<'s>>, input_type: &Arc<Ty<'s>>) -> Result<(), ()> {
         match assign_type.as_ref(){
             Ty::Specialized(Specialized{template: assign_template, args: assign_args}) => {
-                if let Ty::Specialized(Specialized{template: inp_template, args: inp_args}) = input_type.as_ref(){
-                    // TODO: we should give each template an id to make sure they are equal, for now, we just compare the pointers
-                    if !Arc::ptr_eq(assign_template, inp_template){
-                        return  Err(());
+                match input_type.as_ref(){
+                    Ty::Specialized(Specialized{template: inp_template, args: inp_args}) => {
+                        if !Arc::ptr_eq(assign_template, inp_template){
+                            return  Err(());
+                        }
+        
+                        assert_eq!(assign_args.len(), inp_args.len());
+                        assign_args.iter().zip(inp_args.iter()).map(|(a,i)| self.assign(a, i)).collect()
                     }
-
-                    assert_eq!(assign_args.len(), inp_args.len());
-                    assign_args.iter().zip(inp_args.iter()).map(|(a,i)| self.assign(a, i)).collect()
-                } else {
-                    Err(())
+                    Ty::Unknown => {
+                        Ok(())
+                    }
+                    _ => Err(())
                 }
             },
             Ty::Tuple(assign_tup) => {

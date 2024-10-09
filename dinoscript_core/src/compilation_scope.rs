@@ -1098,20 +1098,14 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 self.feed_call(&Functor::Expr(Box::new(Expr::Ref(name.clone()).with_pair(expr.pair.clone()))), args, sink)
             }
             Expr::Array(items)=>{
-                let mut arr_ty = None;
+                let mut arr_ty = Ty::unknown();
                 for item in items.iter().rev() {
                     let item_ty = self.feed_expression(item, sink)?;
-                    if let Some(ty) = arr_ty.as_ref() {
-                        match combine_types(ty, &item_ty){
-                            Ok(combined) => arr_ty = Some(combined),
-                            Err(_) => return Err(CompilationError::ArrayItemTypeMismatch { expected_ty: ty.clone(), actual_ty: item_ty}.with_pair(expr.pair.clone()))
-                        }
-                    }
-                    else {
-                        arr_ty = Some(item_ty);
+                    match combine_types(&arr_ty, &item_ty){
+                        Ok(combined) => arr_ty = combined,
+                        Err(_) => return Err(CompilationError::ArrayItemTypeMismatch { expected_ty: arr_ty.clone(), actual_ty: item_ty}.with_pair(expr.pair.clone()))
                     }
                 }
-                let arr_ty = arr_ty.unwrap();
                 sink.push(Command::Array(items.len()));
                 Ok(self.sequence_ty(arr_ty))
             }

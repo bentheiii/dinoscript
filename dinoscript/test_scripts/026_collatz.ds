@@ -1,0 +1,17 @@
+fn collatz_step(n: int)->int{
+    (n%2 == 0).if(
+        (n/2).floor(),
+        3*n+1
+    )
+}
+fn collatz_helper(n: int, ret: Sequence<int>)->Sequence<int>{
+    if (n == 1, ret + [1], collatz_helper(collatz_step(n), ret + [n]))
+}
+
+fn collatz(n: int)->Sequence<int>{
+    collatz_helper(n, [])
+}
+
+fn main() -> bool{
+    assert((5).collatz() == [5, 16, 8, 4, 2, 1])
+}

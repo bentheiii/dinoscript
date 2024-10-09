@@ -11,3 +11,4 @@ mod unique;
 mod overloads;
 mod compilation_error;
 pub mod sequence;
+pub mod dinobj_utils;

@@ -1,7 +1,7 @@
 use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt}, bytecode::{Command, SourceId}, compilation_scope::{
-        self, ty::{BuiltinTemplate, Fn, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
+        self, ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
     }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::Sequence
 };
 // pragma: skip 2
@@ -60,34 +60,6 @@ impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
     }
 }
 
-macro_rules! get_type {
-    ($b:ident, $gens:expr, T0) => {
-        $gens[0].clone()
-    };
-    ($b:ident, $gens:expr, T1) => {
-        $gens[0].clone()
-    };
-    ($b:ident, $gens:expr, $ty_name:ident) => {
-        $b.$ty_name.clone()
-    };
-    ($b:ident, $gens:expr, ($ty_name:ident<$($gen_params:tt),*>)) => {
-        $b.$ty_name.instantiate(vec![$(get_type!($b, $gens, $gen_params)),*])
-    };
-    ($b:ident, $gens:expr, ($($params:tt),*)->($out:tt)) => {
-        Arc::new(Ty::Fn(Fn::new(vec![$(get_type!($b, $gens, $params)),*], get_type!($b, $gens, $out))))
-    }
-}
-
-macro_rules! arg_suffix {
-    ($b:ident, $gens:expr, $name:ident, ($type_name:tt ~= $resolv:ident)) => {
-        dinoscript_core::dinopack::utils::Arg::with_default_resolve(std::borrow::Cow::Borrowed(stringify!($param_name)), get_type!($b, $gens, $type_name), std::borrow::Cow::Borrowed(stringify!($resolv)))
-    };
-
-    ($b:ident, $gens:expr, $name:ident, $type_name:tt) => {
-        dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), get_type!($b, $gens, $type_name))
-    };
-}
-
 macro_rules! ty_gen {
     ($b:ident, $g:expr, int) => {
         $b.int()
@@ -134,30 +106,38 @@ macro_rules! arg_gen {
     };
 }
 
-macro_rules! signature_fn {
-    (fn $name:ident <$($gen_name:ident),*> ($($param_name:ident : $arg_suf:tt),*) -> $ret_type:tt) => {
-        {
-            |b: &Builtins<'_>| {
-                let gen_id = dinoscript_core::compilation_scope::ty::GenericSetId::unique();
-                let gen_names = vec![$(std::borrow::Cow::Borrowed(stringify!($gen_name))),*];
-                let gens: Vec<Arc<Ty<'_>>> = gen_names.iter().enumerate().map(|(i, _)| Arc::new(dinoscript_core::compilation_scope::ty::Ty::Generic(dinoscript_core::compilation_scope::ty::Generic::new(i, gen_id)))).collect();
-                let gen = SignatureGen::new(gen_names);
-                Signature::new(
-                    std::borrow::Cow::Borrowed(stringify!($name)),
-                    Some(gen),
-                    vec![$(arg_suffix!(b, gens, $param_name, $arg_suf)),*],
-                    get_type!(b, gens, $ret_type),
-                )
-            }
+macro_rules! rt_unwrap_value {
+    ($evaled:expr) => {
+        match $evaled {
+            Ok(v) => v,
+            Err(e) => return to_return_value(Ok(Err(e))),
         }
     };
-    (fn $name:ident ($($param_name:ident : $type_name:tt),*) -> $ret_type:tt) => {
-        |b: &Builtins<'_>| Signature::new(
-            std::borrow::Cow::Borrowed(stringify!($name)),
-            None,
-            vec![$(dinoscript_core::dinopack::utils::Arg::new(std::borrow::Cow::Borrowed(stringify!($param_name)), get_type!(b, (), $type_name))),*],
-            get_type!(b, (), $ret_type),
-        )
+}
+
+macro_rules! rt_as_prim {
+    ($ref:expr, $variant:ident) => {
+        if let DinObject::$variant(v) = $ref.as_ref() {
+            v
+        } else {
+            let err = format!("Expected {} got {:?}", stringify!($variant), $ref);
+            return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
+        }
+    };
+}
+
+macro_rules! rt_as_ext {
+    ($ref:expr, $ty:ident) => {
+        {
+            let ptr = (*rt_as_prim!($ref, Extended));
+            let tn = (unsafe{&*ptr}).type_name();
+            if tn != $ty::EXPECTED_TYPE_NAME {
+                let err = format!("Expected {} got {:?}", $ty::EXPECTED_TYPE_NAME, tn);
+                return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
+            } 
+            let ptr = ptr as *const $ty;
+            unsafe{&*ptr}
+        }
     };
 }
 
@@ -291,40 +271,7 @@ fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
     }
 }
 
-macro_rules! unwrap_value {
-    ($evaled:expr) => {
-        match $evaled {
-            Ok(v) => v,
-            Err(e) => return to_return_value(Ok(Err(e))),
-        }
-    };
-}
 
-macro_rules! as_prim {
-    ($ref:expr, $variant:ident) => {
-        if let DinObject::$variant(v) = $ref.as_ref() {
-            v
-        } else {
-            let err = format!("Expected {} got {:?}", stringify!($variant), $ref);
-            return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
-        }
-    };
-}
-
-macro_rules! as_ext {
-    ($ref:expr, $ty:ident) => {
-        {
-            let ptr = (*as_prim!($ref, Extended));
-            let tn = (unsafe{&*ptr}).type_name();
-            if tn != $ty::EXPECTED_TYPE_NAME {
-                let err = format!("Expected {} got {:?}", $ty::EXPECTED_TYPE_NAME, tn);
-                return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
-            } 
-            let ptr = ptr as *const $ty;
-            unsafe{&*ptr}
-        }
-    };
-}
 
 pub(crate)
 fn setup_items<'a, 's>()->
@@ -351,11 +298,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a + b))))
                 })),
             ))
@@ -372,11 +319,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(if *b == 0{
                         frame.runtime().allocate(Err("Division by zero".into()))
                     } else {
@@ -397,11 +344,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().bool(a == b))
                 })),
             ))
@@ -418,11 +365,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().bool(a >= b))
                 })),
             ))
@@ -439,11 +386,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(if *b == 0{
                         frame.runtime().allocate(Err("Division by zero".into()))
                     } else {
@@ -464,11 +411,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a * b))))
                 })),
             ))
@@ -485,9 +432,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
+                    let a = rt_as_prim!(a, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(-a))))
                 })),
             ))
@@ -504,11 +451,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
-                    let b = as_prim!(b, Int);
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a - b))))
                 })),
             ))
@@ -525,9 +472,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Int);
+                    let a = rt_as_prim!(a, Int);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))))
                 })),
             ))
@@ -546,9 +493,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a_ref = unwrap_value!(frame.eval_pop()?);
+                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a_ref, Bool);
+                    let a = rt_as_prim!(a_ref, Bool);
                     if !a{
                         to_return_value(Ok(Ok(a_ref)))
                     }
@@ -571,9 +518,9 @@ ItemsBuilder<'a, 's>
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
                     // todo: if the value is a pending, maybe we can add it to the error message?
-                    let a_ref = unwrap_value!(frame.eval_pop()?);
+                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a_ref, Bool);
+                    let a = rt_as_prim!(a_ref, Bool);
                     to_return_value(if *a{
                         Ok(Ok(a_ref))
                     }
@@ -597,9 +544,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let b = as_prim!(b, Bool);
+                    let b = rt_as_prim!(b, Bool);
                     
                     if !b {
                         frame.stack.pop().unwrap();
@@ -620,11 +567,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Bool);
-                    let b = as_prim!(b, Bool);
+                    let a = rt_as_prim!(a, Bool);
+                    let b = rt_as_prim!(b, Bool);
 
                     to_return_value(frame.runtime().bool(a == b))
                 })),
@@ -642,9 +589,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Bool);
+                    let a = rt_as_prim!(a, Bool);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Bool(!a))))
                 })),
             ))
@@ -661,9 +608,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a_ref = unwrap_value!(frame.eval_pop()?);
+                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a_ref, Bool);
+                    let a = rt_as_prim!(a_ref, Bool);
                     if *a{
                         to_return_value(Ok(Ok(a_ref)))
                     }
@@ -687,11 +634,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Str);
-                    let b = as_prim!(b, Str);
+                    let a = rt_as_prim!(a, Str);
+                    let b = rt_as_prim!(b, Str);
                     
                     to_return_value(frame.runtime().bool(a == b))
                 })),
@@ -711,9 +658,9 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_prim!(a, Float);
+                    let a = rt_as_prim!(a, Float);
                     to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))))
                 })),
             ))
@@ -721,6 +668,34 @@ ItemsBuilder<'a, 's>
         ,
         // endregion float
         // region:sequence
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T", "T"]);
+                    Signature::new_generic(
+                        "add",
+                        vec![
+                            arg_gen!(bi, gen, a: Sequence<T>), 
+                            arg_gen!(bi, gen, b: Sequence<T>),
+                        ],
+                        ty_gen!(bi, gen, Sequence<T>),
+                        gen,
+                    )
+                },
+                //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
+                    
+                    let ret = Sequence::new_concat(frame.runtime(), vec![a, b])?;
+
+                    to_return_value(frame.runtime().allocate_ext(ret))
+
+                })),
+            ))
+        )
+        ,
         // pragma:unwrap
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
@@ -739,12 +714,12 @@ ItemsBuilder<'a, 's>
                 },
                 //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = unwrap_value!(frame.eval_pop()?);
-                    let b = unwrap_value!(frame.eval_pop()?);
-                    let fn_eq = unwrap_value!(frame.eval_pop()?);
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
+                    let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = as_ext!(a, Sequence);
-                    let b = as_ext!(b, Sequence);
+                    let a = rt_as_ext!(a, Sequence);
+                    let b = rt_as_ext!(b, Sequence);
                     if a.len() != b.len(){
                         return to_return_value(frame.runtime().bool(false));
                     }
@@ -752,8 +727,8 @@ ItemsBuilder<'a, 's>
                         let a_it = frame.runtime().clone_ref(a_it)?;
                         let b_it = frame.runtime().clone_ref(b_it)?;
                         let res = frame.call(&fn_eq, vec![a_it, b_it])?;
-                        let res = unwrap_value!(res);
-                        let res = as_prim!(res, Bool);
+                        let res = rt_unwrap_value!(res);
+                        let res = rt_as_prim!(res, Bool);
                         if !*res{
                             return to_return_value(frame.runtime().bool(false));
                         }
@@ -780,11 +755,11 @@ ItemsBuilder<'a, 's>
                     )
                 },
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let seq = unwrap_value!(frame.eval_pop()?);
-                    let idx = unwrap_value!(frame.eval_pop()?);
+                    let seq = rt_unwrap_value!(frame.eval_pop()?);
+                    let idx = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let seq = as_ext!(seq, Sequence);
-                    let idx = as_prim!(idx, Int);
+                    let seq = rt_as_ext!(seq, Sequence);
+                    let idx = rt_as_prim!(idx, Int);
                     let Ok(idx) = usize::try_from(*idx) else {
                         return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                     };
