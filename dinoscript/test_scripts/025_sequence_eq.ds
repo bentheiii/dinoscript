@@ -11,5 +11,5 @@ fn main() -> bool{
     && assert(a != [5, 16, 8, 4, 2, 1, 0])
     && assert(a != [5, 16, 8, 4, 2])
     && assert(a != [5, 16, 8, 4, 2, 2])
-    && assert(eq(a, [5, 16, 8, 4, 2, 4], my_eq))
+    && assert(eq(a, [2, 16, 5, 7, 5, 4], my_eq))
 }
