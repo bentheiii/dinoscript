@@ -1,0 +1,14 @@
+fn main()->bool{
+    assert(1_000 == 1000)
+    && assert(0b1010 == 10)
+    && assert(0x64 == 100)
+    && assert(0b_1011 == 11)
+    && assert(0x6_4 == 100)
+    && assert(12_34 == 1234)
+    && assert(-1_000 == -1000)
+    && assert(-0b1010 == -10)
+    && assert(-0x64 == -100)
+    && assert(-0b_1011 == -11)
+    && assert(-0x6_4 == -100)
+    && assert(-12_34 == -1234)
+}

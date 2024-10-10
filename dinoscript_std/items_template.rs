@@ -359,6 +359,27 @@ ItemsBuilder<'a, 's>
             SetupItem::Function(SetupFunction::new(
                 |bi: &Builtins<'_>| {
                     Signature::new(
+                        "gt",
+                        vec![arg!(bi, a: int), arg!(bi, b: int)],
+                        ty!(bi, bool),
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
+                    to_return_value(frame.runtime().bool(a > b))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    Signature::new(
                         "gte",
                         vec![arg!(bi, a: int), arg!(bi, b: int)],
                         ty!(bi, bool),
@@ -371,6 +392,48 @@ ItemsBuilder<'a, 's>
                     let a = rt_as_prim!(a, Int);
                     let b = rt_as_prim!(b, Int);
                     to_return_value(frame.runtime().bool(a >= b))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    Signature::new(
+                        "lt",
+                        vec![arg!(bi, a: int), arg!(bi, b: int)],
+                        ty!(bi, bool),
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
+                    to_return_value(frame.runtime().bool(a < b))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    Signature::new(
+                        "lte",
+                        vec![arg!(bi, a: int), arg!(bi, b: int)],
+                        ty!(bi, bool),
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    let b = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let a = rt_as_prim!(a, Int);
+                    let b = rt_as_prim!(b, Int);
+                    to_return_value(frame.runtime().bool(a <= b))
                 })),
             ))
         )

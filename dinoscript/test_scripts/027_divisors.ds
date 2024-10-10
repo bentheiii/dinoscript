@@ -1,0 +1,25 @@
+fn next_divisor(n: int, a: int) -> int {
+    if(n%a == 0,
+        a,
+        if(a*a > n,
+            -1,
+            next_divisor(n, a+1)
+        )
+    )
+}
+
+fn divisors_helper(n: int, a: int, ret: Sequence<int>)-> Sequence<int> {
+    let next = next_divisor(n, a);
+    if(next == -1,
+        ret+[n],
+        divisors_helper((n/next).floor(), next, ret + [next])
+    )
+}
+
+fn divisors(n: int) -> Sequence<int> {
+    divisors_helper(n, 2, [])
+}
+
+fn main()->bool{
+    assert(divisors(25795) == [5,7,11,67])
+}

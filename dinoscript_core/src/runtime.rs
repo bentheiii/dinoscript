@@ -327,8 +327,11 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             }
             Command::EvalTop => self.eval_top(TailCallAvailability::Allowed),
             Command::PushInt(i) => {
+                let Ok(i) = (*i).try_into() else {
+                    todo!()
+                };
                 self.stack
-                    .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Int(*i)))?));
+                    .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Int(i)))?));
                 Ok(ControlFlow::Break(()))
             }
             Command::PushFloat(f) => {

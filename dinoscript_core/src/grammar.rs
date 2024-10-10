@@ -1,4 +1,4 @@
-use std::{sync::LazyLock};
+use std::{borrow::Cow, sync::LazyLock};
 
 use pest::{
     iterators::Pair,
@@ -89,8 +89,24 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
         }
         Rule::NUMBER_ANY => {
             // todo handle hex, bin, digit seps, floats, etc
-            let n = inner.as_str().parse().unwrap();
-            return Ok(Expr::LitInt(n).with_pair(inner));
+            let mut to_parse = Cow::Borrowed(inner.as_str());
+            if to_parse.contains('_') {
+                to_parse = Cow::Owned(to_parse.replace("_", ""));
+            }
+            if let Some(whole) = to_parse
+                .parse::<i128>()
+                .ok()
+                .or_else(|| {
+                    to_parse.strip_prefix("0x").and_then(|s| i128::from_str_radix(s, 16).ok())
+                })
+                .or_else(|| {
+                    to_parse.strip_prefix("0b").and_then(|s| i128::from_str_radix(s, 2).ok())
+                })
+            {
+                return Ok(Expr::LitInt(whole).with_pair(inner));
+            } else {
+                todo!("handle float")
+            }
         }
         Rule::expression => {
             return parse_expr(inner);

@@ -1,0 +1,25 @@
+fn next_divisor(n: int, a: int) -> int {
+    if(n%a == 0,
+        a,
+        if(a*a > n,
+            -1,
+            next_divisor(n, a+1)
+        )
+    )
+}
+
+fn omega_helper(n: int, a: int, ret: int)-> int {
+    let next = next_divisor(n, a);
+    if(next == -1,
+        ret + if(n==1,0,1),
+        omega_helper((n/next).floor(), next, ret + 1)
+    )
+}
+
+fn omega(n: int) -> int {
+    omega_helper(n, 2, 0)
+}
+
+fn main()->bool{
+    assert(omega(25795) == 4)
+}

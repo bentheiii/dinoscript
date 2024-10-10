@@ -83,7 +83,7 @@ pub mod expression {
 
     #[derive(Debug, Clone)]
     pub enum Expr<'s> {
-        LitInt(i64),
+        LitInt(i128),
         LitBool(bool),
         LitFloat(f64),
         LitString(Cow<'s, str>),

@@ -1,0 +1,11 @@
+fn product_helper(arr: Sequence<int>, ret: int) -> int{
+    if(arr.len() == 0, ret, product_helper(arr.pop(0), arr.get(0) * ret))
+}
+
+fn my_product(arr: Sequence<int>) -> int {
+    product_helper(arr, 1)
+}
+
+fn main()->bool{
+    assert(my_product([227,3,5,29]) == 98_745)
+}
