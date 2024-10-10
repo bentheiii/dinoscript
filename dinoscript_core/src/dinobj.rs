@@ -1,8 +1,17 @@
 use derive_more::Debug;
 
-use std::{borrow::Cow, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc};
+use std::{
+    borrow::Cow,
+    mem::size_of,
+    ops::{BitAnd, ControlFlow, Deref},
+    sync::Arc,
+};
 
-use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeViolation}, runtime::{Runtime, SystemRuntimeFrame, REPORT_MEMORY_USAGE}};
+use crate::{
+    bytecode::Command,
+    errors::{AllocatedRuntimeError, RuntimeViolation},
+    runtime::{Runtime, SystemRuntimeFrame, REPORT_MEMORY_USAGE},
+};
 
 #[derive(Debug)]
 pub enum DinObject<'s> {
@@ -23,12 +32,10 @@ pub enum DinObject<'s> {
 
 unsafe impl Send for DinObject<'_> {}
 
-impl<'s> DinObject<'s>{
+impl<'s> DinObject<'s> {
     fn extra_allocated_size(&self) -> usize {
         match self {
-            Self::Extended(e) => {
-                unsafe{(**e).allocated_size()}
-            },
+            Self::Extended(e) => unsafe { (**e).allocated_size() },
             Self::Str(s) => s.len(),
             _ => 0,
         }
@@ -38,7 +45,7 @@ impl<'s> DinObject<'s>{
 impl Drop for DinObject<'_> {
     fn drop(&mut self) {
         if let Self::Extended(e) = self {
-            unsafe{
+            unsafe {
                 drop(Box::from_raw(*e as *mut (dyn ExtendedObject)));
             };
         }
@@ -119,7 +126,6 @@ pub trait ExtendedObject: Debug {
     fn allocated_size(&self) -> usize;
 }
 
-
 pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedRuntimeError<'s>>;
 pub type DinoResult<'s> = Result<DinoValue<'s>, RuntimeViolation>;
 
@@ -138,7 +144,7 @@ pub struct Pending<'s> {
 }
 
 #[derive(Debug)]
-pub struct AllocatedObject<'s>{
+pub struct AllocatedObject<'s> {
     value: DinObject<'s>,
     size: usize, // todo we shouldn't store this
     #[debug(skip)]
@@ -148,14 +154,14 @@ pub struct AllocatedObject<'s>{
 unsafe impl Send for AllocatedObject<'_> {}
 unsafe impl Sync for AllocatedObject<'_> {}
 
-impl<'s> AllocatedObject<'s>{   
+impl<'s> AllocatedObject<'s> {
     pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
         let size = value.obj_size();
-        Self{value, size, runtime}
+        Self { value, size, runtime }
     }
 }
 
-impl<'s> Drop for AllocatedObject<'s>{
+impl<'s> Drop for AllocatedObject<'s> {
     fn drop(&mut self) {
         if REPORT_MEMORY_USAGE {
             println!("Deallocating ({} bytes) {:?}", self.size, self.value);
@@ -167,7 +173,7 @@ impl<'s> Drop for AllocatedObject<'s>{
 #[derive(Debug)]
 pub struct AllocatedRef<'s>(pub Arc<AllocatedObject<'s>>);
 
-impl<'s> AllocatedRef<'s>{
+impl<'s> AllocatedRef<'s> {
     pub const SIZE: usize = size_of::<AllocatedRef>();
     pub fn new(obj: Arc<AllocatedObject<'s>>) -> Self {
         Self(obj)
@@ -184,16 +190,21 @@ impl<'s> AllocatedRef<'s>{
     }
 }
 
-impl<'s> Drop for AllocatedRef<'s>{
+impl<'s> Drop for AllocatedRef<'s> {
     fn drop(&mut self) {
         if REPORT_MEMORY_USAGE {
-            println!("Deallocating ref ({} bytes, {} refs remaining) {:?}", Self::SIZE, Arc::strong_count(&self.0)-1, self.0.value);
+            println!(
+                "Deallocating ref ({} bytes, {} refs remaining) {:?}",
+                Self::SIZE,
+                Arc::strong_count(&self.0) - 1,
+                self.0.value
+            );
         }
         self.0.runtime.deallocate(Self::SIZE);
     }
 }
 
-impl<'s> Deref for AllocatedRef<'s>{
+impl<'s> Deref for AllocatedRef<'s> {
     type Target = DinObject<'s>;
 
     fn deref(&self) -> &Self::Target {
@@ -207,7 +218,7 @@ impl<'s> AsRef<DinObject<'s>> for AllocatedRef<'s> {
     }
 }
 
-pub trait Allocatable<'s>{
+pub trait Allocatable<'s> {
     type Output: Sized;
     fn allocated_size(&self) -> usize {
         size_of::<Self::Output>() + self.obj_size()
@@ -218,7 +229,7 @@ pub trait Allocatable<'s>{
     fn allocate(self, runtime: Runtime<'s>) -> Self::Output;
 }
 
-impl<'s> Allocatable<'s> for DinObject<'s>{
+impl<'s> Allocatable<'s> for DinObject<'s> {
     type Output = AllocatedRef<'s>;
     fn obj_size(&self) -> usize {
         size_of::<AllocatedObject<'s>>() + self.extra_allocated_size()

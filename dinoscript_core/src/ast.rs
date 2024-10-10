@@ -1,16 +1,13 @@
-pub mod pairable{
+pub mod pairable {
     #[derive(Debug, Clone)]
-    pub struct WithPair<'s, T>{
+    pub struct WithPair<'s, T> {
         pub inner: T,
-        pub pair: pest::iterators::Pair<'s, crate::grammar::Rule>
+        pub pair: pest::iterators::Pair<'s, crate::grammar::Rule>,
     }
 
-    pub trait Pairable<'s>: Sized{
-        fn with_pair(self, pair: pest::iterators::Pair<'s, crate::grammar::Rule>) -> WithPair<'s, Self>{
-            WithPair{
-                inner: self,
-                pair
-            }
+    pub trait Pairable<'s>: Sized {
+        fn with_pair(self, pair: pest::iterators::Pair<'s, crate::grammar::Rule>) -> WithPair<'s, Self> {
+            WithPair { inner: self, pair }
         }
     }
 }
@@ -28,28 +25,41 @@ pub mod ty {
     }
 
     impl<'s> Ty<'s> {
-        pub fn to_in_code(&self)->String{
+        pub fn to_in_code(&self) -> String {
             match self {
                 Ty::Tuple(tys) => {
-                    format!("({})", tys.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", "))
-                },
+                    format!(
+                        "({})",
+                        tys.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", ")
+                    )
+                }
                 Ty::Fn(fn_ty) => {
-                    let args = fn_ty.args.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", ");
+                    let args = fn_ty
+                        .args
+                        .iter()
+                        .map(|t| t.inner.to_in_code())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     let ret = fn_ty.ret.inner.to_in_code();
                     format!("({}) -> ({})", args, ret)
-                },
+                }
                 Ty::Specialized(specialized_ty) => {
-                    if specialized_ty.args.is_empty(){
+                    if specialized_ty.args.is_empty() {
                         return specialized_ty.name.to_string();
                     }
-                    let args = specialized_ty.args.iter().map(|t| t.inner.to_in_code()).collect::<Vec<_>>().join(", ");
+                    let args = specialized_ty
+                        .args
+                        .iter()
+                        .map(|t| t.inner.to_in_code())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     format!("{}<{}>", specialized_ty.name, args)
                 }
             }
         }
-    } 
+    }
 
-    impl<'s> Pairable<'s> for Ty<'s>{}
+    impl<'s> Pairable<'s> for Ty<'s> {}
 
     pub type TyWithPair<'s> = WithPair<'s, Ty<'s>>;
 
@@ -76,7 +86,10 @@ pub mod ty {
 }
 
 pub mod expression {
-    use super::{pairable::{Pairable, WithPair}, ty::TyWithPair};
+    use super::{
+        pairable::{Pairable, WithPair},
+        ty::TyWithPair,
+    };
     use std::borrow::Cow;
 
     pub type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
@@ -100,7 +113,7 @@ pub mod expression {
         Array(Vec<ExprWithPair<'s>>),
     }
 
-    impl<'s> Pairable<'s> for Expr<'s>{}
+    impl<'s> Pairable<'s> for Expr<'s> {}
 
     #[derive(Debug, Clone)]
     pub struct Lookup<'s> {
@@ -176,7 +189,7 @@ pub mod expression {
         Lookup,
     }
 
-    impl<'s> Pairable<'s> for Operator{}
+    impl<'s> Pairable<'s> for Operator {}
 
     impl Operator {
         pub fn func_name(&self) -> &'static str {
@@ -236,7 +249,7 @@ pub mod statement {
         Compound(Compound<'s>),
     }
 
-    impl<'s> Pairable<'s> for Stmt<'s>{}
+    impl<'s> Pairable<'s> for Stmt<'s> {}
 
     #[derive(Debug)]
     pub struct Type<'s> {
@@ -283,10 +296,7 @@ pub mod statement {
 
     impl<'s> Field<'s> {
         pub fn new(name: impl Into<Cow<'s, str>>, ty: TyWithPair<'s>) -> Field<'s> {
-            Field {
-                name: name.into(),
-                ty,
-            }
+            Field { name: name.into(), ty }
         }
     }
 

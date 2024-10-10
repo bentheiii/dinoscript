@@ -25,11 +25,9 @@ impl<'a, T> Deref for MaybeOwned<'a, T> {
 
 impl<'a, T> AsRef<T> for MaybeOwned<'a, T> {
     fn as_ref(&self) -> &T {
-        
         match self {
             MaybeOwned::Borrowed(t) => t,
             MaybeOwned::Owned(t) => t,
         }
     }
-    
 }

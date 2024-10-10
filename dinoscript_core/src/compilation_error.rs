@@ -1,6 +1,9 @@
 use std::{borrow::Cow, error::Error, fmt::Display, sync::Arc};
 
-use crate::{ast::pairable::{Pairable, WithPair}, compilation_scope::{ty::Ty, NamedType}};
+use crate::{
+    ast::pairable::{Pairable, WithPair},
+    compilation_scope::{ty::Ty, NamedType},
+};
 
 #[derive(Debug, Clone)]
 pub enum CompilationError<'c, 's> {
@@ -43,11 +46,11 @@ pub enum CompilationError<'c, 's> {
         expected_ty: Arc<Ty<'s>>,
         actual_ty: Arc<Ty<'s>>,
     },
-    ParameterWithoutDefaultAfterDefault{
+    ParameterWithoutDefaultAfterDefault {
         param_name: Cow<'s, str>,
         default_param_name: Cow<'s, str>,
     },
-    FailedDefaultResolution{
+    FailedDefaultResolution {
         fn_name: Cow<'s, str>,
         param_n: usize,
         overload_name: Cow<'s, str>,
@@ -74,72 +77,65 @@ impl Display for CompilationError<'_, '_> {
             ),
             CompilationError::TypeUsedAsValue { ty } => {
                 write!(f, "Type {} cannot be used as a value", ty)
-            },
+            }
             CompilationError::ArgumentCountMismatch {
                 func_name: struct_name,
                 min_n,
                 max_n,
                 actual_n,
-            } => if min_n == max_n{
-                write!(
-                f,
-                "Callable {} expects {} arguments, got {}",
-                struct_name, min_n, actual_n
-            )} else {
-                write!(
-                f,
-                "Callable {} expects between {} and {} arguments, got {}",
-                struct_name, min_n, max_n, actual_n
-            )
-            },
+            } => {
+                if min_n == max_n {
+                    write!(
+                        f,
+                        "Callable {} expects {} arguments, got {}",
+                        struct_name, min_n, actual_n
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Callable {} expects between {} and {} arguments, got {}",
+                        struct_name, min_n, max_n, actual_n
+                    )
+                }
+            }
             CompilationError::ArgumentTypeMismatch {
                 func_name,
                 param_n,
                 param_name,
                 expected_ty,
                 actual_ty,
-            } => match param_name{
-                    None => write!(
+            } => match param_name {
+                None => write!(
                     f,
                     "Type mismatch in callable {}: param #{} expects {}, got {}",
                     func_name, param_n, expected_ty, actual_ty
-                ), Some(param_name) => write!(
+                ),
+                Some(param_name) => write!(
                     f,
                     "Type mismatch in callable {}: param {} ({}) expects {}, got {}",
                     func_name, param_n, param_name, expected_ty, actual_ty
-                )
+                ),
             },
             CompilationError::NameNotFound { name } => write!(f, "Unknown name: {}", name),
             CompilationError::NoOverloads { name, arg_types } => write!(
                 f,
                 "No overloads found for callable {} with arguments {}",
                 name,
-                arg_types
-                    .iter()
-                    .map(|ty| ty.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                arg_types.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", ")
             ),
             CompilationError::AmbiguousOverloads { name, arg_types } => write!(
                 f,
                 "Ambiguous overloads found for callable {} with arguments {}",
                 name,
-                arg_types
-                    .iter()
-                    .map(|ty| ty.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                arg_types.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", ")
             ),
             CompilationError::NotCallable { ty } => write!(f, "Object of type {} is not callable", ty),
-            CompilationError::ArrayItemTypeMismatch {
-                expected_ty,
-                actual_ty,
-            } => write!(
+            CompilationError::ArrayItemTypeMismatch { expected_ty, actual_ty } => write!(
                 f,
                 "Type mismatch in array: expected item type {}, got {}",
                 expected_ty, actual_ty
             ),
-            CompilationError::ParameterWithoutDefaultAfterDefault{
+            CompilationError::ParameterWithoutDefaultAfterDefault {
                 param_name,
                 default_param_name,
             } => write!(
@@ -147,7 +143,7 @@ impl Display for CompilationError<'_, '_> {
                 "Parameter {} cannot be declared without a default value after parameter {}, that has a default value",
                 param_name, default_param_name
             ),
-            CompilationError::FailedDefaultResolution{
+            CompilationError::FailedDefaultResolution {
                 fn_name,
                 param_n,
                 overload_name,
@@ -163,6 +159,13 @@ impl Display for CompilationError<'_, '_> {
 impl Display for CompilationErrorWithPair<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (line, col) = self.pair.line_col();
-        write!(f, "line {} col {}- \"{}\": {}", line, col, self.pair.as_str(), self.inner)
+        write!(
+            f,
+            "line {} col {}- \"{}\": {}",
+            line,
+            col,
+            self.pair.as_str(),
+            self.inner
+        )
     }
 }

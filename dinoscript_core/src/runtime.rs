@@ -1,7 +1,17 @@
-use std::{collections::HashMap, ops::ControlFlow, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    ops::ControlFlow,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, sequence::Sequence
+    bytecode::{Command, SourceId},
+    dinobj::{
+        Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending,
+        SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject,
+    },
+    errors::{RuntimeError, RuntimeViolation},
+    sequence::Sequence,
 };
 
 #[derive(Debug)]
@@ -25,8 +35,7 @@ unsafe impl Send for SharedRuntime<'_> {}
 pub(crate) const REPORT_MEMORY_USAGE: bool = false;
 pub(crate) const INTERN_CONSTS: bool = true;
 
-impl<'s> SharedRuntime<'s>{
-
+impl<'s> SharedRuntime<'s> {
     fn clone_ref(&mut self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
@@ -34,27 +43,27 @@ impl<'s> SharedRuntime<'s>{
             println!("cloning ref ({} bytes) to {:?}", AllocatedRef::SIZE, obj);
             println!("total allocated space: {} bytes", self.allocated_space);
         }
-        Ok(unsafe{obj.clone()})
+        Ok(unsafe { obj.clone() })
     }
 
     fn clone_true(&mut self) -> DinoResult<'s> {
-        if !INTERN_CONSTS{
+        if !INTERN_CONSTS {
             unreachable!()
         }
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.true_.as_ref().unwrap();
-        Ok(Ok(unsafe{r.clone()}))
+        Ok(Ok(unsafe { r.clone() }))
     }
 
     fn clone_false(&mut self) -> DinoResult<'s> {
-        if !INTERN_CONSTS{
+        if !INTERN_CONSTS {
             unreachable!()
         }
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.false_.as_ref().unwrap();
-        Ok(Ok(unsafe{r.clone()}))
+        Ok(Ok(unsafe { r.clone() }))
     }
 }
 
@@ -86,7 +95,7 @@ impl<'s> Runtime<'s> {
     }
 
     pub fn new() -> Self {
-        let shared_runtime = SharedRuntime{
+        let shared_runtime = SharedRuntime {
             allocated_space: 0,
             true_: None,
             false_: None,
@@ -97,38 +106,41 @@ impl<'s> Runtime<'s> {
         let true_ = ret.allocate(Ok(DinObject::Bool(true))).unwrap().unwrap();
         let false_ = ret.allocate(Ok(DinObject::Bool(false))).unwrap().unwrap();
         let nil = ret.allocate(Ok(DinObject::Struct(vec![]))).unwrap().unwrap();
-        let null = ret.allocate(Ok(DinObject::Variant(VariantObject::new(0, ret.clone_ref(&nil).unwrap())))).unwrap().unwrap();
-        
-        if INTERN_CONSTS{
+        let null = ret
+            .allocate(Ok(DinObject::Variant(VariantObject::new(
+                0,
+                ret.clone_ref(&nil).unwrap(),
+            ))))
+            .unwrap()
+            .unwrap();
+
+        if INTERN_CONSTS {
             let mut rt = ret.0.lock().unwrap();
             rt.true_ = Some(true_);
             rt.false_ = Some(false_);
             rt.nil = Some(nil);
             rt.null = Some(null);
         }
-        
+
         ret
     }
 
     pub fn bool(&self, b: bool) -> DinoResult<'s> {
-        if INTERN_CONSTS{
+        if INTERN_CONSTS {
             let mut rt = self.0.lock().unwrap();
             if b {
                 rt.clone_true()
             } else {
                 rt.clone_false()
             }
-        }
-        else{
+        } else {
             self.allocate(Ok(DinObject::Bool(b)))
         }
     }
 
     pub fn null(&self) -> Result<AllocatedRef<'s>, RuntimeViolation> {
         let x = self.0.lock().unwrap();
-        self.clone_ref(
-            x.null.as_ref().unwrap()
-        )
+        self.clone_ref(x.null.as_ref().unwrap())
     }
 
     pub fn clone_ref(&self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
@@ -242,13 +254,17 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             match self.stack.last() {
                 Some(StackItem::Value(_)) => return Ok(ControlFlow::Break(())),
                 Some(StackItem::Pending(..)) => {
-                    let Some(StackItem::Pending(Pending { func,  mut arguments })) = self.stack.pop() else {
+                    let Some(StackItem::Pending(Pending { func, mut arguments })) = self.stack.pop() else {
                         unreachable!()
                     };
                     let func_ref = if let DinObject::BindBack(bind_back) = func.as_ref() {
-                        arguments.extend(bind_back.defaults.iter().map(|d| {
-                            Ok(StackItem::Value(Ok(self.runtime.clone_ref(d)?)))
-                        }).collect::<Result<Vec<_>,_>>()?);
+                        arguments.extend(
+                            bind_back
+                                .defaults
+                                .iter()
+                                .map(|d| Ok(StackItem::Value(Ok(self.runtime.clone_ref(d)?))))
+                                .collect::<Result<Vec<_>, _>>()?,
+                        );
                         &bind_back.func
                     } else {
                         &func
@@ -285,7 +301,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             self.stack.push(StackItem::Value(val));
                         }
                         other => {
-                            unreachable!("attempted to call object {:?}", other) // err
+                            unreachable!("attempted to call object {:?}", other)
+                            // err
                         }
                     }
                 }
@@ -310,7 +327,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 DinObject::UserFn(user_fn) => {
                     self.stack.extend(args);
                     for command in user_fn.commands.iter() {
-                        if let ControlFlow::Continue(new_args) = self.execute(command)?{
+                        if let ControlFlow::Continue(new_args) = self.execute(command)? {
                             args = new_args;
                             self.stack.clear();
                             // note: for now we also clear all the runtime cells, this is not necessary
@@ -319,17 +336,18 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                         }
                     }
                     let ret = self.stack.pop().unwrap();
-                    let StackItem::Value(val) = ret else {
-                        todo!()
-                    };
-                    break Ok(val)
+                    let StackItem::Value(val) = ret else { todo!() };
+                    break Ok(val);
                 }
                 _ => unreachable!(),
             }
         }
     }
 
-    pub fn execute<'a: 's>(&mut self, command: &'a Command<'s>) -> Result<ControlFlow<(), TailCall<'s>>, RuntimeViolation> {
+    pub fn execute<'a: 's>(
+        &mut self,
+        command: &'a Command<'s>,
+    ) -> Result<ControlFlow<(), TailCall<'s>>, RuntimeViolation> {
         match command {
             Command::PopToCell(i) => {
                 debug_assert!(matches!(self.cells[*i], RuntimeCell::Uninitialized));
@@ -349,9 +367,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             }
             Command::EvalTop => self.eval_top(TailCallAvailability::Allowed),
             Command::PushInt(i) => {
-                let Ok(i) = (*i).try_into() else {
-                    todo!()
-                };
+                let Ok(i) = (*i).try_into() else { todo!() };
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Int(i)))?));
                 Ok(ControlFlow::Break(()))
@@ -362,8 +378,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(ControlFlow::Break(()))
             }
             Command::PushBool(b) => {
-                self.stack
-                    .push(StackItem::Value(self.runtime.bool(*b)?));
+                self.stack.push(StackItem::Value(self.runtime.bool(*b)?));
                 Ok(ControlFlow::Break(()))
             }
             Command::PushString(s) => {
@@ -375,13 +390,16 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match &self.cells[*i] {
                     RuntimeCell::Uninitialized => panic!("cell {i} is uninitialized"), // err
                     RuntimeCell::Value(val) => {
-                        self.stack.push(StackItem::Value(DinoValue::Ok(self.runtime.clone_ref(val)?)));
+                        self.stack
+                            .push(StackItem::Value(DinoValue::Ok(self.runtime.clone_ref(val)?)));
                         Ok(ControlFlow::Break(()))
                     }
                 }
             }
             Command::PushFromSource(pfs) => {
-                let source_fn = self.runtime.clone_ref(&self.get_sources().sources[pfs.source][pfs.id])?;
+                let source_fn = self
+                    .runtime
+                    .clone_ref(&self.get_sources().sources[pfs.source][pfs.id])?;
                 self.stack.push(StackItem::Value(DinoValue::Ok(source_fn)));
                 Ok(ControlFlow::Break(()))
             }
@@ -425,8 +443,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     commands: &mfn.commands,
                 };
                 let value = self.runtime.allocate(Ok(DinObject::UserFn(user_fn)))?;
-                self.stack
-                    .push(StackItem::Value(value));
+                self.stack.push(StackItem::Value(value));
                 Ok(ControlFlow::Break(()))
             }
             Command::MakePending(n_args) => {
@@ -445,17 +462,15 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     unreachable!()
                 };
                 match val {
-                    Ok(item) => {
-                        match item.as_ref(){
-                            DinObject::Struct(fields) => {
-                                let attr = &fields[*i];
-                                self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(attr)?)));
-                                Ok(ControlFlow::Break(()))
-                            }
-                            _ => todo!()
+                    Ok(item) => match item.as_ref() {
+                        DinObject::Struct(fields) => {
+                            let attr = &fields[*i];
+                            self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(attr)?)));
+                            Ok(ControlFlow::Break(()))
                         }
-                    }
-                    _ => todo!()
+                        _ => todo!(),
+                    },
+                    _ => todo!(),
                 }
             }
             Command::Struct(i) => {
@@ -467,7 +482,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     };
                     fields.push(val);
                 }
-                match fields.into_iter().collect(){
+                match fields.into_iter().collect() {
                     Err(_) => todo!(),
                     Ok(fields) => {
                         let struct_ = self.runtime.allocate(Ok(DinObject::Struct(fields)))?;
@@ -491,7 +506,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     };
                     items.push(val);
                 }
-                match items.into_iter().collect(){
+                match items.into_iter().collect() {
                     Err(_) => todo!(),
                     Ok(items) => {
                         let array = self.runtime.allocate_ext(Sequence::new_array(items))?;
@@ -526,23 +541,26 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
     }
 }
 
-
-pub struct SystemRuntimeFrame<'p, 's, 'r>{
+pub struct SystemRuntimeFrame<'p, 's, 'r> {
     pub stack: DinoStack<'s>,
     parent: &'p RuntimeFrame<'s, 'r>,
     tca: TailCallAvailability,
 }
 
-impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
-    pub(crate) fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
-        Self{
-            stack,
-            parent,
-            tca,
-        }
+impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
+    pub(crate) fn from_parent(
+        parent: &'p RuntimeFrame<'s, 'r>,
+        stack: DinoStack<'s>,
+        tca: TailCallAvailability,
+    ) -> Self {
+        Self { stack, parent, tca }
     }
 
-    fn from_system_parent(parent: &'p SystemRuntimeFrame<'p, 's, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
+    fn from_system_parent(
+        parent: &'p SystemRuntimeFrame<'p, 's, 'r>,
+        stack: DinoStack<'s>,
+        tca: TailCallAvailability,
+    ) -> Self {
         Self::from_parent(parent.parent, stack, parent.tca & tca)
     }
 
@@ -551,7 +569,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
     }
 
     pub fn eval_pop(&mut self) -> DinoResult<'s> {
-        if let ControlFlow::Break(ret) = self.eval_pop_tca(TailCallAvailability::Disallowed)?{
+        if let ControlFlow::Break(ret) = self.eval_pop_tca(TailCallAvailability::Disallowed)? {
             Ok(ret)
         } else {
             self.runtime().allocate(Err("stack is unexpectedly empty".into()))
@@ -560,25 +578,40 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
 
     pub fn call(&self, func: &AllocatedRef<'s>, arguments: &[DinoValue<'s>]) -> DinoResult<'s> {
         let (func_ref, arguments) = if let DinObject::BindBack(bind_back) = func.as_ref() {
-            (&bind_back.func, bind_back.defaults.iter().map(|d| {
-                Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?)))
-            }).chain(arguments.into_iter().map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?)))).collect::<Result<Vec<_>, _>>()?)
+            (
+                &bind_back.func,
+                bind_back
+                    .defaults
+                    .iter()
+                    .map(|d| Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?))))
+                    .chain(
+                        arguments
+                            .into_iter()
+                            .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?))),
+                    )
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
         } else {
-            (func, arguments.into_iter().map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?))).collect::<Result<Vec<_>, _>>()?)
+            (
+                func,
+                arguments
+                    .into_iter()
+                    .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?)))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
         };
-        match func_ref.as_ref(){
+        match func_ref.as_ref() {
             DinObject::UserFn(..) => {
                 let func = self.runtime().clone_ref(func_ref)?;
                 let mut new_frame = self.parent.child(func);
                 new_frame.exec_self_fn(arguments)
             }
             DinObject::SourceFn(source_fn) => {
-                let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments, TailCallAvailability::Disallowed);
+                let mut new_frame =
+                    SystemRuntimeFrame::from_system_parent(self, arguments, TailCallAvailability::Disallowed);
                 let ret = source_fn(&mut new_frame)?;
-                match ret{
-                    ControlFlow::Break(val) => {
-                        Ok(val)
-                    }
+                match ret {
+                    ControlFlow::Break(val) => Ok(val),
                     ControlFlow::Continue(..) => {
                         unreachable!()
                     }
@@ -593,26 +626,34 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                 let mut new_frame = self.parent.child(func);
                 new_frame.exec_self_fn(arguments)
             }
-            _ => {panic!("unexpected function: {:?}", func_ref)}
+            _ => {
+                panic!("unexpected function: {:?}", func_ref)
+            }
         }
     }
 
     pub fn eval_pop_tca(&mut self, tca: TailCallAvailability) -> SourceFnResult<'s> {
         loop {
-            match self.stack.pop().unwrap(){
+            match self.stack.pop().unwrap() {
                 StackItem::Value(val) => return Ok(ControlFlow::Break(val)),
-                StackItem::Pending(Pending {func, mut arguments}) => {
+                StackItem::Pending(Pending { func, mut arguments }) => {
                     let func_ref = if let DinObject::BindBack(bind_back) = func.as_ref() {
-                        arguments = bind_back.defaults.iter().map(|d| {
-                            Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?)))
-                        }).chain(arguments.into_iter().map(Ok)).collect::<Result<Vec<_>,_>>()?;
+                        arguments = bind_back
+                            .defaults
+                            .iter()
+                            .map(|d| Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?))))
+                            .chain(arguments.into_iter().map(Ok))
+                            .collect::<Result<Vec<_>, _>>()?;
                         &bind_back.func
                     } else {
                         &func
                     };
-                    match func_ref.as_ref(){
+                    match func_ref.as_ref() {
                         DinObject::UserFn(..) => {
-                            if tca.is_allowed() && self.tca.is_allowed() && self.parent.user_fn.as_ref().is_some_and(|t| Arc::ptr_eq(&func.0, &t.0)){
+                            if tca.is_allowed()
+                                && self.tca.is_allowed()
+                                && self.parent.user_fn.as_ref().is_some_and(|t| Arc::ptr_eq(&func.0, &t.0))
+                            {
                                 return Ok(ControlFlow::Continue(arguments));
                             }
                             let func = self.runtime().clone_ref(func_ref)?;
@@ -623,7 +664,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                         DinObject::SourceFn(source_fn) => {
                             let mut new_frame = SystemRuntimeFrame::from_system_parent(self, arguments, tca);
                             let ret = source_fn(&mut new_frame)?;
-                            match ret{
+                            match ret {
                                 ControlFlow::Break(val) => {
                                     self.stack.push(StackItem::Value(val));
                                 }
@@ -637,7 +678,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             let Some(user_fn) = self.parent.user_fn.as_ref() else {
                                 panic!("tail call with no user function")
                             };
-                            if tca.is_allowed() && self.tca.is_allowed(){
+                            if tca.is_allowed() && self.tca.is_allowed() {
                                 return Ok(ControlFlow::Continue(arguments));
                             }
                             let func = self.runtime().clone_ref(user_fn)?;
@@ -645,7 +686,9 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
-                        _ => {panic!("unexpected function: {:?}", func_ref)}
+                        _ => {
+                            panic!("unexpected function: {:?}", func_ref)
+                        }
                     }
                 }
             }

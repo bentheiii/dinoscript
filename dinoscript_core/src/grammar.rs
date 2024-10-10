@@ -8,7 +8,10 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant},
+    pairable::Pairable,
+    statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair},
+    ty::{FnTy, SpecializedTy, Ty, TyWithPair},
 };
 
 #[derive(Parser)]
@@ -24,7 +27,12 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
         Rule::signature => {
             let mut inner = first.into_inner();
             let [args, out] = [inner.next().unwrap(), inner.next().unwrap()];
-            let args = args.into_inner().next().map(|p| p.into_inner().map(|p| parse_type(p)).collect::<Result<_,_>>()).transpose()?.unwrap_or_default();
+            let args = args
+                .into_inner()
+                .next()
+                .map(|p| p.into_inner().map(|p| parse_type(p)).collect::<Result<_, _>>())
+                .transpose()?
+                .unwrap_or_default();
             let out = parse_type(out)?;
             let fn_ty = FnTy::new(args, out);
             return Ok(Ty::Fn(fn_ty).with_pair(input_marker));
@@ -48,7 +56,8 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
             return Ok(Ty::Specialized(SpecializedTy {
                 name: name.into(),
                 args: generic_args,
-            }).with_pair(input_marker));
+            })
+            .with_pair(input_marker));
         }
     }
 }
@@ -97,10 +106,14 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 .parse::<i128>()
                 .ok()
                 .or_else(|| {
-                    to_parse.strip_prefix("0x").and_then(|s| i128::from_str_radix(s, 16).ok())
+                    to_parse
+                        .strip_prefix("0x")
+                        .and_then(|s| i128::from_str_radix(s, 16).ok())
                 })
                 .or_else(|| {
-                    to_parse.strip_prefix("0b").and_then(|s| i128::from_str_radix(s, 2).ok())
+                    to_parse
+                        .strip_prefix("0b")
+                        .and_then(|s| i128::from_str_radix(s, 2).ok())
                 })
             {
                 Ok(Expr::LitInt(whole).with_pair(inner))
@@ -127,21 +140,36 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
             let mut child = inner.into_inner();
             let name = child.next().unwrap().as_str();
             let mut args = Vec::new();
-            for arg in child.next().unwrap().into_inner().next().map(|p| p.into_inner()).into_iter().flatten() {
+            for arg in child
+                .next()
+                .unwrap()
+                .into_inner()
+                .next()
+                .map(|p| p.into_inner())
+                .into_iter()
+                .flatten()
+            {
                 let ty = parse_type(arg)?;
                 args.push(ty);
             }
             return Ok(Expr::Disambiguation(Disambiguation {
                 name: name.into(),
                 arg_tys: args,
-            }).with_pair(pair_mark));
+            })
+            .with_pair(pair_mark));
         }
         Rule::CNAME => {
             let name = inner.as_str();
             return Ok(Expr::Ref(name.into()).with_pair(inner));
         }
-        Rule::container =>{
-            let ret = inner.clone().into_inner().next().map(|p|p.into_inner().map(parse_expr).collect::<Result<Vec<_>, _>>()).transpose()?.unwrap_or_default();
+        Rule::container => {
+            let ret = inner
+                .clone()
+                .into_inner()
+                .next()
+                .map(|p| p.into_inner().map(parse_expr).collect::<Result<Vec<_>, _>>())
+                .transpose()?
+                .unwrap_or_default();
             return Ok(Expr::Array(ret).with_pair(inner));
         }
         _ => {
@@ -161,7 +189,12 @@ fn parse_expr2(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 let mut inner = inner.into_inner();
                 let [method_name, arg_pairs] = [inner.next().unwrap(), inner.next().unwrap()];
                 let mut args = Vec::new();
-                for arg in arg_pairs.into_inner().next().map(|p|p.into_inner().collect()).unwrap_or(Vec::new()) {
+                for arg in arg_pairs
+                    .into_inner()
+                    .next()
+                    .map(|p| p.into_inner().collect())
+                    .unwrap_or(Vec::new())
+                {
                     let expr = parse_expr(arg)?;
                     args.push(expr);
                 }
@@ -196,18 +229,14 @@ fn parse_expr2(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                     name: member_name.into(),
                 })
             }
-            Rule::member_opt_value => {
-                Expr::VariantOpt(Variant {
-                    obj: Box::new(ret),
-                    name: inner.into_inner().next().unwrap().as_str().into(),
-                })
-            }
-            Rule::member_value => {
-                Expr::Variant(Variant {
-                    obj: Box::new(ret),
-                    name: inner.into_inner().next().unwrap().as_str().into(),
-                })
-            }
+            Rule::member_opt_value => Expr::VariantOpt(Variant {
+                obj: Box::new(ret),
+                name: inner.into_inner().next().unwrap().as_str().into(),
+            }),
+            Rule::member_value => Expr::Variant(Variant {
+                obj: Box::new(ret),
+                name: inner.into_inner().next().unwrap().as_str().into(),
+            }),
             Rule::index => {
                 let mut args = Vec::new();
                 for arg in inner.into_inner().next().unwrap().into_inner() {
@@ -222,7 +251,8 @@ fn parse_expr2(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
             _ => {
                 unreachable!()
             }
-        }.with_pair(pair_marker);
+        }
+        .with_pair(pair_marker);
     }
     Ok(ret)
 }
@@ -238,12 +268,14 @@ fn parse_expr1(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
             Rule::UNARY_NOT => Operator::UnNot,
             Rule::UNARY_INV => Operator::UnInv,
             _ => unreachable!(),
-        }.with_pair(inner.clone());
+        }
+        .with_pair(inner.clone());
 
         expr = Expr::Call(Call {
             functor: Functor::Operator(op),
             args: vec![expr],
-        }).with_pair(inner);
+        })
+        .with_pair(inner);
     }
     Ok(expr)
 }
@@ -291,16 +323,18 @@ fn parse_expr(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 Rule::BINARY_MOD => Operator::BinMod,
                 Rule::BINARY_POW => todo!(),
                 _ => unreachable!(),
-            }.with_pair(op_pair.clone());
+            }
+            .with_pair(op_pair.clone());
             Ok(Expr::Call(Call {
                 functor: Functor::Operator(op),
                 args: vec![lhs?, rhs?],
-            }).with_pair(op_pair))
+            })
+            .with_pair(op_pair))
         })
         .parse(input.into_inner())
 }
 
-fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()>{
+fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::function));
     let pair = input.clone();
     let mut inners = input.into_inner();
@@ -312,7 +346,11 @@ fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()>{
         inners.next().unwrap(),
     ];
     let name = raw_name.as_str();
-    let gen_params = gen_params.into_inner().next().map(|g_pair| g_pair.into_inner().map(|p| p.as_str().into()).collect()).unwrap_or_default();
+    let gen_params = gen_params
+        .into_inner()
+        .next()
+        .map(|g_pair| g_pair.into_inner().map(|p| p.as_str().into()).collect())
+        .unwrap_or_default();
     let params = params
         .into_inner()
         .next()
@@ -329,11 +367,11 @@ fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()>{
                             Rule::expr_default => {
                                 let expr_pair = default.into_inner().next().unwrap();
                                 Some(FnArgDefault::Value(parse_expr(expr_pair)?))
-                            },
+                            }
                             Rule::resolve_default => {
                                 let name = default.into_inner().next().unwrap().as_str();
                                 Some(FnArgDefault::ResolveOverload(ResolveOverload::new(name)))
-                            },
+                            }
                             _ => {
                                 unreachable!()
                             }
@@ -363,14 +401,12 @@ fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()>{
         return_ty: ret_ty,
         body,
         ret,
-    }).with_pair(pair));
+    })
+    .with_pair(pair));
 }
 
 pub fn parse_raw_function(input: &str) -> Result<StmtWithPair<'_>, Box<pest::error::Error<Rule>>> {
-    return parse_function(DinoParse::parse(Rule::function, input)?
-        .next()
-        .unwrap())
-        .map_err(|_e| todo!());
+    return parse_function(DinoParse::parse(Rule::function, input)?.next().unwrap()).map_err(|_e| todo!());
 }
 
 fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
@@ -389,7 +425,8 @@ fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
                 var: name.into(),
                 ty,
                 expr,
-            }).with_pair(input_marker));
+            })
+            .with_pair(input_marker));
         }
         Rule::function => {
             return parse_function(first);
@@ -397,24 +434,33 @@ fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
 
         Rule::compound_def => {
             let mut inner = first.into_inner();
-            let [kind, raw_name, gen_params, fields] = [inner.next().unwrap(), inner.next().unwrap(), inner.next().unwrap(), inner.next().unwrap()];
+            let [kind, raw_name, gen_params, fields] = [
+                inner.next().unwrap(),
+                inner.next().unwrap(),
+                inner.next().unwrap(),
+                inner.next().unwrap(),
+            ];
             let name = raw_name.as_str();
             let kind = match kind.as_str() {
                 "struct" => CompoundKind::Struct,
                 "union" => CompoundKind::Union,
                 _ => unreachable!(),
             };
-            let gen_params = gen_params.into_inner().next().map(|p| p.into_inner().map(|p| p.as_str().into()).collect()).unwrap_or_default();
+            let gen_params = gen_params
+                .into_inner()
+                .next()
+                .map(|p| p.into_inner().map(|p| p.as_str().into()).collect())
+                .unwrap_or_default();
             let fields = fields
                 .into_inner()
-                .map(|field|{
+                .map(|field| {
                     let mut inner = field.into_inner();
                     let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
                     let name = name.as_str();
                     let ty = parse_type(ty)?;
                     Ok(Field::new(name, ty))
                 })
-                .collect::<Result<_,_>>()?;
+                .collect::<Result<_, _>>()?;
             return Ok(Stmt::Compound(Compound::new(kind, name, gen_params, fields)).with_pair(input_marker));
         }
         Rule::type_def => {

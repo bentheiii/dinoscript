@@ -1,12 +1,23 @@
-use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
-    bytecode::{Command, SourceId}, compilation_scope::{
-        self, ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, sequence::{NormalizedIdx, Sequence}, stack::Stack
+    bytecode::{Command, SourceId},
+    compilation_scope::{
+        self,
+        ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate},
+        CompilationScope, NamedItem, NamedType,
+    },
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
+    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
+    sequence::{NormalizedIdx, Sequence},
+    stack::Stack,
 };
-// pragma: skip 2
+use std::{ops::ControlFlow, sync::Arc};
+// pragma: skip 6
+use dinoscript_core::{
+    ast::statement::{FnArgDefault, ResolveOverload, Stmt},
+    bytecode::to_in_code,
+    maybe_owned::MaybeOwned,
+};
 use std::collections::HashMap;
-use dinoscript_core::{bytecode::to_in_code, ast::statement::{FnArgDefault, ResolveOverload, Stmt}, maybe_owned::MaybeOwned};
 
 pub struct Builtins<'s> {
     pub int: Arc<Ty<'s>>,
@@ -102,11 +113,11 @@ macro_rules! ty {
 macro_rules! arg {
     ($b:ident, $name:ident: $($ty_parts:tt)*) => {
         Arg::new(stringify!($name), ty!($b, $($ty_parts)*))
-        
+
     };
 }
 
-macro_rules! arg_gen { 
+macro_rules! arg_gen {
     ($b:ident, $g:expr, $name:ident: $($ty_parts:tt)*) => {
         Arg::new(stringify!($name), ty_gen!($b, $g, $($ty_parts)*))
     };
@@ -136,18 +147,16 @@ macro_rules! rt_as_prim {
 }
 
 macro_rules! rt_as_ext {
-    ($ref:expr, $ty:ident) => {
-        {
-            let ptr = (*rt_as_prim!($ref, Extended));
-            let tn = (unsafe{&*ptr}).type_name();
-            if tn != $ty::EXPECTED_TYPE_NAME {
-                let err = format!("Expected {} got {:?}", $ty::EXPECTED_TYPE_NAME, tn);
-                return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
-            } 
-            let ptr = ptr as *const $ty;
-            unsafe{&*ptr}
+    ($ref:expr, $ty:ident) => {{
+        let ptr = (*rt_as_prim!($ref, Extended));
+        let tn = (unsafe { &*ptr }).type_name();
+        if tn != $ty::EXPECTED_TYPE_NAME {
+            let err = format!("Expected {} got {:?}", $ty::EXPECTED_TYPE_NAME, tn);
+            return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
         }
-    };
+        let ptr = ptr as *const $ty;
+        unsafe { &*ptr }
+    }};
 }
 
 // pragma:replace-start
@@ -155,10 +164,10 @@ pub(crate) struct ItemsBuilder<'p, 's> {
     scope: CompilationScope<'p, 's, Builtins<'s>>,
     source_id: SourceId,
     next_id: usize,
-    pub(crate) replacements: HashMap<&'static str, String>
+    pub(crate) replacements: HashMap<&'static str, String>,
 }
 
-fn signature_code_from_statement(stmt: &Stmt<'_>)->String{
+fn signature_code_from_statement(stmt: &Stmt<'_>) -> String {
     let Stmt::Fn(func) = stmt else {
         panic!("expected function statement, got {:?}", stmt);
     };
@@ -167,17 +176,23 @@ fn signature_code_from_statement(stmt: &Stmt<'_>)->String{
     let args = &func.args;
     let ret = &func.return_ty;
 
-    let gen_params_tokens = generic_params.iter().map(|p| format!("\"{}\"", p)).collect::<Vec<_>>().join(", ");
+    let gen_params_tokens = generic_params
+        .iter()
+        .map(|p| format!("\"{}\"", p))
+        .collect::<Vec<_>>()
+        .join(", ");
     let name_token = format!("\"{}\"", name);
     let mut args_tokens = Vec::with_capacity(args.len());
     for arg in args {
         let name = arg.name.as_ref();
         let ty = &arg.ty;
         args_tokens.push(match arg.default.as_ref() {
-            Some(FnArgDefault::ResolveOverload(ResolveOverload{name: resolv})) => {
+            Some(FnArgDefault::ResolveOverload(ResolveOverload { name: resolv })) => {
                 format!("arg_gen!(bi, gen, {}~={}: {})", name, resolv, ty.inner.to_in_code())
             }
-            Some(_) => {panic!()}
+            Some(_) => {
+                panic!()
+            }
             None => {
                 format!("arg_gen!(bi, gen, {}: {})", name, ty.inner.to_in_code())
             }
@@ -185,7 +200,8 @@ fn signature_code_from_statement(stmt: &Stmt<'_>)->String{
     }
     let args_tokens = args_tokens.join(",\n                ");
     let ret_token = ret.inner.to_in_code();
-    format!("
+    format!(
+        "
     |bi: &Builtins<'_>| {{
         let gen = SignatureGen::new(vec![{gen_params_tokens}] as Vec<&'static str>);
         Signature::new_generic(
@@ -197,7 +213,8 @@ fn signature_code_from_statement(stmt: &Stmt<'_>)->String{
             gen,
         )
     }}
-    ")
+    "
+    )
 }
 
 impl<'p, 's> ItemsBuilder<'p, 's> {
@@ -212,20 +229,23 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
     fn build_source(&mut self, replacement_name: &'static str, code: &'static str) {
         let func_stmt = dinoscript_core::grammar::parse_raw_function(code).unwrap();
         let mut sink = Vec::new();
-        if let Err(err) =self.scope.feed_statement(&func_stmt, &mut sink){
+        if let Err(err) = self.scope.feed_statement(&func_stmt, &mut sink) {
             panic!("compilation error (building {}): {}", replacement_name, err);
         }
         // the sink should now have two items, the first is the actual function, the second is popping it to some cell (that we don't care about)
         // in the future, the sink might also include default values and the like, but it will never include captures since these are globals functions
-        assert!(matches!(sink.pop(), Some(Command::PopToCell(_))));  // remove the pop command
-        let Command::MakeFunction(mk_func) = sink.pop().unwrap() else { panic!("Expected a MakeFunction command") };
+        assert!(matches!(sink.pop(), Some(Command::PopToCell(_)))); // remove the pop command
+        let Command::MakeFunction(mk_func) = sink.pop().unwrap() else {
+            panic!("Expected a MakeFunction command")
+        };
         assert!(sink.is_empty());
         assert!(mk_func.n_captures == 0);
         let n_cells = mk_func.n_cells;
         let commands = to_in_code(&mk_func.commands, "                    ");
         // now we need the signature, we could re-create it from the statement, but it's easier (for now at least) to just get it from the code
         let signature = signature_code_from_statement(&func_stmt.inner);
-        let replacement = format!("SetupItem::Function(SetupFunction::new(
+        let replacement = format!(
+            "SetupItem::Function(SetupFunction::new(
             {signature},
             {{
                 static LZ: std::sync::LazyLock<Vec<Command>> = std::sync::LazyLock::new(|| {{
@@ -233,22 +253,28 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
                 }});
                 SetupFunctionBody::User(dinoscript_core::dinobj::UserFn::without_capture({n_cells}, &LZ))
             }}
-        ))\n");
+        ))\n"
+        );
         assert!(self.replacements.insert(replacement_name, replacement).is_none());
     }
 }
 
-fn prepare_build<'p>()->ItemsBuilder<'p, 'static>{
+fn prepare_build<'p>() -> ItemsBuilder<'p, 'static> {
     let mut scope = CompilationScope::root();
     let builtins = pre_items_setup(&mut scope);
     scope.builtins = Some(MaybeOwned::Owned(builtins));
-    ItemsBuilder{scope, source_id: SOURCE_ID, next_id: 0, replacements: HashMap::new()}
+    ItemsBuilder {
+        scope,
+        source_id: SOURCE_ID,
+        next_id: 0,
+        replacements: HashMap::new(),
+    }
 }
 // pragma:replace-with-raw
 // pragma:replace-end
 
 pub(crate) const SOURCE_ID: SourceId = "std";
-pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<'s>>)->Builtins<'s>{
+pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<'s>>) -> Builtins<'s> {
     fn register_type<'s, B>(
         scope: &mut CompilationScope<'_, 's, B>,
         name: &'s str,
@@ -256,36 +282,52 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
     ) -> Arc<TyTemplate<'s>> {
         let template = Arc::new(template);
         scope
-        .names
-        .insert(name.into(), NamedItem::Type(NamedType::Template(template.clone())));
+            .names
+            .insert(name.into(), NamedItem::Type(NamedType::Template(template.clone())));
         template
     }
 
     let int = register_type(scope, "int", TyTemplate::Builtin(BuiltinTemplate::primitive("int"))).instantiate(vec![]);
-    let float = register_type(scope, "float", TyTemplate::Builtin(BuiltinTemplate::primitive("float"))).instantiate(vec![]);
-    let bool = register_type(scope, "bool", TyTemplate::Builtin(BuiltinTemplate::primitive("bool"))).instantiate(vec![]);
+    let float =
+        register_type(scope, "float", TyTemplate::Builtin(BuiltinTemplate::primitive("float"))).instantiate(vec![]);
+    let bool =
+        register_type(scope, "bool", TyTemplate::Builtin(BuiltinTemplate::primitive("bool"))).instantiate(vec![]);
     let str = register_type(scope, "str", TyTemplate::Builtin(BuiltinTemplate::primitive("str"))).instantiate(vec![]);
-    let sequence = register_type(scope, "Sequence", TyTemplate::Builtin(BuiltinTemplate::new(
+    let sequence = register_type(
+        scope,
         "Sequence",
-        TemplateGenericSpecs::new(GenericSetId::unique(), 1)
-    )));
-    let stack = register_type(scope, "Stack", TyTemplate::Builtin(BuiltinTemplate::new(
+        TyTemplate::Builtin(BuiltinTemplate::new(
+            "Sequence",
+            TemplateGenericSpecs::new(GenericSetId::unique(), 1),
+        )),
+    );
+    let stack = register_type(
+        scope,
         "Stack",
-        TemplateGenericSpecs::new(GenericSetId::unique(), 1)
-    )));
+        TyTemplate::Builtin(BuiltinTemplate::new(
+            "Stack",
+            TemplateGenericSpecs::new(GenericSetId::unique(), 1),
+        )),
+    );
 
-    Builtins { int, float, bool, str, sequence, stack }
+    Builtins {
+        int,
+        float,
+        bool,
+        str,
+        sequence,
+        stack,
+    }
 }
 
-fn to_return_value(result: DinoResult<'_>)->SourceFnResult<'_>{
+fn to_return_value(result: DinoResult<'_>) -> SourceFnResult<'_> {
     match result {
         Ok(v) => Ok(ControlFlow::Break(v)),
         Err(e) => Err(e),
     }
 }
 
-
-
+#[rustfmt::skip]
 pub(crate)
 // pragma:replace-start
 fn setup_items<'a, 's>()->

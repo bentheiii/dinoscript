@@ -5,7 +5,7 @@ pub enum Command<'s> {
     PopToCell(usize), // POP
     EvalTop,          // EVL // this is always for a return
 
-    PushInt(i128),                   // PIC
+    PushInt(i128),                  // PIC
     PushFloat(f64),                 // PFC
     PushBool(bool),                 // PBC
     PushString(Cow<'s, str>),       // PSC
@@ -13,7 +13,7 @@ pub enum Command<'s> {
     PushFromSource(PushFromSource), // PSR
     PushFromCapture(usize),         // PCP
     PushGlobal(usize),              // PGL
-    PushTail,                // PT-
+    PushTail,                       // PT-
 
     MakeFunction(MakeFunction<'s>), // MFN
     MakePending(usize),             // MPE

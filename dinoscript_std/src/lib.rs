@@ -2,18 +2,10 @@ mod items;
 use items::{pre_items_setup, setup_items, Builtins, SOURCE_ID};
 
 use dinoscript_core::{
-    compilation_scope::
-        CompilationScope
-    ,
-    dinopack::
-        DinoPack
-    ,
-    maybe_owned::MaybeOwned,
-    runtime::RuntimeFrame,
+    compilation_scope::CompilationScope, dinopack::DinoPack, maybe_owned::MaybeOwned, runtime::RuntimeFrame,
 };
 
 pub struct StdPack;
-
 
 impl DinoPack for StdPack {
     type Builtins<'s> = Builtins<'s>;
@@ -31,7 +23,7 @@ impl DinoPack for StdPack {
         };
 
         scope.builtins = Some(MaybeOwned::Owned(builtins));
-        
+
         for item in setup_items() {
             item.push_to_compilation(scope, source_id, &mut get_id);
         }

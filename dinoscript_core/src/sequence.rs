@@ -20,7 +20,12 @@ impl<'s> Sequence<'s> {
         SequenceInner::new_concat(runtime, seqs).map(Self)
     }
 
-    pub fn new_slice(runtime: &Runtime<'s>, source: AllocatedRef<'s>, start_idx: usize, end_idx: usize) -> Result<Self, RuntimeViolation> {
+    pub fn new_slice(
+        runtime: &Runtime<'s>,
+        source: AllocatedRef<'s>,
+        start_idx: usize,
+        end_idx: usize,
+    ) -> Result<Self, RuntimeViolation> {
         SequenceInner::new_slice(runtime, source, start_idx, end_idx).map(Self)
     }
 
@@ -44,24 +49,25 @@ impl<'s> Sequence<'s> {
         self.0.idx_from_int(idx)
     }
 
-    pub fn iter<'a>(&'a self, frame: &'a SystemRuntimeFrame<'_, 's, '_>)->Box<dyn Iterator<Item=DinoResult<'s>> + 'a>{
+    pub fn iter<'a>(
+        &'a self,
+        frame: &'a SystemRuntimeFrame<'_, 's, '_>,
+    ) -> Box<dyn Iterator<Item = DinoResult<'s>> + 'a> {
         self.0.iter(frame)
     }
 
-    pub fn is_array(&self)->bool{
+    pub fn is_array(&self) -> bool {
         matches!(self.0, SequenceInner::Array(_))
     }
 }
 
 #[derive(Debug)]
-enum SequenceInner<'s>{
+enum SequenceInner<'s> {
     Array(
         // might be empty
-        Vec<AllocatedRef<'s>>
+        Vec<AllocatedRef<'s>>,
     ),
-    Concat(
-        SequenceConcat<'s>
-    ),
+    Concat(SequenceConcat<'s>),
     Slice(SequenceSlice<'s>),
     Map(SequenceMap<'s>),
 }
@@ -69,50 +75,63 @@ enum SequenceInner<'s>{
 #[derive(Debug)]
 struct SequenceConcat<'s>(
     // is guaranteed to have at least two elements
-    Vec<SequenceConcatPart<'s>>
+    Vec<SequenceConcatPart<'s>>,
 );
 
 #[derive(Debug)]
-struct RelevantPart<'a, 's>{
+struct RelevantPart<'a, 's> {
     part: &'a SequenceConcatPart<'s>,
     start_idx: usize,
     part_index: usize,
 }
 
-impl<'a, 's> RelevantPart<'a, 's>{
-    fn new(part: &'a SequenceConcatPart<'s>, prev_part_end_idx: usize, part_index: usize)->Self{
-        Self{part, start_idx: prev_part_end_idx, part_index}
+impl<'a, 's> RelevantPart<'a, 's> {
+    fn new(part: &'a SequenceConcatPart<'s>, prev_part_end_idx: usize, part_index: usize) -> Self {
+        Self {
+            part,
+            start_idx: prev_part_end_idx,
+            part_index,
+        }
     }
 }
 
-impl<'s> SequenceConcat<'s>{
+impl<'s> SequenceConcat<'s> {
     const MAX_CONCAT_LIN_SEARCH: usize = 5;
 
-    fn new(parts: Vec<SequenceConcatPart<'s>>)->Self{
-        debug_assert!(parts.len() >= 2, "concat should have at least two parts, got {}", parts.len());
+    fn new(parts: Vec<SequenceConcatPart<'s>>) -> Self {
+        debug_assert!(
+            parts.len() >= 2,
+            "concat should have at least two parts, got {}",
+            parts.len()
+        );
         Self(parts)
     }
 
-    fn iter(&self)->impl Iterator<Item=&SequenceConcatPart<'s>>{
+    fn iter(&self) -> impl Iterator<Item = &SequenceConcatPart<'s>> {
         self.0.iter()
     }
 
-    fn len(&self)->usize{
+    fn len(&self) -> usize {
         self.0.len()
     }
 
-    fn last(&self)->&SequenceConcatPart<'s>{
+    fn last(&self) -> &SequenceConcatPart<'s> {
         self.0.last().unwrap()
     }
 
-    fn find_relevant_part<'a>(&'a self, index: usize)->RelevantPart<'a, 's>{
-        if self[0].end_idx > index{
+    fn find_relevant_part<'a>(&'a self, index: usize) -> RelevantPart<'a, 's> {
+        if self[0].end_idx > index {
             RelevantPart::new(&self[0], 0, 0)
-        }
-        else if self.len() <= Self::MAX_CONCAT_LIN_SEARCH{
+        } else if self.len() <= Self::MAX_CONCAT_LIN_SEARCH {
             // linear search
-            let (idx, (prev_end, part)) = self.iter().tuple_windows().map(|(prev_part, part)| (prev_part.end_idx, part)).enumerate().find(|(_,(_, part))| part.end_idx > index).unwrap();
-            RelevantPart::new(part, prev_end, idx+1)
+            let (idx, (prev_end, part)) = self
+                .iter()
+                .tuple_windows()
+                .map(|(prev_part, part)| (prev_part.end_idx, part))
+                .enumerate()
+                .find(|(_, (_, part))| part.end_idx > index)
+                .unwrap();
+            RelevantPart::new(part, prev_end, idx + 1)
         } else {
             // binary search
             // we treat this as a binary search over the windowed tuples
@@ -129,23 +148,23 @@ impl<'s> SequenceConcat<'s>{
                 if mid_part.end_idx <= index {
                     left = mid + 1;
                 } else {
-                    break RelevantPart::new(mid_part, mid_part_prev.end_idx, mid+1);
+                    break RelevantPart::new(mid_part, mid_part_prev.end_idx, mid + 1);
                 }
             }
         }
     }
 }
 
-impl<'s> Index<usize> for SequenceConcat<'s>{
+impl<'s> Index<usize> for SequenceConcat<'s> {
     type Output = SequenceConcatPart<'s>;
 
-    fn index(&self, index: usize)->&Self::Output{
+    fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
     }
 }
 
 #[derive(Debug)]
-struct SequenceMap<'s>{
+struct SequenceMap<'s> {
     // guarantees:
     // * to be a valid sequence
     // * to not be empty
@@ -158,7 +177,7 @@ struct SequenceMap<'s>{
 }
 
 #[derive(Debug)]
-struct SequenceConcatPart<'s>{
+struct SequenceConcatPart<'s> {
     // guarantees:
     // * to be a valid sequence
     // * to not be empty
@@ -168,16 +187,18 @@ struct SequenceConcatPart<'s>{
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum NormalizedIdx{
+pub enum NormalizedIdx {
     Negative,
     Positive(usize),
-    Overflow
+    Overflow,
 }
 
 fn normalize_idx(idx: i64, len: usize) -> NormalizedIdx {
     if idx < 0 {
-        let Ok(subtrahend) = usize::try_from(-idx) else { return NormalizedIdx::Negative };
-        match len.checked_sub(subtrahend){
+        let Ok(subtrahend) = usize::try_from(-idx) else {
+            return NormalizedIdx::Negative;
+        };
+        match len.checked_sub(subtrahend) {
             Some(n) => NormalizedIdx::Positive(n),
             None => NormalizedIdx::Negative,
         }
@@ -190,9 +211,9 @@ fn normalize_idx(idx: i64, len: usize) -> NormalizedIdx {
 }
 
 #[derive(Debug)]
-struct SequenceSlice<'s>{
+struct SequenceSlice<'s> {
     // guarantees:
-    // * to be a valid array 
+    // * to be a valid array
     // * length higher than the start index and higher than or equal to the end index
     // * to not be a slice itself
     // * either the start index is higher than 0 or the end index is lower than the length
@@ -203,7 +224,6 @@ struct SequenceSlice<'s>{
 }
 
 impl<'s> SequenceInner<'s> {
-
     fn empty() -> Self {
         Self::Array(Vec::new())
     }
@@ -213,7 +233,7 @@ impl<'s> SequenceInner<'s> {
     }
 
     pub fn new_concat(runtime: &Runtime<'s>, seqs: Vec<AllocatedRef<'s>>) -> Result<Self, RuntimeViolation> {
-        fn get_parts_iter<'a, 's>(part: &'a AllocatedRef<'s>)->Box<dyn Iterator<Item=&'a AllocatedRef<'s>> + 'a>{
+        fn get_parts_iter<'a, 's>(part: &'a AllocatedRef<'s>) -> Box<dyn Iterator<Item = &'a AllocatedRef<'s>> + 'a> {
             let part_seq: &'a Sequence<'s> = match as_ext!(part, Sequence) {
                 Some(seq) => seq,
                 None => return Box::new(std::iter::empty()),
@@ -234,7 +254,7 @@ impl<'s> SequenceInner<'s> {
             debug_assert!(!part_seq.is_empty(), "concat should not have empty parts");
             end_idx += part_seq.len();
             let part = runtime.clone_ref(part)?;
-            parts.push(SequenceConcatPart{seq: part, end_idx});
+            parts.push(SequenceConcatPart { seq: part, end_idx });
         }
         debug_assert!(parts.len() != 1, "concat should have at least two parts, or be empty");
         if parts.is_empty() {
@@ -244,8 +264,13 @@ impl<'s> SequenceInner<'s> {
         }
     }
 
-    pub fn new_slice(runtime: &Runtime<'s>, source: AllocatedRef<'s>, start_idx: usize, mut end_idx: usize) -> Result<Self, RuntimeViolation> {
-        let source_seq: &Sequence<'s> = match as_ext!(source, Sequence){
+    pub fn new_slice(
+        runtime: &Runtime<'s>,
+        source: AllocatedRef<'s>,
+        start_idx: usize,
+        mut end_idx: usize,
+    ) -> Result<Self, RuntimeViolation> {
+        let source_seq: &Sequence<'s> = match as_ext!(source, Sequence) {
             Some(seq) => seq,
             None => return Ok(Self::empty()),
         };
@@ -257,29 +282,40 @@ impl<'s> SequenceInner<'s> {
         if end_idx > source_len {
             end_idx = source_len;
         }
-        debug_assert!(end_idx != source_len || start_idx != 0, "slice should not be the whole array, enforced by the caller");
+        debug_assert!(
+            end_idx != source_len || start_idx != 0,
+            "slice should not be the whole array, enforced by the caller"
+        );
         match source_seq {
             Self::Slice(slc) => {
                 let source = runtime.clone_ref(&slc.source)?;
-                Ok(Self::Slice(SequenceSlice{source, start_idx: slc.start_idx + start_idx, end_idx: slc.start_idx + end_idx}))
-            },
-            _ =>Ok(Self::Slice(SequenceSlice{source, start_idx, end_idx}))
+                Ok(Self::Slice(SequenceSlice {
+                    source,
+                    start_idx: slc.start_idx + start_idx,
+                    end_idx: slc.start_idx + end_idx,
+                }))
+            }
+            _ => Ok(Self::Slice(SequenceSlice {
+                source,
+                start_idx,
+                end_idx,
+            })),
         }
     }
 
     pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
         if cfg!(debug_assertions) {
-            let func: &Sequence<'s> = match as_ext!(inner, Sequence){
+            let func: &Sequence<'s> = match as_ext!(inner, Sequence) {
                 Some(seq) => seq,
                 None => return Self::empty(),
             };
             let func = &func.0;
             debug_assert!(!func.is_empty(), "map should not have an empty function");
         }
-        Self::Map(SequenceMap{inner, func})
+        Self::Map(SequenceMap { inner, func })
     }
 
-    pub fn idx_from_int(&self, idx: i64) -> NormalizedIdx{
+    pub fn idx_from_int(&self, idx: i64) -> NormalizedIdx {
         let seq_len = self.len();
         normalize_idx(idx, seq_len)
     }
@@ -288,33 +324,33 @@ impl<'s> SequenceInner<'s> {
         match self {
             Self::Array(array) => {
                 let Some(orig) = array.get(index) else {
-                    return frame.runtime().allocate(Err("Index out of bounds".into()))
+                    return frame.runtime().allocate(Err("Index out of bounds".into()));
                 };
                 Ok(Ok(frame.runtime().clone_ref(orig)?))
-            },
+            }
             Self::Concat(parts) => {
                 if index >= parts.last().end_idx {
-                    return frame.runtime().allocate(Err("Index out of bounds".into()))
+                    return frame.runtime().allocate(Err("Index out of bounds".into()));
                 }
                 let relevant_part = parts.find_relevant_part(index);
-                let part = match as_ext!(relevant_part.part.seq, Sequence){
+                let part = match as_ext!(relevant_part.part.seq, Sequence) {
                     Some(seq) => &seq.0,
                     None => unreachable!(),
                 };
                 part.get(frame, index - relevant_part.start_idx)
-            },
+            }
             Self::Slice(slc) => {
-                if index >= slc.end_idx-slc.start_idx {
+                if index >= slc.end_idx - slc.start_idx {
                     return frame.runtime().allocate(Err("Index out of bounds".into()));
                 }
-                let part = match as_ext!(slc.source, Sequence){
+                let part = match as_ext!(slc.source, Sequence) {
                     Some(seq) => &seq.0,
                     None => return frame.runtime().allocate(Err("Invalid source".into())),
                 };
-                part.get(frame,index + slc.start_idx)
-            },
+                part.get(frame, index + slc.start_idx)
+            }
             Self::Map(map) => {
-                let arg = match as_ext!(map.inner, Sequence){
+                let arg = match as_ext!(map.inner, Sequence) {
                     Some(seq) => &seq.0,
                     None => return frame.runtime().allocate(Err("Invalid source".into())),
                 };
@@ -330,7 +366,7 @@ impl<'s> SequenceInner<'s> {
             Self::Concat(array) => array.last().end_idx,
             Self::Slice(slc) => slc.end_idx - slc.start_idx,
             Self::Map(map) => {
-                let arg = match as_ext!(map.inner, Sequence){
+                let arg = match as_ext!(map.inner, Sequence) {
                     Some(seq) => &seq.0,
                     None => unreachable!("Invalid source"),
                 };
@@ -347,7 +383,10 @@ impl<'s> SequenceInner<'s> {
         }
     }
 
-    pub fn iter<'a>(&'a self, frame: &'a SystemRuntimeFrame<'_, 's, '_>)->Box<dyn Iterator<Item=DinoResult<'s>> + 'a>{
+    pub fn iter<'a>(
+        &'a self,
+        frame: &'a SystemRuntimeFrame<'_, 's, '_>,
+    ) -> Box<dyn Iterator<Item = DinoResult<'s>> + 'a> {
         match self {
             Self::Array(array) => Box::new(array.iter().map(|r| Ok(Ok(frame.runtime().clone_ref(r)?)))),
             Self::Concat(array) => {
@@ -357,45 +396,64 @@ impl<'s> SequenceInner<'s> {
                     iter.push(part.iter(frame));
                 }
                 Box::new(iter.into_iter().flatten())
-            },
+            }
             Self::Slice(slc) => {
                 let inner = &as_ext!(slc.source, Sequence).unwrap().0;
-                match inner{
-                    Self::Array(array) => Box::new(array.iter().map(|r| Ok(Ok(frame.runtime().clone_ref(r)?))).skip(slc.start_idx).take(slc.end_idx - slc.start_idx)),
+                match inner {
+                    Self::Array(array) => Box::new(
+                        array
+                            .iter()
+                            .map(|r| Ok(Ok(frame.runtime().clone_ref(r)?)))
+                            .skip(slc.start_idx)
+                            .take(slc.end_idx - slc.start_idx),
+                    ),
                     Self::Concat(concat) => {
                         let rel_start_part = concat.find_relevant_part(slc.start_idx);
-                        let rel_end_part = concat.find_relevant_part(slc.end_idx-1);
-                        if rel_start_part.part_index == rel_end_part.part_index{
+                        let rel_end_part = concat.find_relevant_part(slc.end_idx - 1);
+                        if rel_start_part.part_index == rel_end_part.part_index {
                             // the slice is within the same part, we can just return a slice over that
                             let part_seq = as_ext!(rel_start_part.part.seq, Sequence).unwrap();
                             let part_seq = &part_seq.0;
-                            Box::new(part_seq.iter(frame).take(slc.end_idx - rel_start_part.start_idx).skip(slc.start_idx - rel_start_part.start_idx))
+                            Box::new(
+                                part_seq
+                                    .iter(frame)
+                                    .take(slc.end_idx - rel_start_part.start_idx)
+                                    .skip(slc.start_idx - rel_start_part.start_idx),
+                            )
                         } else {
                             let mut iter = Vec::with_capacity(rel_end_part.part_index - rel_start_part.part_index + 1);
                             {
                                 let first_part_seq = &as_ext!(rel_start_part.part.seq, Sequence).unwrap().0;
-                                let first_iter: Box<dyn Iterator<Item=_>> = Box::new(first_part_seq.iter(frame).skip(slc.start_idx - rel_start_part.start_idx));
+                                let first_iter: Box<dyn Iterator<Item = _>> = Box::new(
+                                    first_part_seq
+                                        .iter(frame)
+                                        .skip(slc.start_idx - rel_start_part.start_idx),
+                                );
                                 iter.push(first_iter);
                             }
-                            for part in concat.0.iter().take(rel_end_part.part_index).skip(rel_start_part.part_index + 1) {
+                            for part in concat
+                                .0
+                                .iter()
+                                .take(rel_end_part.part_index)
+                                .skip(rel_start_part.part_index + 1)
+                            {
                                 let part_seq = &as_ext!(part.seq, Sequence).unwrap().0;
                                 iter.push(part_seq.iter(frame));
                             }
                             {
                                 let last_part_seq = &as_ext!(rel_end_part.part.seq, Sequence).unwrap().0;
-                                let last_iter: Box<dyn Iterator<Item=_>> = Box::new(last_part_seq.iter(frame).take(slc.end_idx - rel_end_part.start_idx));
+                                let last_iter: Box<dyn Iterator<Item = _>> =
+                                    Box::new(last_part_seq.iter(frame).take(slc.end_idx - rel_end_part.start_idx));
                                 iter.push(last_iter);
                             }
                             Box::new(iter.into_iter().flatten())
                         }
                     }
-                    _ => Box::new(
-                        inner.iter(frame).take(slc.end_idx).skip(slc.start_idx)
-                    )
+                    _ => Box::new(inner.iter(frame).take(slc.end_idx).skip(slc.start_idx)),
                 }
-            },
+            }
             Self::Map(map) => {
-                let arg = match as_ext!(map.inner, Sequence){
+                let arg = match as_ext!(map.inner, Sequence) {
                     Some(seq) => &seq.0,
                     None => unreachable!("Invalid source"),
                 };
@@ -417,15 +475,23 @@ impl<'s> ExtendedObject for Sequence<'s> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{as_prim, dinobj::{DinObject, TailCallAvailability}, runtime::{Runtime, RuntimeFrame}};
+    use crate::{
+        as_prim,
+        dinobj::{DinObject, TailCallAvailability},
+        runtime::{Runtime, RuntimeFrame},
+    };
 
     use super::*;
 
     fn array_from_vec(runtime: &Runtime<'static>, vec: Vec<i64>) -> AllocatedRef<'static> {
-        let seq = Sequence::new_array(vec.into_iter().map(|i| runtime.allocate(Ok(DinObject::Int(i))).unwrap().unwrap()).collect());
+        let seq = Sequence::new_array(
+            vec.into_iter()
+                .map(|i| runtime.allocate(Ok(DinObject::Int(i))).unwrap().unwrap())
+                .collect(),
+        );
         runtime.allocate_ext(seq).unwrap().unwrap()
     }
-    
+
     #[test]
     fn test_concat_get_linear() {
         let runtime = Runtime::new();
@@ -436,12 +502,16 @@ mod tests {
         let part3 = array_from_vec(&runtime, vec![4, 39, 24]);
 
         let seq = SequenceInner::Concat(SequenceConcat::new(vec![
-            SequenceConcatPart{seq: part1, end_idx: 4},
-            SequenceConcatPart{seq: part2, end_idx: 6},
-            SequenceConcatPart{seq: part3, end_idx: 9},
+            SequenceConcatPart { seq: part1, end_idx: 4 },
+            SequenceConcatPart { seq: part2, end_idx: 6 },
+            SequenceConcatPart { seq: part3, end_idx: 9 },
         ]));
 
-        let get = |idx| seq.get(&frame, idx).unwrap().map(|r| as_prim!(r, Int).cloned().unwrap());
+        let get = |idx| {
+            seq.get(&frame, idx)
+                .unwrap()
+                .map(|r| as_prim!(r, Int).cloned().unwrap())
+        };
 
         assert_eq!(get(0).unwrap(), 3);
         assert_eq!(get(1).unwrap(), 1);
@@ -469,15 +539,28 @@ mod tests {
         let part6 = array_from_vec(&runtime, vec![6, 2, 99]);
 
         let seq = SequenceInner::Concat(SequenceConcat::new(vec![
-            SequenceConcatPart{seq: part1, end_idx: 4},
-            SequenceConcatPart{seq: part2, end_idx: 6},
-            SequenceConcatPart{seq: part3, end_idx: 9},
-            SequenceConcatPart{seq: part4, end_idx: 12},
-            SequenceConcatPart{seq: part5, end_idx: 16},
-            SequenceConcatPart{seq: part6, end_idx: 19},
+            SequenceConcatPart { seq: part1, end_idx: 4 },
+            SequenceConcatPart { seq: part2, end_idx: 6 },
+            SequenceConcatPart { seq: part3, end_idx: 9 },
+            SequenceConcatPart {
+                seq: part4,
+                end_idx: 12,
+            },
+            SequenceConcatPart {
+                seq: part5,
+                end_idx: 16,
+            },
+            SequenceConcatPart {
+                seq: part6,
+                end_idx: 19,
+            },
         ]));
 
-        let get = |idx| seq.get(&frame, idx).unwrap().map(|r| as_prim!(r, Int).cloned().unwrap());
+        let get = |idx| {
+            seq.get(&frame, idx)
+                .unwrap()
+                .map(|r| as_prim!(r, Int).cloned().unwrap())
+        };
 
         assert_eq!(get(0).unwrap(), 3);
         assert_eq!(get(1).unwrap(), 1);
@@ -502,14 +585,17 @@ mod tests {
     }
 
     #[test]
-    fn test_make_concat(){
+    fn test_make_concat() {
         let runtime = Runtime::new();
         let root_frame = RuntimeFrame::root(0, &runtime);
         let frame = SystemRuntimeFrame::from_parent(&root_frame, Vec::new(), TailCallAvailability::Disallowed);
 
         let part1 = array_from_vec(&runtime, vec![3, 1, 0, 9]);
         let part2 = array_from_vec(&runtime, vec![5, 92]);
-        let con1 = runtime.allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2]).unwrap()).unwrap().unwrap();
+        let con1 = runtime
+            .allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2]).unwrap())
+            .unwrap()
+            .unwrap();
         let part3 = array_from_vec(&runtime, vec![3, 45, 16]);
         let part4 = array_from_vec(&runtime, vec![]);
         let part5 = array_from_vec(&runtime, vec![4, 39, 24]);
@@ -527,7 +613,7 @@ mod tests {
         assert_eq!(parts.len(), 4);
     }
     #[test]
-    fn test_make_concat_empty(){
+    fn test_make_concat_empty() {
         let runtime = Runtime::new();
         let part1 = array_from_vec(&runtime, vec![]);
         let part2 = array_from_vec(&runtime, vec![]);
@@ -541,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_slice(){
+    fn test_make_slice() {
         let runtime = Runtime::new();
         let root_frame = RuntimeFrame::root(0, &runtime);
         let frame = SystemRuntimeFrame::from_parent(&root_frame, Vec::new(), TailCallAvailability::Disallowed);
@@ -559,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_slice_empty_eq_bounds(){
+    fn test_make_slice_empty_eq_bounds() {
         let runtime = Runtime::new();
         let source = array_from_vec(&runtime, vec![3, 1, 0, 9, 5, 92, 4, 39, 24]);
         let seq = Sequence::new_slice(&runtime, source, 2, 2).unwrap();
@@ -569,7 +655,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_slice_empty_gt_bounds(){
+    fn test_make_slice_empty_gt_bounds() {
         let runtime = Runtime::new();
         let source = array_from_vec(&runtime, vec![3, 1, 0, 9, 5, 92, 4, 39, 24]);
         let seq = Sequence::new_slice(&runtime, source, 7, 2).unwrap();
@@ -579,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn test_make_slice_nested(){
+    fn test_make_slice_nested() {
         let runtime = Runtime::new();
         let root_frame = RuntimeFrame::root(0, &runtime);
         let frame = SystemRuntimeFrame::from_parent(&root_frame, Vec::new(), TailCallAvailability::Disallowed);
@@ -604,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_idx(){
+    fn test_normalize_idx() {
         assert_eq!(normalize_idx(0, 5), NormalizedIdx::Positive(0));
         assert_eq!(normalize_idx(1, 5), NormalizedIdx::Positive(1));
         assert_eq!(normalize_idx(2, 5), NormalizedIdx::Positive(2));
@@ -621,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    fn test_iter_sliced_concat(){
+    fn test_iter_sliced_concat() {
         let runtime = Runtime::new();
         let root_frame = RuntimeFrame::root(0, &runtime);
         let frame = SystemRuntimeFrame::from_parent(&root_frame, Vec::new(), TailCallAvailability::Disallowed);
@@ -631,18 +717,33 @@ mod tests {
         let part3 = array_from_vec(&runtime, vec![3, 45, 16]);
         let part4 = array_from_vec(&runtime, vec![4, 39, 24]);
 
-        let inner = runtime.allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2, part3, part4]).unwrap()).unwrap().unwrap();
+        let inner = runtime
+            .allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2, part3, part4]).unwrap())
+            .unwrap()
+            .unwrap();
 
-        let slc = |start, end| SequenceInner::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end).unwrap().iter(&frame).map(|r| *as_prim!(r.unwrap().unwrap(), Int).unwrap()).collect::<Vec<_>>();
+        let slc = |start, end| {
+            SequenceInner::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end)
+                .unwrap()
+                .iter(&frame)
+                .map(|r| *as_prim!(r.unwrap().unwrap(), Int).unwrap())
+                .collect::<Vec<_>>()
+        };
 
         let full = [3, 1, 0, 9, 5, 92, 3, 45, 16, 4, 39, 24];
-        for start_ind in 0..full.len(){
-            for end_ind in start_ind..=full.len(){
-                if start_ind == 0 && end_ind == full.len(){
+        for start_ind in 0..full.len() {
+            for end_ind in start_ind..=full.len() {
+                if start_ind == 0 && end_ind == full.len() {
                     // not handled by slicing
                     continue;
                 }
-                assert_eq!(slc(start_ind, end_ind), full[start_ind..end_ind].to_vec(), "start: {}, end: {}", start_ind, end_ind);
+                assert_eq!(
+                    slc(start_ind, end_ind),
+                    full[start_ind..end_ind].to_vec(),
+                    "start: {}, end: {}",
+                    start_ind,
+                    end_ind
+                );
             }
         }
     }

@@ -13,7 +13,7 @@ use stdext::function_name;
 
 const SHOW_COMMANDS: bool = false;
 
-fn test_script(script_number: usize){
+fn test_script(script_number: usize) {
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
     let file_path = glob(&file_pattern)
         .unwrap()
@@ -26,17 +26,17 @@ fn test_script(script_number: usize){
         })
         .unwrap()
         .unwrap();
-    let input = fs::read_to_string(&file_path)
-        .unwrap_or_else(|_| panic!("{}", file_path.to_str().unwrap().to_string()));
+    let input =
+        fs::read_to_string(&file_path).unwrap_or_else(|_| panic!("{}", file_path.to_str().unwrap().to_string()));
 
     let statements = parse_raw_statements(&input).unwrap();
-    
+
     let mut scope = CompilationScope::root();
     let core_pack = StdPack;
     core_pack.setup_compiler(&mut scope);
     let mut commands = Vec::new();
     for stmt in statements {
-        if let Err(err)  = scope.feed_statement(&stmt, &mut commands){
+        if let Err(err) = scope.feed_statement(&stmt, &mut commands) {
             panic!("compilation error: {}", err);
         }
     }
@@ -55,7 +55,7 @@ fn test_script(script_number: usize){
         println!("----commands for {}----", script_number);
         println!("{:#?}", commands);
     }
-    
+
     {
         let push_command = Command::PushFromCell(main_cell);
         let runtime = Runtime::new();
@@ -68,7 +68,7 @@ fn test_script(script_number: usize){
         runtime_frame.execute(&push_command).unwrap();
         runtime_frame.execute(&Command::MakePending(0)).unwrap();
         runtime_frame.execute(&Command::EvalTop).unwrap();
-        
+
         // result of main should now be on top of the stack
         let popped = runtime_frame.stack.pop().unwrap();
         let StackItem::Value(Ok(result_ref)) = popped else {
@@ -87,212 +87,212 @@ fn test_script(script_number: usize){
     };
 }
 
-fn test_script_from_name(name: &str){
-    let script_number = name[name.len()-3..].parse().unwrap();
+fn test_script_from_name(name: &str) {
+    let script_number = name[name.len() - 3..].parse().unwrap();
     test_script(script_number);
 }
 
 #[test]
-fn test_script_001(){
+fn test_script_001() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_002(){
+fn test_script_002() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_003(){
+fn test_script_003() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_004(){
+fn test_script_004() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_005(){
+fn test_script_005() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_006(){
+fn test_script_006() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_007(){
+fn test_script_007() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_008(){
+fn test_script_008() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_009(){
+fn test_script_009() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_010(){
+fn test_script_010() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_011(){
+fn test_script_011() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_012(){
+fn test_script_012() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_013(){
+fn test_script_013() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_014(){
+fn test_script_014() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_015(){
+fn test_script_015() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_016(){
+fn test_script_016() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_017(){
+fn test_script_017() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_018(){
+fn test_script_018() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_019(){
+fn test_script_019() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_020(){
+fn test_script_020() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_021(){
+fn test_script_021() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_022(){
+fn test_script_022() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_023(){
+fn test_script_023() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_024(){
+fn test_script_024() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_025(){
+fn test_script_025() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_026(){
+fn test_script_026() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_027(){
+fn test_script_027() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_028(){
+fn test_script_028() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_029(){
+fn test_script_029() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_030(){
+fn test_script_030() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_031(){
+fn test_script_031() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_032(){
+fn test_script_032() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_033(){
+fn test_script_033() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_034(){
+fn test_script_034() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_035(){
+fn test_script_035() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_036(){
+fn test_script_036() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_037(){
+fn test_script_037() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_038(){
+fn test_script_038() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_039(){
+fn test_script_039() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_040(){
+fn test_script_040() {
     test_script_from_name(function_name!());
 }
 
 #[test]
-fn test_script_041(){
+fn test_script_041() {
     test_script_from_name(function_name!());
 }
