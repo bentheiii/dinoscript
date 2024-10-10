@@ -11,7 +11,7 @@ pub mod utils {
     use std::{borrow::Cow, collections::{HashMap, HashSet}, sync::Arc};
 
     use crate::{
-        ast::statement::Stmt, bytecode::SourceId, compilation_scope::{ty::{Generic, GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, OverloadResolve, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
+        bytecode::SourceId, compilation_scope::{ty::{Generic, GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, OverloadResolve, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
     };
 
     pub enum SetupItem<'s, C> {
@@ -108,13 +108,6 @@ pub mod utils {
         pub fn to_overload(&self, loc: SystemLoc) -> Overload<'s> {
             let gen_params = self.generic.as_ref().map(|gen| OverloadGenericParams::new(gen.id, gen.generic_params.clone()));
             Overload::new(gen_params, self.args.iter().map(Arg::to_overload_arg).collect(), self.ret.clone(), OverloadLoc::System(loc))
-        }
-
-        pub fn from_statement(stmt: &Stmt<'s>)->Self{
-            let Stmt::Fn(func) = stmt else {
-                panic!("expected function statement, got {:?}", stmt);
-            };
-            todo!()
         }
     }
 

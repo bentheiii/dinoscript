@@ -465,10 +465,10 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
             }
-            Command::Variant(i) => {
+            Command::Variant(..) => {
                 todo!()
             }
-            Command::VariantOpt(i) => {
+            Command::VariantOpt(..) => {
                 todo!()
             }
             Command::Array(i) => {

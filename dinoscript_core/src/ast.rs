@@ -115,7 +115,7 @@ pub mod expression {
     }
 
     #[derive(Debug, Clone)]
-    struct FormattedExpression<'s> {
+    pub struct FormattedExpression<'s> {
         expr: ExprWithPair<'s>,
         format: Option<Cow<'s, str>>,
     }
