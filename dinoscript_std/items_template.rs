@@ -2,7 +2,7 @@ use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt}, bytecode::{Command, SourceId}, compilation_scope::{
         self, ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::Sequence
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::{NormalizedIdx, Sequence}
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -735,7 +735,7 @@ ItemsBuilder<'a, 's>
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T", "T"]);
+                    let gen = SignatureGen::new(vec!["T"]);
                     Signature::new_generic(
                         "add",
                         vec![
@@ -748,10 +748,19 @@ ItemsBuilder<'a, 's>
                 },
                 //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                    let b_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let a = rt_as_ext!(a_ref, Sequence);
+                    let b = rt_as_ext!(b_ref, Sequence);
+
+                    if a.is_empty(){
+                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&b_ref)?)));
+                    } else if b.is_empty(){
+                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&a_ref)?)));
+                    }
                     
-                    let ret = Sequence::new_concat(frame.runtime(), vec![a, b])?;
+                    let ret = Sequence::new_concat(frame.runtime(), vec![a_ref, b_ref])?;
 
                     to_return_value(frame.runtime().allocate_ext(ret))
 
@@ -775,7 +784,6 @@ ItemsBuilder<'a, 's>
                         gen,
                     )
                 },
-                //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
                 SetupFunctionBody::System(Box::new(|frame| {
                     let a = rt_unwrap_value!(frame.eval_pop()?);
                     let b = rt_unwrap_value!(frame.eval_pop()?);
@@ -808,6 +816,30 @@ ItemsBuilder<'a, 's>
                 |bi: &Builtins<'_>| {
                     let gen = SignatureGen::new(vec!["T"]);
                     Signature::new_generic(
+                        "len",
+                        vec![
+                            arg_gen!(bi, gen, a: Sequence<T>), 
+                        ],
+                        ty!(bi, int),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = rt_unwrap_value!(frame.eval_pop()?);
+                    
+                    let a = rt_as_ext!(a, Sequence);
+                    let l = a.len() as i64;
+                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(l))))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
                         "lookup",
                         vec![
                             arg_gen!(bi, gen, seq: Sequence<T>), 
@@ -823,7 +855,7 @@ ItemsBuilder<'a, 's>
 
                     let seq = rt_as_ext!(seq, Sequence);
                     let idx = rt_as_prim!(idx, Int);
-                    let Ok(idx) = usize::try_from(*idx) else {
+                    let NormalizedIdx::Positive(idx) = seq.idx_from_int(*idx) else {
                         return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                     };
                     let Some(item_ref) = seq.get(idx) else {
@@ -831,6 +863,53 @@ ItemsBuilder<'a, 's>
                     };
                     let ret = frame.runtime().clone_ref(item_ref)?;
                     to_return_value(Ok(Ok(ret)))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "slice",
+                        vec![
+                            arg_gen!(bi, gen, seq: Sequence<T>), 
+                            arg!(bi, start_idx: int), 
+                            arg!(bi, end_idx: int), // todo make this an optional?
+                        ],
+                        ty_gen!(bi, gen, Sequence<T>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+                    let start_idx = rt_unwrap_value!(frame.eval_pop()?);
+                    let end_idx = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let seq = rt_as_ext!(seq_ref, Sequence);
+                    
+                    let start_idx = rt_as_prim!(start_idx, Int);
+                    let end_idx = rt_as_prim!(end_idx, Int);
+                    
+                    let seq_len = seq.len();
+                    let start_idx = match seq.idx_from_int(*start_idx){
+                        NormalizedIdx::Positive(idx) => idx,
+                        NormalizedIdx::Negative => 0,
+                        NormalizedIdx::Overflow => seq_len,
+                    };
+                    let end_idx = match seq.idx_from_int(*end_idx){
+                        NormalizedIdx::Positive(idx) => idx,
+                        NormalizedIdx::Negative => 0,
+                        NormalizedIdx::Overflow => seq_len,
+                    };
+                    
+                    if start_idx == 0 && end_idx >= seq_len{
+                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&seq_ref)?)));
+                    }
+                    let ret = Sequence::new_slice(frame.runtime(), seq_ref, start_idx, end_idx)?;
+                    to_return_value(frame.runtime().allocate_ext(ret))
                 })),
             ))
         )
@@ -843,6 +922,25 @@ ItemsBuilder<'a, 's>
             "abs",
             r#"fn abs(x: int)->int{
                 if(x>=0, x, -x)
+            }"#
+        )
+        // pragma:replace-end
+        ,
+        // endregion
+        // region:seq-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "pop",
+            r#"fn pop<T>(seq: Sequence<T>, idx:int)->Sequence<T>{
+                let seq_len = seq.len();
+                if(idx==0 || -idx==seq_len,
+                    slice(seq, 1, seq_len),
+                    if(idx==-1 || idx==seq_len-1,
+                        slice(seq, 0, -1),
+                        slice(seq, 0, idx) + slice(seq, idx+1, seq_len)
+                    )
+                )
             }"#
         )
         // pragma:replace-end

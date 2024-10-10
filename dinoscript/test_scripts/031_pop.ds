@@ -1,0 +1,13 @@
+fn main()->bool{
+    let seq = [12,42,10,24];
+    
+    assert(seq.pop(0) == [42,10,24])
+    && assert(seq.pop(1) == [12,10,24])
+    && assert(seq.pop(2) == [12,42,24])
+    && assert(seq.pop(3) == [12,42,10])
+
+    && assert(seq.pop(-1) == [12,42,10])
+    && assert(seq.pop(-2) == [12,42,24])
+    && assert(seq.pop(-3) == [12,10,24])
+    && assert(seq.pop(-4) == [42,10,24])
+}

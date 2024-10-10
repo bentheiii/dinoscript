@@ -8,7 +8,7 @@ pub trait DinoPack {
 }
 
 pub mod utils {
-    use std::{borrow::Cow, collections::HashMap, sync::Arc};
+    use std::{borrow::Cow, collections::{HashMap, HashSet}, sync::Arc};
 
     use crate::{
         ast::statement::Stmt, bytecode::SourceId, compilation_scope::{ty::{Generic, GenericSetId, Ty}, CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, OverloadResolve, SystemLoc}, dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn}, errors::RuntimeViolation, runtime::Runtime
@@ -67,6 +67,7 @@ pub mod utils {
 
     pub struct SignatureGen<'s> {
         id: GenericSetId,
+        // todo we don't actually need this if we use on ordered hashmap
         generic_params: Vec<Cow<'s, str>>,
         gen_tys: HashMap<Cow<'s, str>, Arc<Ty<'s>>>,
     }
@@ -75,6 +76,7 @@ pub mod utils {
         pub fn new(generic_params: Vec<impl Into<Cow<'s, str>>>) -> Self {
             let id = GenericSetId::unique();
             let generic_params: Vec<_> = generic_params.into_iter().map(|s| s.into()).collect();
+            debug_assert!(generic_params.len() == generic_params.iter().collect::<HashSet<_>>().len(), "duplicate generic params");
             let gen_tys = generic_params.iter().enumerate().map(|(i, k)| (k.clone(), Arc::new(Ty::Generic(Generic::new(i, id))))).collect();
             Self { id, generic_params,  gen_tys}
         }
