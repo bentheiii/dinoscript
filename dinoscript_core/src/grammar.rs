@@ -103,9 +103,11 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                     to_parse.strip_prefix("0b").and_then(|s| i128::from_str_radix(s, 2).ok())
                 })
             {
-                return Ok(Expr::LitInt(whole).with_pair(inner));
+                Ok(Expr::LitInt(whole).with_pair(inner))
+            } else if let Some(whole) = to_parse.parse::<f64>().ok() {
+                Ok(Expr::LitFloat(whole).with_pair(inner))
             } else {
-                todo!("handle float")
+                Err(())
             }
         }
         Rule::expression => {

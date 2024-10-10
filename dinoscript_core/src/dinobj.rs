@@ -7,6 +7,7 @@ use crate::{bytecode::Command, errors::{AllocatedRuntimeError, RuntimeViolation}
 #[derive(Debug)]
 pub enum DinObject<'s> {
     Int(i64), // todo make a biginteger
+    /// is guanteed to never be a NaN/Inf
     Float(f64),
     Bool(bool),
     Str(Cow<'s, str>), // todo use a fenced string
