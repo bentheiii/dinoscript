@@ -1,0 +1,11 @@
+fn square(x: int) -> int {
+    x * x
+}
+
+fn call(a:int, f:(int)->(int))->int {
+    f(a)
+}
+
+fn main()->bool {
+    assert(call(12,square) == 144)
+}

@@ -18,10 +18,10 @@ impl<'s> Stack<'s>{
     pub const EXPECTED_TYPE_NAME: &'static str = "Stack";
 
     pub fn populated(top: AllocatedRef<'s>, prev: AllocatedRef<'s>) -> Self{
-        let Some(top_s) = as_ext!(top, Stack) else {
+        let Some(prev_s) = as_ext!(prev, Stack) else {
             return Self::Empty;
         };
-        let len = top_s.len() + 1;
+        let len = prev_s.len() + 1;
         Self::Populated(PopulatedStackNode{top, prev, len})
     }
 
@@ -62,6 +62,7 @@ impl<'s> Stack<'s>{
                 match self.node{
                     Stack::Empty => None,
                     Stack::Populated(node) => {
+                        dbg!(&node.prev);
                         let prev = as_ext!(node.prev, Stack)?;
                         self.node = prev;
                         Some(&node.top)

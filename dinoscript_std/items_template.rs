@@ -1032,7 +1032,7 @@ fn setup_items<'s>()->
                     let stack_ref = rt_unwrap_value!(frame.eval_pop()?);
                     let item_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let ret = Stack::populated(stack_ref, item_ref);
+                    let ret = Stack::populated(item_ref, stack_ref);
                     to_return_value(frame.runtime().allocate_ext(ret))
                 })),
             ))
@@ -1075,12 +1075,15 @@ fn setup_items<'s>()->
                     let stack = rt_unwrap_value!(frame.eval_pop()?);
 
                     let stack = rt_as_ext!(stack, Stack);
+                    dbg!(stack);
+
                     let mut arr = Vec::with_capacity(stack.len());
-                    
                     for item_ref in stack.iter(){
+                        dbg!(item_ref);
                         let item_ref = frame.runtime().clone_ref(item_ref)?;
                         arr.push(item_ref);
                     }
+                    arr.reverse();
 
                     let ret = Sequence::new_array(arr);
                     to_return_value(frame.runtime().allocate_ext(ret))
