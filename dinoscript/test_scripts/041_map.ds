@@ -1,0 +1,10 @@
+fn incr(x: int) -> (int)->(int) {
+    fn incr_inner(y: int) -> int {
+        y + x
+    }
+    incr_inner
+}
+
+fn main()->bool {
+    assert([1, 2, 3].map(incr(1)) == [2, 3, 4])
+}

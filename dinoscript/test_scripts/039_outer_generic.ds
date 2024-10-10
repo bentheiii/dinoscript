@@ -1,0 +1,10 @@
+fn my_map<T, V>(x: T, f: (T) -> (V)) -> V {
+    fn inner(z: T) -> V {
+        f(z)
+    }
+    inner(x)
+}
+
+fn main()->bool {
+    assert(my_map(2, neg{int}) == -2)
+}

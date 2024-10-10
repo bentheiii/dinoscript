@@ -7,7 +7,8 @@ macro_rules! unique {
         impl $name {
             $v fn unique() -> Self {
                 static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-                Self(COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst))
+                let ret = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Self(ret)
             }
         }
     };

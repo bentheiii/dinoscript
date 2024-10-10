@@ -505,7 +505,7 @@ struct OverloadCandidate<'s> {
 }
 
 pub struct CompilationScope<'p, 's, B> {
-    id: GenericSetId, // the scope id, used to differentiate between generic params of scopes
+    id: Option<GenericSetId>, // the scope id, used to differentiate between generic params of scopes
     parent: Option<&'p Self>,
     pub builtins: Option<MaybeOwned<'p, B>>,
     pub names: HashMap<Cow<'s, str>, NamedItem<'s>>,
@@ -543,7 +543,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
 
     pub fn root() -> Self {
         Self {
-            id: GenericSetId::unique(),
+            id: None,
             parent: None,
             builtins: None,
             names: HashMap::new(),
@@ -552,9 +552,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn child(&'p self) -> Self {
+    fn child(&'p self, gen_id: Option<GenericSetId>) -> Self {
         Self {
-            id: GenericSetId::unique(),
+            id: gen_id,
             parent: Some(self),
             builtins: self.builtins.as_ref().map(|b| b.borrowed()),
             names: HashMap::new(),
@@ -643,7 +643,14 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         // todo check that the number of args match
                         Ok(template.instantiate(args))
                     }
-                    _ => todo!(), // raise an error
+                    RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
+                        if args.is_empty() {
+                            Ok(ty.clone())
+                        } else {
+                            todo!("error: {} is not a template type", name) // raise an error
+                        }
+                    },
+                    _ => todo!("handle item: {:#?}", item), // raise an error
                 }
             }
         }
@@ -699,7 +706,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn set_generics(&mut self, names: impl IntoIterator<Item = Cow<'s, str>>) {
         for (i, name) in names.into_iter().enumerate() {
             self.names
-                .insert(name, NamedItem::Type(NamedType::Concrete(Arc::new(Ty::Generic(Generic::new(i, self.id))))));
+                .insert(name, NamedItem::Type(NamedType::Concrete(Arc::new(Ty::Generic(Generic::new(i, self.id.unwrap()))))));
         }
     }
 
@@ -1206,11 +1213,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }
 
                 // todo check that we don't shadow a variable
+                let gen_id = gen_params.as_ref().map(|g| g.gen_id);
                 let new_overload = Overload::new(gen_params, args, expected_return_ty, OverloadLoc::Cell(fn_cell_idx));
                 self.add_overload(name.clone(), new_overload);
                 
                 
-                let mut subscope = self.child();
+                let mut subscope = self.child(gen_id);
                 assert!(!subscope.is_root());
                 let mut subscope_sink = Vec::new();
                 subscope.set_generics(generic_params.iter().cloned());

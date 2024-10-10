@@ -1,0 +1,16 @@
+fn square(x: int) -> int {
+    x * x
+}
+
+fn square(x: float) -> float {
+    x * x
+}
+
+fn call<T>(a:T, f:(T)->(T))->T {
+    f(a)
+}
+
+fn main()->bool {
+    assert(call(12,square{int}) == 144)
+    && assert(call(0.5,square{float}) == 0.25)
+}

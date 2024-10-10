@@ -63,8 +63,25 @@ impl<'s> BindingResolution<'s> {
                 self.bound_generics[*idx] = combine_types(bound_type, input_type)?;
                 Ok(())
             }
+            Ty::Generic(expected_gen) => {
+                match input_type.as_ref() {
+                    Ty::Generic(actual_gen) => {
+                        if expected_gen.idx == actual_gen.idx && expected_gen.gen_id == actual_gen.gen_id{
+                            Ok(())
+                        } else {
+                            Err(())
+                        }
+                    }
+                    Ty::Unknown => {
+                        Ok(())
+                    }
+                    _ => Err(()),
+                }
+            }
             Ty::Generic(_) =>{
-                todo!()
+                // todo
+                dbg!(assign_type, input_type, self.gen_id);
+                Err(())
             }
             Ty::Unknown => unreachable!(),
             Ty::Tail => unreachable!(),
