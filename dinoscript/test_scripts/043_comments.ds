@@ -1,0 +1,14 @@
+/* some nonsense */
+/* let x = 2; */
+let x = 1;  // something else
+
+fn foo() -> int {
+    let y = 2; // some more nonsense
+    //let y = 3;
+    x + y  // some more nonsense
+}
+
+fn main()->bool{
+    let z /* hi! */ = foo();
+    assert(z==3)
+}

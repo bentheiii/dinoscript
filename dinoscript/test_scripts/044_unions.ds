@@ -1,0 +1,12 @@
+union Msg(
+    i: int,
+    f: float
+)
+
+fn main()->bool{
+    let m_f = Msg::f(3.0);
+    let m_i = Msg::i(7);
+
+    assert(m_f!:f == 3.0)
+    && assert(m_i!:i == 7)
+}

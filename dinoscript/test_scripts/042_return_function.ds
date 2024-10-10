@@ -1,0 +1,16 @@
+fn incr(x: int) -> (int)->(int) {
+    fn incr_inner(y: int) -> int {
+        let t = x;
+        y + t
+    }
+    incr_inner
+}
+
+fn inc_1_twice(x: int) -> int {
+    let f = incr(1);
+    f(f(x))
+}
+
+fn main()->bool{
+    assert (inc_1_twice(3) == 5)
+}

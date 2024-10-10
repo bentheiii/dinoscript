@@ -229,11 +229,11 @@ fn parse_expr2(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                     name: member_name.into(),
                 })
             }
-            Rule::member_opt_value => Expr::VariantOpt(Variant {
+            Rule::member_opt_value => Expr::VariantAccessOpt(Variant {
                 obj: Box::new(ret),
                 name: inner.into_inner().next().unwrap().as_str().into(),
             }),
-            Rule::member_value => Expr::Variant(Variant {
+            Rule::member_value => Expr::VariantAccess(Variant {
                 obj: Box::new(ret),
                 name: inner.into_inner().next().unwrap().as_str().into(),
             }),

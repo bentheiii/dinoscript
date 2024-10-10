@@ -119,6 +119,14 @@ impl<'s> VariantObject<'s> {
     pub fn new(tag: usize, obj: AllocatedRef<'s>) -> Self {
         Self { tag, obj }
     }
+
+    pub fn tag(&self) -> usize {
+        self.tag
+    }
+
+    pub fn obj(&self) -> &AllocatedRef<'s> {
+        &self.obj
+    }
 }
 
 pub trait ExtendedObject: Debug {

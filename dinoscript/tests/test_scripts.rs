@@ -296,3 +296,18 @@ fn test_script_040() {
 fn test_script_041() {
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_042() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_043() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_044() {
+    test_script_from_name(function_name!());
+}

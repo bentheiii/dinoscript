@@ -22,7 +22,8 @@ pub enum Command<'s> {
     Attr(usize),       // ATR
     Struct(usize),     // STR
     Variant(usize),    // VAR
-    VariantOpt(usize), // VOP
+    VariantAccess(usize), // VAC
+    VariantAccessOpt(usize), // VAP
     Array(usize),      // ARR
 }
 
@@ -49,7 +50,8 @@ impl<'s> Command<'s> {
             Command::Attr(attr)=>format!("{indent}dinoscript_core::bytecode::Command::Attr({})",attr),
             Command::Struct(structure)=>format!("{indent}dinoscript_core::bytecode::Command::Struct({})",structure),
             Command::Variant(variant)=>format!("{indent}dinoscript_core::bytecode::Command::Variant({})",variant),
-            Command::VariantOpt(variant_opt)=>format!("{indent}dinoscript_core::bytecode::Command::VariantOpt({})",variant_opt),
+            Command::VariantAccess(variant)=>format!("{indent}dinoscript_core::bytecode::Command::VariantAccess({})",variant),
+            Command::VariantAccessOpt(variant_opt)=>format!("{indent}dinoscript_core::bytecode::Command::VariantAccessOpt({})",variant_opt),
             Command::Array(array)=>format!("{indent}dinoscript_core::bytecode::Command::Array({})",array),
             Command::BindBack(bind_back)=>format!("{indent}dinoscript_core::bytecode::Command::BindBack({})",bind_back),
         }

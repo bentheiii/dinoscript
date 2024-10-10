@@ -1051,6 +1051,34 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                 }
 
+                if let Expr::Attr(Attr { obj, name: variant_name }) = &expr.as_ref().inner {
+                    if let Expr::Ref(obj_name) = &obj.as_ref().inner {
+                        let named_item = self.get_named_item(obj_name);
+                        if let Some(RelativeNamedItem::Type(NamedType::Template(named_template))) = named_item {
+                            if let TyTemplate::Compound(CompoundTemplate {
+                                compound_kind: CompoundKind::Union,
+                                generics,
+                                fields,
+                                ..
+                            }) = named_template.as_ref()
+                            {
+                                if generics.is_some() {
+                                    todo!()
+                                }
+                                let Some((variant_tag, _, variant)) = fields.get_full(variant_name) else {
+                                    todo!("variant not found")
+                                };
+                                if arg_sinks.len() != 1 {
+                                    todo!("wrong number of arguments")
+                                }
+                                // todo assert that the type is correct
+                                sink.extend(arg_sinks.into_iter().next().unwrap());
+                                sink.push(Command::Variant(variant_tag));
+                                return Ok(named_template.instantiate(vec![]));
+                            }
+                        }
+                    }
+                }
                 for arg_sink in arg_sinks.into_iter().rev() {
                     sink.extend(arg_sink);
                 }
@@ -1221,27 +1249,27 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 sink.push(Command::Struct(tys.len()));
                 Ok(Arc::new(Ty::Tuple(tys)))
             }
-            Expr::Variant(Variant { obj, name }) => {
+            Expr::VariantAccess(Variant { obj, name }) => {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
                         let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
-                        sink.push(Command::Variant(field.idx));
+                        sink.push(Command::VariantAccess(field.idx));
                         Ok(field.raw_ty)
                     }
                     _ => todo!(), // raise an error
                 }
             }
-            Expr::VariantOpt(Variant { obj, name }) => {
+            Expr::VariantAccessOpt(Variant { obj, name }) => {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
                         let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
-                        sink.push(Command::VariantOpt(field.idx));
+                        sink.push(Command::VariantAccessOpt(field.idx));
                         Ok(self.optional(field.raw_ty))
                     }
                     _ => todo!(), // raise an error

@@ -491,10 +491,35 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
             }
-            Command::Variant(..) => {
-                todo!()
+            Command::Variant(tag) => {
+                self.eval_top(TailCallAvailability::Disallowed)?;
+                let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                    unreachable!()
+                };
+                let Ok(val) = val else { todo!() };
+                let variant = self.runtime.allocate(Ok(DinObject::Variant(VariantObject::new(*tag, val))))?;
+                self.stack.push(StackItem::Value(variant));
+                Ok(ControlFlow::Break(()))
             }
-            Command::VariantOpt(..) => {
+            Command::VariantAccess(expected_tag) => {
+                self.eval_top(TailCallAvailability::Disallowed)?;
+                let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                    unreachable!()
+                };
+                let Ok(val) = val else { todo!() };
+                match val.as_ref() {
+                    DinObject::Variant(variant) => {
+                        if variant.tag() == *expected_tag {
+                            self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(variant.obj())?)));
+                            Ok(ControlFlow::Break(()))
+                        } else {
+                            todo!()
+                        }
+                    }
+                    _ => todo!(),
+                }
+            }
+            Command::VariantAccessOpt(..) => {
                 todo!()
             }
             Command::Array(i) => {
