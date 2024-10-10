@@ -62,7 +62,6 @@ impl<'s> Stack<'s>{
                 match self.node{
                     Stack::Empty => None,
                     Stack::Populated(node) => {
-                        dbg!(&node.prev);
                         let prev = as_ext!(node.prev, Stack)?;
                         self.node = prev;
                         Some(&node.top)

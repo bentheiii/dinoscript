@@ -6,5 +6,6 @@ fn incr(x: int) -> (int)->(int) {
 }
 
 fn main()->bool {
-    assert([1, 2, 3].map(incr(1)) == [2, 3, 4])
+    let m = [1, 2, 3].map(incr(1));
+    assert(m == [2, 3, 4])
 }

@@ -300,6 +300,28 @@ fn setup_items<'s>()->
     // pragma:skip 1
     let mut builder = prepare_build();
     vec![
+        // region:generic
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "debug",
+                        vec![arg_gen!(bi, gen, a: T)],
+                        ty_gen!(bi, gen, T),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let a = frame.eval_pop()?;
+                    println!("Debug: {:?}", a);
+                    to_return_value(Ok(a))
+                })),
+            ))
+        )
+        ,
+        // endregion
         // region:int
         // pragma:unwrap
         builder.add_item(
@@ -815,9 +837,9 @@ fn setup_items<'s>()->
                     let b = rt_as_ext!(b_ref, Sequence);
 
                     if a.is_empty(){
-                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&b_ref)?)));
+                        return to_return_value(Ok(Ok(b_ref)));
                     } else if b.is_empty(){
-                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&a_ref)?)));
+                        return to_return_value(Ok(Ok(a_ref)));
                     }
                     
                     let ret = Sequence::new_concat(frame.runtime(), vec![a_ref, b_ref])?;
@@ -928,6 +950,35 @@ fn setup_items<'s>()->
         builder.add_item(
             SetupItem::Function(SetupFunction::new(
                 |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T", "V"]);
+                    Signature::new_generic(
+                        "map",
+                        vec![
+                            arg_gen!(bi, gen, seq: Sequence<T>), 
+                            arg_gen!(bi, gen, fun: (T)->(V)), 
+                        ],
+                        ty_gen!(bi, gen, Sequence<V>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+                    let func = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let seq = rt_as_ext!(seq_ref, Sequence);
+                    if seq.is_empty(){
+                        return to_return_value(Ok(Ok(seq_ref)));
+                    }
+                    let ret = Sequence::new_map(seq_ref, func);
+                    to_return_value(frame.runtime().allocate_ext(ret))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
                     let gen = SignatureGen::new(vec!["T"]);
                     Signature::new_generic(
                         "slice",
@@ -963,7 +1014,7 @@ fn setup_items<'s>()->
                     };
                     
                     if start_idx == 0 && end_idx >= seq_len{
-                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&seq_ref)?)));
+                        return to_return_value(Ok(Ok(seq_ref)));
                     }
                     let ret = Sequence::new_slice(frame.runtime(), seq_ref, start_idx, end_idx)?;
                     to_return_value(frame.runtime().allocate_ext(ret))
@@ -991,7 +1042,7 @@ fn setup_items<'s>()->
                     let seq = rt_as_ext!(seq_ref, Sequence);
                     
                     if seq.is_array(){
-                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&seq_ref)?)));
+                        return to_return_value(Ok(Ok(seq_ref)));
                     }
                     
                     let seq_len = seq.len();
@@ -1075,11 +1126,9 @@ fn setup_items<'s>()->
                     let stack = rt_unwrap_value!(frame.eval_pop()?);
 
                     let stack = rt_as_ext!(stack, Stack);
-                    dbg!(stack);
 
                     let mut arr = Vec::with_capacity(stack.len());
                     for item_ref in stack.iter(){
-                        dbg!(item_ref);
                         let item_ref = frame.runtime().clone_ref(item_ref)?;
                         arr.push(item_ref);
                     }

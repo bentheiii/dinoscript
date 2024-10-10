@@ -126,7 +126,6 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
             Ok(Arc::new(Ty::Fn(Fn::new(args, ret))))
         }
         (Ty::Generic(a_gen), Ty::Generic(b_gen)) => {
-            dbg!(a_gen, b_gen);
             if a_gen.idx == b_gen.idx && a_gen.gen_id == b_gen.gen_id{
                 Ok(a.clone())
             } else {

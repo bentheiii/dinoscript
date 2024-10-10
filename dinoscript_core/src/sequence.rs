@@ -24,6 +24,10 @@ impl<'s> Sequence<'s> {
         SequenceInner::new_slice(runtime, source, start_idx, end_idx).map(Self)
     }
 
+    pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
+        Self(SequenceInner::new_map(inner, func))
+    }
+
     pub fn get(&self, frame: &SystemRuntimeFrame<'_, 's, '_>, index: usize) -> DinoResult<'s> {
         self.0.get(frame, index)
     }
@@ -263,6 +267,18 @@ impl<'s> SequenceInner<'s> {
         }
     }
 
+    pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
+        if cfg!(debug_assertions) {
+            let func: &Sequence<'s> = match as_ext!(inner, Sequence){
+                Some(seq) => seq,
+                None => return Self::empty(),
+            };
+            let func = &func.0;
+            debug_assert!(!func.is_empty(), "map should not have an empty function");
+        }
+        Self::Map(SequenceMap{inner, func})
+    }
+
     pub fn idx_from_int(&self, idx: i64) -> NormalizedIdx{
         let seq_len = self.len();
         normalize_idx(idx, seq_len)
@@ -302,7 +318,7 @@ impl<'s> SequenceInner<'s> {
                     Some(seq) => &seq.0,
                     None => return frame.runtime().allocate(Err("Invalid source".into())),
                 };
-                let arg = arg.get(frame,index)?;
+                let arg = arg.get(frame, index)?;
                 frame.call(&map.func, &[arg])
             }
         }
