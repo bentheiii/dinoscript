@@ -12,3 +12,4 @@ mod overloads;
 mod compilation_error;
 pub mod sequence;
 pub mod dinobj_utils;
+pub mod stack;

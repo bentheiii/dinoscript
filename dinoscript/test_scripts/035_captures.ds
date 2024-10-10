@@ -1,0 +1,10 @@
+fn my_mod(i: int)->(int)->(int){
+    fn ret(j: int)->int{
+        if(j < i, j, ret(j - i))
+    }
+    ret
+}
+
+fn main()->bool{
+    assert(my_mod(3)(5) == 2)
+}

@@ -332,8 +332,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                         self.cells[*i] = RuntimeCell::Value(val);
                         Ok(ControlFlow::Break(()))
                     }
-                    Err(_) => {
-                        todo!() // exit the current frame
+                    Err(e) => {
+                        todo!("handle error: {}", e) // exit the current frame
                     }
                 }
             }
@@ -400,12 +400,13 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 let captures = {
                     let mut captures = Vec::with_capacity(mfn.n_captures);
                     for _ in 0..mfn.n_captures {
-                        self.eval_top(TailCallAvailability::Disallowed)?; // NOTE: i think this is actually never needed, aren't captures always retrieved from cells?
+                        self.eval_top(TailCallAvailability::Disallowed)?;
                         let StackItem::Value(Ok(val)) = self.stack.pop().unwrap() else {
                             todo!()
                         };
                         captures.push(val);
                     }
+                    captures.reverse();
                     captures
                 };
                 let user_fn = UserFn {

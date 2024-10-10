@@ -16,7 +16,7 @@ use crate::ast::{
 struct DinoParse;
 
 fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
-    debug_assert!(matches!(input.as_rule(), Rule::complete_type));
+    debug_assert!(matches!(input.as_rule(), Rule::complete_type), "{:?}", input);
     let input_marker = input.clone();
     let mut inner = input.into_inner();
     let first = inner.next().unwrap();

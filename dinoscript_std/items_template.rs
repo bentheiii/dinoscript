@@ -2,7 +2,7 @@ use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
     bytecode::{Command, SourceId}, compilation_scope::{
         self, ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, sequence::{NormalizedIdx, Sequence}
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, sequence::{NormalizedIdx, Sequence}, stack::Stack
 };
 // pragma: skip 2
 use std::collections::HashMap;
@@ -13,7 +13,9 @@ pub struct Builtins<'s> {
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
     pub str: Arc<Ty<'s>>,
+
     pub sequence: Arc<TyTemplate<'s>>,
+    pub stack: Arc<TyTemplate<'s>>,
 }
 
 impl<'s> Builtins<'s> {
@@ -35,6 +37,10 @@ impl<'s> Builtins<'s> {
 
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.sequence.instantiate(vec![ty])
+    }
+
+    fn stack(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.stack.instantiate(vec![ty])
     }
 }
 
@@ -75,6 +81,9 @@ macro_rules! ty_gen {
     };
     ($b:ident, $g:expr, Sequence<$ty:tt>) => {
         $b.sequence(ty_gen!($b, $g, $ty))
+    };
+    ($b:ident, $g:expr, Stack<$ty:tt>) => {
+        $b.stack(ty_gen!($b, $g, $ty))
     };
     ($b:ident, $g:expr, $id:ident) => {
         $g.get_gen(stringify!($id))
@@ -120,7 +129,7 @@ macro_rules! rt_as_prim {
         if let DinObject::$variant(v) = $ref.as_ref() {
             v
         } else {
-            let err = format!("Expected {} got {:?}", stringify!($variant), $ref);
+            let err = format!("Expected {} got {:?} (ln {})", stringify!($variant), $ref, line!());
             return to_return_value(Ok($ref.runtime().allocate(Err(err.into()))?));
         }
     };
@@ -238,7 +247,7 @@ fn prepare_build<'p>()->ItemsBuilder<'p, 'static>{
 // pragma:replace-with-raw
 // pragma:replace-end
 
-pub(crate) const SOURCE_ID: SourceId = "core";
+pub(crate) const SOURCE_ID: SourceId = "std";
 pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<'s>>)->Builtins<'s>{
     fn register_type<'s, B>(
         scope: &mut CompilationScope<'_, 's, B>,
@@ -260,8 +269,12 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
         "Sequence",
         TemplateGenericSpecs::new(GenericSetId::unique(), 1)
     )));
+    let stack = register_type(scope, "Stack", TyTemplate::Builtin(BuiltinTemplate::new(
+        "Stack",
+        TemplateGenericSpecs::new(GenericSetId::unique(), 1)
+    )));
 
-    Builtins { int, float, bool, str, sequence }
+    Builtins { int, float, bool, str, sequence, stack }
 }
 
 fn to_return_value(result: DinoResult<'_>)->SourceFnResult<'_>{
@@ -1001,6 +1014,81 @@ fn setup_items<'s>()->
         )
         ,
         // endregion sequence
+        // region:stack
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    // todo is this ok? should we make an unknown explicit?
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "push",
+                        vec![arg_gen!(bi, gen, stack: Stack<T>), arg_gen!(bi, gen, item: T)],
+                        ty_gen!(bi, gen, Stack<T>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let stack_ref = rt_unwrap_value!(frame.eval_pop()?);
+                    let item_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let ret = Stack::populated(stack_ref, item_ref);
+                    to_return_value(frame.runtime().allocate_ext(ret))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    // todo is this ok? should we make an unknown explicit?
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "stack",
+                        vec![],
+                        ty_gen!(bi, gen, Stack<T>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let ret = Stack::empty();
+                    to_return_value(frame.runtime().allocate_ext(ret))
+                })),
+            ))
+        )
+        ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    // todo is this ok? should we make an unknown explicit?
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "to_array",
+                        vec![arg_gen!(bi, gen, stack: Stack<T>)],
+                        ty_gen!(bi, gen, Sequence<T>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let stack = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let stack = rt_as_ext!(stack, Stack);
+                    let mut arr = Vec::with_capacity(stack.len());
+                    
+                    for item_ref in stack.iter(){
+                        let item_ref = frame.runtime().clone_ref(item_ref)?;
+                        arr.push(item_ref);
+                    }
+
+                    let ret = Sequence::new_array(arr);
+                    to_return_value(frame.runtime().allocate_ext(ret))
+                })),
+            ))
+        )
+        ,
+        // endregion stack
         // region:int-1
         // pragma:replace-start
         builder.build_source(
