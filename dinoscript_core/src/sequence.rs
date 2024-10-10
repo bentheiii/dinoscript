@@ -22,15 +22,16 @@ pub enum Sequence<'s>{
 #[derive(Debug)]
 struct SequenceConcat<'s>(Vec<SequenceConcatPart<'s>>);
 
+#[derive(Debug)]
 struct RelevantPart<'a, 's>{
     part: &'a SequenceConcatPart<'s>,
-    prev_part_end_idx: usize,
+    start_idx: usize,
     part_index: usize,
 }
 
 impl<'a, 's> RelevantPart<'a, 's>{
     fn new(part: &'a SequenceConcatPart<'s>, prev_part_end_idx: usize, part_index: usize)->Self{
-        Self{part, prev_part_end_idx, part_index}
+        Self{part, start_idx: prev_part_end_idx, part_index}
     }
 }
 
@@ -61,7 +62,7 @@ impl<'s> SequenceConcat<'s>{
         else if self.len() <= Self::MAX_CONCAT_LIN_SEARCH{
             // linear search
             let (idx, (prev_end, part)) = self.iter().tuple_windows().map(|(prev_part, part)| (prev_part.end_idx, part)).enumerate().find(|(_,(_, part))| part.end_idx > index).unwrap();
-            RelevantPart::new(part, prev_end, idx)
+            RelevantPart::new(part, prev_end, idx+1)
         } else {
             // binary search
             // we treat this as a binary search over the windowed tuples
@@ -139,7 +140,6 @@ struct SequenceSlice<'s>{
 }
 
 impl<'s> Sequence<'s> {
-    const MAX_CONCAT_LIN_SEARCH: usize = 5;
     pub const EXPECTED_TYPE_NAME: &'static str = "Sequence";
 
     fn empty() -> Self {
@@ -216,7 +216,7 @@ impl<'s> Sequence<'s> {
                 }
                 let relevant_part = parts.find_relevant_part(index);
                 let part: &Sequence<'_> = as_ext!(relevant_part.part.seq, Sequence)?;
-                part.get(index - relevant_part.prev_part_end_idx)
+                part.get(index - relevant_part.start_idx)
             },
             Self::Slice(slc) => {
                 if index >= slc.end_idx-slc.start_idx {
@@ -247,7 +247,7 @@ impl<'s> Sequence<'s> {
         match self {
             Self::Array(array) => Box::new(array.iter()),
             Self::Concat(array) => {
-                let mut iter = Vec::new();
+                let mut iter = Vec::with_capacity(array.len());
                 for part in array.iter() {
                     let part: &Sequence<'_> = as_ext!(part.seq, Sequence).unwrap();
                     iter.push(part.iter());
@@ -258,9 +258,34 @@ impl<'s> Sequence<'s> {
                 let inner = as_ext!(slc.source, Sequence).unwrap();
                 match inner{
                     Self::Array(array) => Box::new(array.iter().skip(slc.start_idx).take(slc.end_idx - slc.start_idx)),
-
+                    Self::Concat(concat) => {
+                        let rel_start_part = concat.find_relevant_part(slc.start_idx);
+                        let rel_end_part = concat.find_relevant_part(slc.end_idx-1);
+                        let mut iter = Vec::with_capacity(rel_end_part.part_index - rel_start_part.part_index + 1);
+                        if rel_start_part.part_index == rel_end_part.part_index{
+                            // the slice is within the same part, we can just return a slice over that
+                            let part_seq = as_ext!(rel_start_part.part.seq, Sequence).unwrap();
+                            Box::new(part_seq.iter().take(slc.end_idx - rel_start_part.start_idx).skip(slc.start_idx - rel_start_part.start_idx))
+                        } else {
+                            {
+                                let first_part_seq = as_ext!(rel_start_part.part.seq, Sequence).unwrap();
+                                let first_iter: Box<dyn Iterator<Item=&AllocatedRef<'s>>> = Box::new(first_part_seq.iter().skip(slc.start_idx - rel_start_part.start_idx));
+                                iter.push(first_iter);
+                            }
+                            for part in concat.0.iter().take(rel_end_part.part_index).skip(rel_start_part.part_index + 1) {
+                                let part_seq = as_ext!(part.seq, Sequence).unwrap();
+                                iter.push(part_seq.iter());
+                            }
+                            {
+                                let last_part_seq = as_ext!(rel_end_part.part.seq, Sequence).unwrap();
+                                let last_iter: Box<dyn Iterator<Item=&AllocatedRef<'s>>> = Box::new(last_part_seq.iter().take(slc.end_idx - rel_end_part.start_idx));
+                                iter.push(last_iter);
+                            }
+                            Box::new(iter.into_iter().flatten())
+                        }
+                    }
                     _ => Box::new(
-                        inner.iter().skip(slc.start_idx).take(slc.end_idx - slc.start_idx)
+                        inner.iter().take(slc.end_idx).skip(slc.start_idx)
                     )
                 }
             },
@@ -467,5 +492,29 @@ mod tests {
         assert_eq!(normalize_idx(-4, 5), NormalizedIdx::Positive(1));
         assert_eq!(normalize_idx(-5, 5), NormalizedIdx::Positive(0));
         assert_eq!(normalize_idx(-6, 5), NormalizedIdx::Negative);
+    }
+
+    #[test]
+    fn test_iter_sliced_concat(){
+        let runtime = Runtime::new();
+        let part1 = array_from_vec(&runtime, vec![3, 1, 0, 9]);
+        let part2 = array_from_vec(&runtime, vec![5, 92]);
+        let part3 = array_from_vec(&runtime, vec![3, 45, 16]);
+        let part4 = array_from_vec(&runtime, vec![4, 39, 24]);
+
+        let inner = runtime.allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2, part3, part4]).unwrap()).unwrap().unwrap();
+
+        let slc = |start, end| Sequence::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end).unwrap().iter().map(|r| as_prim!(r, Int).unwrap().clone()).collect::<Vec<_>>();
+
+        let full = vec![3, 1, 0, 9, 5, 92, 3, 45, 16, 4, 39, 24];
+        for start_ind in 0..full.len(){
+            for end_ind in start_ind..=full.len(){
+                if start_ind == 0 && end_ind == full.len(){
+                    // not handled by slicing
+                    continue;
+                }
+                assert_eq!(slc(start_ind, end_ind), full[start_ind..end_ind].to_vec(), "start: {}, end: {}", start_ind, end_ind);
+            }
+        }
     }
 }
