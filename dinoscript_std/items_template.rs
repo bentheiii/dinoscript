@@ -253,7 +253,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
                 }});
                 SetupFunctionBody::User(dinoscript_core::dinobj::UserFn::without_capture({n_cells}, &LZ))
             }}
-        ))\n"
+        )),\n"
         );
         assert!(self.replacements.insert(replacement_name, replacement).is_none());
     }
@@ -327,15 +327,11 @@ fn to_return_value(result: DinoResult<'_>) -> SourceFnResult<'_> {
     }
 }
 
-#[rustfmt::skip]
-pub(crate)
 // pragma:replace-start
-fn setup_items<'a, 's>()->
-ItemsBuilder<'a, 's>
+pub(crate) fn setup_items<'a, 's>() -> ItemsBuilder<'a, 's>
 // pragma:replace-with-raw
 /*
-fn setup_items<'s>()->
- Vec<SetupItem<'s, Builtins<'s>>>
+pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 */
 // pragma:replace-end
 {
@@ -344,844 +340,586 @@ fn setup_items<'s>()->
     vec![
         // region:generic
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "debug",
-                        vec![arg_gen!(bi, gen, a: T)],
-                        ty_gen!(bi, gen, T),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = frame.eval_pop()?;
-                    println!("Debug: {:?}", a);
-                    to_return_value(Ok(a))
-                })),
-            ))
-        )
-        ,
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("debug", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = frame.eval_pop()?;
+                println!("Debug: {:?}", a);
+                to_return_value(Ok(a))
+            })),
+        ))),
         // endregion
         // region:int
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "add",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("add", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a + b))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a + b))))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "div",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, float),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("div", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, float)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(if *b == 0{
-                        frame.runtime().allocate(Err("Division by zero".into()))
-                    } else {
-                        frame.runtime().allocate(Ok(DinObject::Float((*a as f64) / (*b as f64))))
-                    })
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(if *b == 0 {
+                    frame.runtime().allocate(Err("Division by zero".into()))
+                } else {
+                    frame
+                        .runtime()
+                        .allocate(Ok(DinObject::Float((*a as f64) / (*b as f64))))
+                })
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "eq",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().bool(a == b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().bool(a == b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "gt",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("gt", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().bool(a > b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().bool(a > b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "gte",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("gte", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().bool(a >= b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().bool(a >= b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "lt",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("lt", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().bool(a < b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().bool(a < b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "lte",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("lte", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().bool(a <= b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().bool(a <= b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "mod",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("mod", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(if *b == 0{
-                        frame.runtime().allocate(Err("Division by zero".into()))
-                    } else {
-                        frame.runtime().allocate(Ok(DinObject::Int(a % b)))
-                    })
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(if *b == 0 {
+                    frame.runtime().allocate(Err("Division by zero".into()))
+                } else {
+                    frame.runtime().allocate(Ok(DinObject::Int(a % b)))
+                })
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "mul",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("mul", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a * b))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a * b))))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "neg",
-                        vec![arg!(bi, a: int)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("neg", vec![arg!(bi, a: int)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(-a))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(-a))))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "sub",
-                        vec![arg!(bi, a: int), arg!(bi, b: int)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("sub", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    let b = rt_as_prim!(b, Int);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a - b))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                let b = rt_as_prim!(b, Int);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a - b))))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "to_str",
-                        vec![arg!(bi, a: int)],
-                        ty!(bi, str),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("to_str", vec![arg!(bi, a: int)], ty!(bi, str)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Int);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Int);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))))
+            })),
+        ))),
         // endregion
         // region:bool
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "and",
-                        vec![arg!(bi, a: bool), arg!(bi, b: bool)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("and", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a_ref, Bool);
-                    if !a{
-                        to_return_value(Ok(Ok(a_ref)))
-                    }
-                    else{
-                        frame.eval_pop_tca(TailCallAvailability::Allowed)
-                    }
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "assert",
-                        vec![arg!(bi, a: bool)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    // todo: if the value is a pending, maybe we can add it to the error message?
-                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let a = rt_as_prim!(a_ref, Bool);
-                    to_return_value(if *a{
-                        Ok(Ok(a_ref))
-                    }
-                    else{
-                        frame.runtime().allocate(Err("Assertion is false".into()))
-                    })
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "if",
-                        vec![arg!(bi, b:bool), arg_gen!(bi, gen, t: T), arg_gen!(bi, gen, e: T)],
-                        ty_gen!(bi, gen, T),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let b = rt_as_prim!(b, Bool);
-                    
-                    if !b {
-                        frame.stack.pop().unwrap();
-                    }
+                let a = rt_as_prim!(a_ref, Bool);
+                if !a {
+                    to_return_value(Ok(Ok(a_ref)))
+                } else {
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
-                })),
-            ))
-        )
-        ,
+                }
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "eq",
-                        vec![arg!(bi, a: bool), arg!(bi, b: bool)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("assert", vec![arg!(bi, a: bool)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                // todo: if the value is a pending, maybe we can add it to the error message?
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Bool);
-                    let b = rt_as_prim!(b, Bool);
-
-                    to_return_value(frame.runtime().bool(a == b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a_ref, Bool);
+                to_return_value(if *a {
+                    Ok(Ok(a_ref))
+                } else {
+                    frame.runtime().allocate(Err("Assertion is false".into()))
+                })
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "not",
-                        vec![arg!(bi, a: bool)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "if",
+                    vec![arg!(bi, b:bool), arg_gen!(bi, gen, t: T), arg_gen!(bi, gen, e: T)],
+                    ty_gen!(bi, gen, T),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Bool);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Bool(!a))))
-                })),
-            ))
-        )
-        ,
+                let b = rt_as_prim!(b, Bool);
+
+                if !b {
+                    frame.stack.pop().unwrap();
+                }
+                frame.eval_pop_tca(TailCallAvailability::Allowed)
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "or",
-                        vec![arg!(bi, a: bool), arg!(bi, b: bool)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a_ref, Bool);
-                    if *a{
-                        to_return_value(Ok(Ok(a_ref)))
-                    }
-                    else{
-                        frame.eval_pop_tca(TailCallAvailability::Allowed)
-                    }
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Bool);
+                let b = rt_as_prim!(b, Bool);
+
+                to_return_value(frame.runtime().bool(a == b))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("not", vec![arg!(bi, a: bool)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a, Bool);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Bool(!a))))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("or", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a_ref, Bool);
+                if *a {
+                    to_return_value(Ok(Ok(a_ref)))
+                } else {
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
         // endregion bool
         // region:str
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "eq",
-                        vec![arg!(bi, a: str), arg!(bi, b: str)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: str), arg!(bi, b: str)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Str);
-                    let b = rt_as_prim!(b, Str);
-                    
-                    to_return_value(frame.runtime().bool(a == b))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Str);
+                let b = rt_as_prim!(b, Str);
+
+                to_return_value(frame.runtime().bool(a == b))
+            })),
+        ))),
         // endregion str
         // region:float
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "eq",
-                        vec![arg!(bi, a: float), arg!(bi, b: float)],
-                        ty!(bi, bool),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, bool)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Float);
-                    let b = rt_as_prim!(b, Float);
+                let a = rt_as_prim!(a, Float);
+                let b = rt_as_prim!(b, Float);
 
-                    to_return_value(frame.runtime().bool(a==b))
-                })),
-            ))
-        )
-        ,
+                to_return_value(frame.runtime().bool(a == b))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "floor",
-                        vec![arg!(bi, a: float)],
-                        ty!(bi, int),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("floor", vec![arg!(bi, a: float)], ty!(bi, int)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Float);
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))))
-                })),
-            ))
-        )
-        ,
+                let a = rt_as_prim!(a, Float);
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    Signature::new(
-                        "mul",
-                        vec![arg!(bi, a: float), arg!(bi, b: float)],
-                        ty!(bi, float),
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("mul", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, float)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_prim!(a, Float);
-                    let b = rt_as_prim!(b, Float);
+                let a = rt_as_prim!(a, Float);
+                let b = rt_as_prim!(b, Float);
 
-                    to_return_value(
-                        frame.runtime().allocate(Ok(DinObject::Float(a * b)))
-                    )
-                })),
-            ))
-        )
-        ,
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Float(a * b))))
+            })),
+        ))),
         // endregion float
         // region:sequence
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "add",
-                        vec![
-                            arg_gen!(bi, gen, a: Sequence<T>), 
-                            arg_gen!(bi, gen, b: Sequence<T>),
-                        ],
-                        ty_gen!(bi, gen, Sequence<T>),
-                        gen,
-                    )
-                },
-                //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a_ref = rt_unwrap_value!(frame.eval_pop()?);
-                    let b_ref = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "add",
+                    vec![arg_gen!(bi, gen, a: Sequence<T>), arg_gen!(bi, gen, b: Sequence<T>)],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let b_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_ext!(a_ref, Sequence);
-                    let b = rt_as_ext!(b_ref, Sequence);
+                let a = rt_as_ext!(a_ref, Sequence);
+                let b = rt_as_ext!(b_ref, Sequence);
 
-                    if a.is_empty(){
-                        return to_return_value(Ok(Ok(b_ref)));
-                    } else if b.is_empty(){
-                        return to_return_value(Ok(Ok(a_ref)));
-                    }
-                    
-                    let ret = Sequence::new_concat(frame.runtime(), vec![a_ref, b_ref])?;
+                if a.is_empty() {
+                    return to_return_value(Ok(Ok(b_ref)));
+                } else if b.is_empty() {
+                    return to_return_value(Ok(Ok(a_ref)));
+                }
 
-                    to_return_value(frame.runtime().allocate_ext(ret))
+                let ret = Sequence::new_concat(frame.runtime(), vec![a_ref, b_ref])?;
 
-                })),
-            ))
-        )
-        ,
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T0", "T1"]);
-                    Signature::new_generic(
-                        "eq",
-                        vec![
-                            arg_gen!(bi, gen, a: Sequence<T0>), 
-                            arg_gen!(bi, gen, b: Sequence<T1>), 
-                            arg_gen!(bi, gen, fn_eq~=eq: (T0,T1)->(bool))
-                        ],
-                        ty!(bi, bool),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    let b = rt_unwrap_value!(frame.eval_pop()?);
-                    let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T0", "T1"]);
+                Signature::new_generic(
+                    "eq",
+                    vec![
+                        arg_gen!(bi, gen, a: Sequence<T0>),
+                        arg_gen!(bi, gen, b: Sequence<T1>),
+                        arg_gen!(bi, gen, fn_eq~=eq: (T0,T1)->(bool)),
+                    ],
+                    ty!(bi, bool),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let a = rt_as_ext!(a, Sequence);
-                    let b = rt_as_ext!(b, Sequence);
-                    if a.len() != b.len(){
+                let a = rt_as_ext!(a, Sequence);
+                let b = rt_as_ext!(b, Sequence);
+                if a.len() != b.len() {
+                    return to_return_value(frame.runtime().bool(false));
+                }
+                for (a_it, b_it) in a.iter(&frame).zip(b.iter(&frame)) {
+                    let a_it = a_it?;
+                    let b_it = b_it?;
+                    let res = frame.call(&fn_eq, &[a_it, b_it])?;
+                    let res = rt_unwrap_value!(res);
+                    let res = rt_as_prim!(res, Bool);
+                    if !*res {
                         return to_return_value(frame.runtime().bool(false));
                     }
-                    for (a_it, b_it) in a.iter(&frame).zip(b.iter(&frame)){
-                        let a_it = a_it?;
-                        let b_it = b_it?;
-                        let res = frame.call(&fn_eq, &[a_it, b_it])?;
-                        let res = rt_unwrap_value!(res);
-                        let res = rt_as_prim!(res, Bool);
-                        if !*res{
-                            return to_return_value(frame.runtime().bool(false));
-                        }
+                }
+                to_return_value(frame.runtime().bool(true))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("len", vec![arg_gen!(bi, gen, a: Sequence<T>)], ty!(bi, int), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_ext!(a, Sequence);
+                let l = a.len() as i64;
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(l))))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "lookup",
+                    vec![arg_gen!(bi, gen, seq: Sequence<T>), arg!(bi, idx: int)],
+                    ty_gen!(bi, gen, T),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq = rt_unwrap_value!(frame.eval_pop()?);
+                let idx = rt_unwrap_value!(frame.eval_pop()?);
+
+                let seq = rt_as_ext!(seq, Sequence);
+                let idx = rt_as_prim!(idx, Int);
+                let NormalizedIdx::Positive(idx) = seq.idx_from_int(*idx) else {
+                    return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
+                };
+                let item = seq.get(&frame, idx)?;
+                to_return_value(Ok(item))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T", "V"]);
+                Signature::new_generic(
+                    "map",
+                    vec![arg_gen!(bi, gen, seq: Sequence<T>), arg_gen!(bi, gen, fun: (T)->(V))],
+                    ty_gen!(bi, gen, Sequence<V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let func = rt_unwrap_value!(frame.eval_pop()?);
+
+                let seq = rt_as_ext!(seq_ref, Sequence);
+                if seq.is_empty() {
+                    return to_return_value(Ok(Ok(seq_ref)));
+                }
+                let ret = Sequence::new_map(seq_ref, func);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "slice",
+                    vec![
+                        arg_gen!(bi, gen, seq: Sequence<T>),
+                        arg!(bi, start_idx: int),
+                        arg!(bi, end_idx: int), // todo make this an optional?
+                    ],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let start_idx = rt_unwrap_value!(frame.eval_pop()?);
+                let end_idx = rt_unwrap_value!(frame.eval_pop()?);
+
+                let seq = rt_as_ext!(seq_ref, Sequence);
+
+                let start_idx = rt_as_prim!(start_idx, Int);
+                let end_idx = rt_as_prim!(end_idx, Int);
+
+                let seq_len = seq.len();
+                let start_idx = match seq.idx_from_int(*start_idx) {
+                    NormalizedIdx::Positive(idx) => idx,
+                    NormalizedIdx::Negative => 0,
+                    NormalizedIdx::Overflow => seq_len,
+                };
+                let end_idx = match seq.idx_from_int(*end_idx) {
+                    NormalizedIdx::Positive(idx) => idx,
+                    NormalizedIdx::Negative => 0,
+                    NormalizedIdx::Overflow => seq_len,
+                };
+
+                if start_idx == 0 && end_idx >= seq_len {
+                    return to_return_value(Ok(Ok(seq_ref)));
+                }
+                let ret = Sequence::new_slice(frame.runtime(), seq_ref, start_idx, end_idx)?;
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "to_array",
+                    vec![arg_gen!(bi, gen, seq: Sequence<T>)],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let seq = rt_as_ext!(seq_ref, Sequence);
+
+                if seq.is_array() {
+                    return to_return_value(Ok(Ok(seq_ref)));
+                }
+
+                let seq_len = seq.len();
+                let ret = {
+                    let mut v = Vec::with_capacity(seq_len);
+                    for item_ref in seq.iter(&frame) {
+                        let item_ref = match item_ref? {
+                            Ok(v) => v,
+                            other => return to_return_value(Ok(other)),
+                        };
+                        v.push(item_ref);
                     }
-                    to_return_value(frame.runtime().bool(true))
+                    v
+                };
 
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "len",
-                        vec![
-                            arg_gen!(bi, gen, a: Sequence<T>), 
-                        ],
-                        ty!(bi, int),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let a = rt_unwrap_value!(frame.eval_pop()?);
-                    
-                    let a = rt_as_ext!(a, Sequence);
-                    let l = a.len() as i64;
-                    to_return_value(frame.runtime().allocate(Ok(DinObject::Int(l))))
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "lookup",
-                        vec![
-                            arg_gen!(bi, gen, seq: Sequence<T>), 
-                            arg!(bi, idx: int), 
-                        ],
-                        ty_gen!(bi, gen, T),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let seq = rt_unwrap_value!(frame.eval_pop()?);
-                    let idx = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let seq = rt_as_ext!(seq, Sequence);
-                    let idx = rt_as_prim!(idx, Int);
-                    let NormalizedIdx::Positive(idx) = seq.idx_from_int(*idx) else {
-                        return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
-                    };
-                    let item = seq.get(&frame, idx)?;
-                    to_return_value(Ok(item))
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T", "V"]);
-                    Signature::new_generic(
-                        "map",
-                        vec![
-                            arg_gen!(bi, gen, seq: Sequence<T>), 
-                            arg_gen!(bi, gen, fun: (T)->(V)), 
-                        ],
-                        ty_gen!(bi, gen, Sequence<V>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
-                    let func = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let seq = rt_as_ext!(seq_ref, Sequence);
-                    if seq.is_empty(){
-                        return to_return_value(Ok(Ok(seq_ref)));
-                    }
-                    let ret = Sequence::new_map(seq_ref, func);
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "slice",
-                        vec![
-                            arg_gen!(bi, gen, seq: Sequence<T>), 
-                            arg!(bi, start_idx: int), 
-                            arg!(bi, end_idx: int), // todo make this an optional?
-                        ],
-                        ty_gen!(bi, gen, Sequence<T>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
-                    let start_idx = rt_unwrap_value!(frame.eval_pop()?);
-                    let end_idx = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let seq = rt_as_ext!(seq_ref, Sequence);
-                    
-                    let start_idx = rt_as_prim!(start_idx, Int);
-                    let end_idx = rt_as_prim!(end_idx, Int);
-                    
-                    let seq_len = seq.len();
-                    let start_idx = match seq.idx_from_int(*start_idx){
-                        NormalizedIdx::Positive(idx) => idx,
-                        NormalizedIdx::Negative => 0,
-                        NormalizedIdx::Overflow => seq_len,
-                    };
-                    let end_idx = match seq.idx_from_int(*end_idx){
-                        NormalizedIdx::Positive(idx) => idx,
-                        NormalizedIdx::Negative => 0,
-                        NormalizedIdx::Overflow => seq_len,
-                    };
-                    
-                    if start_idx == 0 && end_idx >= seq_len{
-                        return to_return_value(Ok(Ok(seq_ref)));
-                    }
-                    let ret = Sequence::new_slice(frame.runtime(), seq_ref, start_idx, end_idx)?;
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
-        // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "to_array",
-                        vec![
-                            arg_gen!(bi, gen, seq: Sequence<T>),
-                        ],
-                        ty_gen!(bi, gen, Sequence<T>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
-
-                    let seq = rt_as_ext!(seq_ref, Sequence);
-                    
-                    if seq.is_array(){
-                        return to_return_value(Ok(Ok(seq_ref)));
-                    }
-                    
-                    let seq_len = seq.len();
-                    let ret = {
-                        let mut v = Vec::with_capacity(seq_len);
-                        for item_ref in seq.iter(&frame){
-                            let item_ref = match item_ref?{
-                                Ok(v) => v,
-                                other => return to_return_value(Ok(other)),
-                            };
-                            v.push(item_ref);
-                        }
-                        v
-                    };
-
-                    let ret = Sequence::new_array(ret);
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
+                let ret = Sequence::new_array(ret);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
         // endregion sequence
         // region:stack
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    // todo is this ok? should we make an unknown explicit?
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "push",
-                        vec![arg_gen!(bi, gen, stack: Stack<T>), arg_gen!(bi, gen, item: T)],
-                        ty_gen!(bi, gen, Stack<T>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let stack_ref = rt_unwrap_value!(frame.eval_pop()?);
-                    let item_ref = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                // todo is this ok? should we make an unknown explicit?
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "push",
+                    vec![arg_gen!(bi, gen, stack: Stack<T>), arg_gen!(bi, gen, item: T)],
+                    ty_gen!(bi, gen, Stack<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let stack_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let item_ref = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let ret = Stack::populated(item_ref, stack_ref);
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
+                let ret = Stack::populated(item_ref, stack_ref);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    // todo is this ok? should we make an unknown explicit?
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "stack",
-                        vec![],
-                        ty_gen!(bi, gen, Stack<T>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let ret = Stack::empty();
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                // todo is this ok? should we make an unknown explicit?
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("stack", vec![], ty_gen!(bi, gen, Stack<T>), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let ret = Stack::empty();
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
         // pragma:unwrap
-        builder.add_item(
-            SetupItem::Function(SetupFunction::new(
-                |bi: &Builtins<'_>| {
-                    // todo is this ok? should we make an unknown explicit?
-                    let gen = SignatureGen::new(vec!["T"]);
-                    Signature::new_generic(
-                        "to_array",
-                        vec![arg_gen!(bi, gen, stack: Stack<T>)],
-                        ty_gen!(bi, gen, Sequence<T>),
-                        gen,
-                    )
-                },
-                SetupFunctionBody::System(Box::new(|frame| {
-                    let stack = rt_unwrap_value!(frame.eval_pop()?);
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                // todo is this ok? should we make an unknown explicit?
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "to_array",
+                    vec![arg_gen!(bi, gen, stack: Stack<T>)],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let stack = rt_unwrap_value!(frame.eval_pop()?);
 
-                    let stack = rt_as_ext!(stack, Stack);
+                let stack = rt_as_ext!(stack, Stack);
 
-                    let mut arr = Vec::with_capacity(stack.len());
-                    for item_ref in stack.iter(){
-                        let item_ref = frame.runtime().clone_ref(item_ref)?;
-                        arr.push(item_ref);
-                    }
-                    arr.reverse();
+                let mut arr = Vec::with_capacity(stack.len());
+                for item_ref in stack.iter() {
+                    let item_ref = frame.runtime().clone_ref(item_ref)?;
+                    arr.push(item_ref);
+                }
+                arr.reverse();
 
-                    let ret = Sequence::new_array(arr);
-                    to_return_value(frame.runtime().allocate_ext(ret))
-                })),
-            ))
-        )
-        ,
+                let ret = Sequence::new_array(arr);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
         // endregion stack
         // region:int-1
         // pragma:replace-start
@@ -1190,11 +928,9 @@ fn setup_items<'s>()->
             "abs",
             r#"fn abs(x: int)->int{
                 if(x>=0, x, -x)
-            }"#
-        )
-        // pragma:replace-end
-        ,
-        // endregion
+            }"#,
+        ), // pragma:replace-end
+        // endregion:int-1
         // region:seq-1
         // pragma:replace-start
         builder.build_source(
@@ -1209,11 +945,9 @@ fn setup_items<'s>()->
                         slice(seq, 0, idx) + slice(seq, idx+1, seq_len)
                     )
                 )
-            }"#
-        )
-        // pragma:replace-end
-        ,
-        // endregion
+            }"#,
+        ), // pragma:replace-end
+        // endregion:seq-1
         // region:generic-1
         // pragma:replace-start
         builder.build_source(
@@ -1221,14 +955,11 @@ fn setup_items<'s>()->
             "neq",
             r#"fn neq<T0, T1>(x: T0, y: T1, fn_eq: (T0, T1)->(bool) ~= eq)->bool{
                 !fn_eq(x, y)
-            }"#
-        )
-        // pragma:replace-end
-        ,
-        // endregion
-
+            }"#,
+        ), // pragma:replace-end
+           // endregion:generic-1
     ]
-    // pragma:skip 1
-    ; builder
-
+    // pragma:skip 2
+    ;
+    builder
 }
