@@ -8,14 +8,14 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair, Type}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant}, pairable::Pairable, statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair}, ty::{FnTy, SpecializedTy, Ty, TyWithPair}
 };
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct DinoParse;
 
-fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<TyWithPair<'s>, ()> {
+fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::complete_type));
     let input_marker = input.clone();
     let mut inner = input.into_inner();
@@ -53,7 +53,7 @@ fn parse_type<'s>(input: Pair<'s, Rule>) -> Result<TyWithPair<'s>, ()> {
     }
 }
 
-fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
+fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression3));
     let inner = input.into_inner().next().unwrap();
     match inner.as_rule() {
@@ -115,7 +115,7 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             let pair_mark = inner.clone();
             let mut parts = Vec::new();
             for part in inner.into_inner() {
-                let expr = todo!();
+                let expr = parse_expr(part)?;
                 parts.push(expr);
             }
             return Ok(Expr::Tuple(parts).with_pair(pair_mark));
@@ -148,11 +148,11 @@ fn parse_expr3<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     }
 }
 
-fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
+fn parse_expr2(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression2));
     let mut inners = input.into_inner();
     let mut ret = parse_expr3(inners.next().unwrap())?;
-    while let Some(inner) = inners.next() {
+    for inner in inners {
         let pair_marker = inner.clone();
         ret = match inner.as_rule() {
             Rule::method => {
@@ -222,7 +222,7 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             }
         }.with_pair(pair_marker);
     }
-    return Ok(ret);
+    Ok(ret)
 }
 
 fn parse_expr1(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {

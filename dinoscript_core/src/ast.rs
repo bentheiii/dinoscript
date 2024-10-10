@@ -221,13 +221,9 @@ pub mod expression {
 }
 
 pub mod statement {
-    use crate::grammar::Rule;
-
-    type Pair<'s> = pest::iterators::Pair<'s, Rule>;
-
     use super::expression::ExprWithPair;
     use super::pairable::{Pairable, WithPair};
-    use super::ty::{Ty, TyWithPair};
+    use super::ty::TyWithPair;
     use std::borrow::Cow;
 
     pub type StmtWithPair<'s> = WithPair<'s, Stmt<'s>>;

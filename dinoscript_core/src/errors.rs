@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{error::Error, fmt::{Display}, sync::Arc};
 use derive_more::Debug;
 
 use crate::{dinobj::Allocatable, runtime::Runtime};
@@ -15,6 +15,15 @@ pub enum RuntimeError{
     },
 }
 
+impl Display for RuntimeError{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Borrowed(s) => write!(f, "{}", s),
+            Self::Owned{msg, ..} => write!(f, "{}", msg),
+        }
+    }
+}
+
 impl From<&'static str> for RuntimeError{
     fn from(s: &'static str) -> Self {
         Self::Borrowed(s)
@@ -27,15 +36,6 @@ impl From<String> for RuntimeError{
     }
 }
 
-impl RuntimeError{
-    unsafe fn clone(&self) -> Self {
-        match self {
-            Self::Borrowed(s) => Self::Borrowed(s),
-            Self::Owned{msg: ptr, ..} => Self::Owned{msg: ptr.clone(), is_first_owner: false},
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct AllocatedRuntimeError<'s>{
     err: RuntimeError,
@@ -43,11 +43,19 @@ pub struct AllocatedRuntimeError<'s>{
     runtime: Runtime<'s>,
 }
 
+impl<'s> Error for AllocatedRuntimeError<'s>{}
+
+impl<'s> Display for AllocatedRuntimeError<'s>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
+}
+
 impl<'s> Allocatable<'s> for RuntimeError{
     type Output = AllocatedRuntimeError<'s>;
 
     fn obj_size(&self) -> usize {
-        std::mem::size_of::<Self>() + match self {
+        std::mem::size_of::<Self::Output>() + match self {
             Self::Owned{ msg, is_first_owner:true} => msg.len(),
             _ => 0,
         }
@@ -58,5 +66,11 @@ impl<'s> Allocatable<'s> for RuntimeError{
             err: self,
             runtime,
         }
+    }
+}
+
+impl<'s> Drop for AllocatedRuntimeError<'s>{
+    fn drop(&mut self) {
+        self.runtime.deallocate(self.err.obj_size());
     }
 }

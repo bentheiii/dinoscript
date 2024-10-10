@@ -1,7 +1,7 @@
-use std::{collections::HashMap, default, ops::ControlFlow, sync::{Arc, Mutex, Weak}};
+use std::{collections::HashMap, ops::ControlFlow, sync::{Arc, Mutex}};
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{Allocatable, AllocatedObject, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, maybe_owned::MaybeOwned, sequence::Sequence
+    bytecode::{Command, SourceId}, dinobj::{Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject}, errors::{RuntimeError, RuntimeViolation}, sequence::Sequence
 };
 
 #[derive(Debug)]
@@ -67,10 +67,10 @@ impl<'s> Runtime<'s> {
         let size = obj.as_ref().map_or_else(|e| e.allocated_size(), |o| o.allocated_size());
         {
             let mut rt = self.0.lock().unwrap();
-            rt.allocated_space += size + AllocatedRef::SIZE;
+            rt.allocated_space += size;
             // todo check against max size
             if REPORT_MEMORY_USAGE {
-                println!("allocating {} bytes for {:?}", size + AllocatedRef::SIZE, obj);
+                println!("allocating {} bytes for {:?}", size, obj);
                 println!("total allocated space: {} bytes", rt.allocated_space);
             }
         }

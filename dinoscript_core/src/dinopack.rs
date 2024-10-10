@@ -1,9 +1,9 @@
-use crate::{bytecode::SourceId, compilation_scope::CompilationScope, runtime::RuntimeFrame};
+use crate::{compilation_scope::CompilationScope, runtime::RuntimeFrame};
 
 pub trait DinoPack {
     type Builtins<'s>;
 
-    fn setup_compiler<'p, 's>(&self, scope: &mut CompilationScope<'p, 's, Self::Builtins<'s>>);
+    fn setup_compiler<'s>(&self, scope: &mut CompilationScope<'_, 's, Self::Builtins<'s>>);
     fn setup_runtime(&self, frame: &mut RuntimeFrame);
 }
 
@@ -144,10 +144,7 @@ pub mod utils {
         pub fn to_overload_arg(&self) -> OverloadArg<'s> {
             OverloadArg {
                 ty: self.ty.clone(),
-                default: match &self.default {
-                    Some(ArgDefault::Resolve(name)) => Some(crate::compilation_scope::OverloadArgDefault::OverloadResolve(OverloadResolve::new(name.clone()))),
-                    None => None,
-                },
+                default: self.default.as_ref().map(|ArgDefault::Resolve(name)| crate::compilation_scope::OverloadArgDefault::OverloadResolve(OverloadResolve::new(name.clone()))),
             }
         }
     }

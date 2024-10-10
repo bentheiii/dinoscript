@@ -23,8 +23,8 @@ pub enum DinObject<'s> {
 unsafe impl Send for DinObject<'_> {}
 
 impl<'s> DinObject<'s>{
-    pub fn allocated_size(&self) -> usize {
-        size_of::<Self>() + match self {
+    fn extra_allocated_size(&self) -> usize {
+        match self {
             Self::Extended(e) => {
                 unsafe{(**e).allocated_size()}
             },
@@ -144,9 +144,12 @@ pub struct AllocatedObject<'s>{
     runtime: Runtime<'s>,
 }
 
+unsafe impl Send for AllocatedObject<'_> {}
+unsafe impl Sync for AllocatedObject<'_> {}
+
 impl<'s> AllocatedObject<'s>{   
     pub fn new(value: DinObject<'s>, runtime: Runtime<'s>) -> Self {
-        let size = value.allocated_size();
+        let size = value.obj_size();
         Self{value, size, runtime}
     }
 }
@@ -209,6 +212,7 @@ pub trait Allocatable<'s>{
         size_of::<Self::Output>() + self.obj_size()
     }
 
+    /// The size of the object in bytes, excluding the size of the allocated object
     fn obj_size(&self) -> usize;
     fn allocate(self, runtime: Runtime<'s>) -> Self::Output;
 }
@@ -216,7 +220,7 @@ pub trait Allocatable<'s>{
 impl<'s> Allocatable<'s> for DinObject<'s>{
     type Output = AllocatedRef<'s>;
     fn obj_size(&self) -> usize {
-        size_of::<AllocatedObject<'s>>()
+        size_of::<AllocatedObject<'s>>() + self.extra_allocated_size()
     }
 
     fn allocate(self, runtime: Runtime<'s>) -> Self::Output {

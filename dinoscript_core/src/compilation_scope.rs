@@ -476,13 +476,6 @@ struct RelativeNamedItemVariable<'s> {
 }
 
 #[derive(Debug, Clone)]
-struct RelativeNamedItemType<'s> {
-    // Todo i don't think we need this
-    loc: RelativeLocation,
-    ty: Arc<Ty<'s>>,
-}
-
-#[derive(Debug, Clone)]
 struct RelativeNamedItemOverloads<'p, 's> {
     overloads: Vec<RelativeOverload<'p, 's>>,
 }
@@ -628,7 +621,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     .iter()
                     .map(|arg| self.parse_type(arg, gen_params))
                     .collect::<Result<Vec<_>, _>>()?;
-                let return_ty = self.parse_type(&ret, gen_params)?;
+                let return_ty = self.parse_type(ret, gen_params)?;
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
             ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
@@ -680,7 +673,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     .map(|n| n.add_height(1));
                 // invariant, if parent_overloads is Some, then it is an Overloads
                 if let Some(RelativeNamedItem::Overloads(parent_overloads)) = parent_overloads {
-                    rel_overloads.overloads.extend(parent_overloads.overloads.into_iter());
+                    rel_overloads.overloads.extend(parent_overloads.overloads);
                 }
                 Some(RelativeNamedItem::Overloads(rel_overloads))
             }
@@ -728,7 +721,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
     
-    fn resolve_overloads<'a, 'c: 's>(&'a self, name: &Cow<'c, str>, overloads: Vec<RelativeOverload<'p, 's>>, arg_types: &Vec<Arc<Ty<'s>>>, binding: Option<()>)->Result<OverloadCandidate<'s>, CompilationError<'c, 's>>{
+    fn resolve_overloads<'a, 'c: 's>(&'a self, name: &Cow<'c, str>, overloads: Vec<RelativeOverload<'p, 's>>, arg_types: &[Arc<Ty<'s>>], binding: Option<()>)->Result<OverloadCandidate<'s>, CompilationError<'c, 's>>{
         // TODO we only need the name in this function for error reporting, we should remove it
         if let Some(binding) = binding {
             todo!()
@@ -749,53 +742,51 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
             for (i,(param, arg_ty)) in overload.args.iter().zip(arg_types.iter().map(Some).chain(repeat(None))).enumerate() {
                 if let Some(arg_ty) = arg_ty {
-                    if let Err(_) = resolution.assign(&param.ty, arg_ty){
+                    if resolution.assign(&param.ty, arg_ty).is_err(){
                         if is_one_option {
                             // if there's only one overload, we can raise a better error here
                             return Err(CompilationError::ArgumentTypeMismatch { func_name: name.clone(), param_n: i, param_name: None, expected_ty: param.ty.clone(), actual_ty: arg_ty.clone()});
                         }
                         continue 'outer;
                     }
-                } else {
-                    if let Some(default) = &param.default {
-                        match default {
-                            OverloadArgDefault::Value(cell_idx) => {
-                                additional_params.push(AdditionalParam::Value(*cell_idx));
-                            },
-                            OverloadArgDefault::OverloadResolve(OverloadResolve{name: ov_name}) => {
-                                let resolved_ty = param.ty.resolve(None, &resolution.bound_generics, gen_id);
-                                let Ty::Fn(expected_signature ) = resolved_ty.as_ref() else {
-                                    unreachable!()
-                                };
-                                // todo avoid infinite recursion (note that it might be a double recursion)
-                                let candidate = match self.get_named_item(ov_name) {
-                                    Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
-                                        self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
+                } else if let Some(default) = &param.default {
+                    match default {
+                        OverloadArgDefault::Value(cell_idx) => {
+                            additional_params.push(AdditionalParam::Value(*cell_idx));
+                        },
+                        OverloadArgDefault::OverloadResolve(OverloadResolve{name: ov_name}) => {
+                            let resolved_ty = param.ty.resolve(None, &resolution.bound_generics, gen_id);
+                            let Ty::Fn(expected_signature ) = resolved_ty.as_ref() else {
+                                unreachable!()
+                            };
+                            // todo avoid infinite recursion (note that it might be a double recursion)
+                            let candidate = match self.get_named_item(ov_name) {
+                                Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
+                                    self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
+                                }
+                                Some(_) => {
+                                    todo!()
+                                }
+                                None => {
+                                  todo!()  
+                                }
+                            };
+                            let candidate = match candidate{
+                                Ok(candidate) => candidate,
+                                Err(_) => {
+                                    if is_one_option {
+                                        // if there's only one overload, we can raise a better error here
+                                        // todo work the error into the error type
+                                        return Err(CompilationError::FailedDefaultResolution { fn_name: name.clone(), param_n: i, overload_name: ov_name.clone()});
                                     }
-                                    Some(_) => {
-                                        todo!()
-                                    }
-                                    None => {
-                                      todo!()  
-                                    }
-                                };
-                                let candidate = match candidate{
-                                    Ok(candidate) => candidate,
-                                    Err(_) => {
-                                        if is_one_option {
-                                            // if there's only one overload, we can raise a better error here
-                                            // todo work the error into the error type
-                                            return Err(CompilationError::FailedDefaultResolution { fn_name: name.clone(), param_n: i, overload_name: ov_name.clone()});
-                                        }
-                                        continue 'outer;
-                                    }
-                                };
-                                additional_params.push(AdditionalParam::OverloadResolve(candidate));
-                            }
+                                    continue 'outer;
+                                }
+                            };
+                            additional_params.push(AdditionalParam::OverloadResolve(candidate));
                         }
-                    } else {
-                        unreachable!()
                     }
+                } else {
+                    unreachable!()
                 }
             }
             // todo assert that all generics are resolved (not unknown)
@@ -807,10 +798,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             });
         };
         if resolved_overloads.is_empty() {
-            return Err(CompilationError::NoOverloads { name: name.clone(), arg_types: arg_types.clone()});
+            return Err(CompilationError::NoOverloads { name: name.clone(), arg_types: arg_types.to_owned()});
         }
         else if resolved_overloads.len() > 1 {
-            return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types: arg_types.clone()});
+            return Err(CompilationError::AmbiguousOverloads { name: name.clone(), arg_types: arg_types.to_owned()});
         }
         Ok(resolved_overloads.into_iter().next().unwrap())
     }
@@ -876,7 +867,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let mut arg_sinks = Vec::new();
                 for arg in args {
                     let mut arg_sink = Vec::new();
-                    let ty = self.feed_expression(&arg, &mut arg_sink)?;
+                    let ty = self.feed_expression(arg, &mut arg_sink)?;
                     arg_types.push(ty);
                     arg_sinks.push(arg_sink);
                 }
@@ -895,7 +886,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             }
                             let mut resolution = BindingResolution::new(generics.as_ref().map(|g| g.id), generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default());
                             for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
-                                if let Err(_) = resolution.assign(&field.raw_ty, arg_ty){
+                                if resolution.assign(&field.raw_ty, arg_ty).is_err(){
                                     return Err(CompilationError::ArgumentTypeMismatch { func_name: struct_name.clone(), param_n: i, param_name: Some(name.clone()), expected_ty: field.raw_ty.clone(), actual_ty: arg_ty.clone()}.with_pair(expr.pair.clone()));
                                 }
                             }
@@ -1037,7 +1028,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(&name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
                         sink.push(Command::Attr(field.idx));
@@ -1059,7 +1050,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }
             Expr::Tuple(items) => {
                 let tys = items
-                    .into_iter()
+                    .iter()
                     .rev()
                     .map(|item| self.feed_expression(item, sink))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1070,7 +1061,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(&name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
                         sink.push(Command::Variant(field.idx));
@@ -1083,7 +1074,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(&name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
                         sink.push(Command::VariantOpt(field.idx));
@@ -1112,7 +1103,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             Expr::Lookup(Lookup { obj, keys }) => {
                 let mut args = vec![obj.as_ref()];
                 args.extend(keys.iter());
-                self.feed_call(&Functor::Expr(Box::new(Expr::Ref(Cow::Borrowed("lookup")).with_pair(expr.pair.clone()))), args.into_iter(), sink)
+                self.feed_call(&Functor::Expr(Box::new(Expr::Ref(Cow::Borrowed("lookup")).with_pair(expr.pair.clone()))), args, sink)
             }
 
             _ => todo!("handle expression {:?}", expr.inner),
@@ -1128,12 +1119,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     pub fn feed_statement<'c: 's>(&mut self, stmt: &StmtWithPair<'c>, sink: &mut Vec<Command<'c>>) -> Result<(), CompilationErrorWithPair<'c, 's>> {
         match &stmt.inner {
             Stmt::Let(Let { var, ty, expr }) => {
-                let actual_ty = self.feed_expression(&expr, sink)?;
+                let actual_ty = self.feed_expression(expr, sink)?;
                 let declared_ty = if let Some(explicit_ty) = ty {
                     // we should check that actual_ty is a subtype of ty
                     let mut assignment = BindingResolution::primitive();
                     let ty = self.parse_type(explicit_ty, &None)?;
-                    if let Err(_) = assignment.assign(&ty, &actual_ty) {
+                    if assignment.assign(&ty, &actual_ty).is_err() {
                         return Err(CompilationError::LetTypeMismatch { var: var.clone(), expected_ty: ty, actual_ty }.with_pair(stmt.pair.clone()));
                     }
                     ty
@@ -1164,11 +1155,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let gen_params = if generic_params.is_empty() {
                     None
                 } else {
-                    Some(OverloadGenericParams::new(GenericSetId::unique(), generic_params.iter().map(|p| p.clone()).collect()))
+                    Some(OverloadGenericParams::new(GenericSetId::unique(), generic_params.to_vec()))
                 };
 
                 let raw_args = args
-                    .into_iter()
+                    .iter()
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
                             fn_arg.name.clone(),
@@ -1230,7 +1221,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 for body_stmt in body {
                     subscope.feed_statement(body_stmt, &mut subscope_sink)?;
                 }
-                let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
+                let actual_return_ty = subscope.feed_return(ret, &mut subscope_sink)?;
                 // todo check that return_tys match
                 let n_captures = subscope.pending_captures.len();
                 let n_cells = subscope.n_cells;
@@ -1261,7 +1252,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     (None, None)
                 } else {
                     let id = GenericSetId::unique();
-                    (Some(TemplateGenericSpecs::new(id, compound.generic_params.len())), Some(OverloadGenericParams::new(id, compound.generic_params.iter().map(|p| p.clone()).collect())))
+                    (Some(TemplateGenericSpecs::new(id, compound.generic_params.len())), Some(OverloadGenericParams::new(id, compound.generic_params.to_vec())))
                 };
                 let fields = compound
                     .fields

@@ -505,9 +505,9 @@ mod tests {
 
         let inner = runtime.allocate_ext(Sequence::new_concat(&runtime, vec![part1, part2, part3, part4]).unwrap()).unwrap().unwrap();
 
-        let slc = |start, end| Sequence::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end).unwrap().iter().map(|r| as_prim!(r, Int).unwrap().clone()).collect::<Vec<_>>();
+        let slc = |start, end| Sequence::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end).unwrap().iter().map(|r| *as_prim!(r, Int).unwrap()).collect::<Vec<_>>();
 
-        let full = vec![3, 1, 0, 9, 5, 92, 3, 45, 16, 4, 39, 24];
+        let full = [3, 1, 0, 9, 5, 92, 3, 45, 16, 4, 39, 24];
         for start_ind in 0..full.len(){
             for end_ind in start_ind..=full.len(){
                 if start_ind == 0 && end_ind == full.len(){
