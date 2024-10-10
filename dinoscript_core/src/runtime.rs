@@ -136,6 +136,16 @@ impl<'s> Runtime<'s> {
         rt.clone_ref(obj)
     }
 
+    pub fn clone_value(&self, obj: &DinoValue<'s>) -> Result<DinoValue<'s>, RuntimeViolation> {
+        match obj {
+            Ok(obj) => {
+                let obj = self.clone_ref(obj)?;
+                Ok(Ok(obj))
+            }
+            Err(e) => todo!(),
+        }
+    }
+
     pub fn deallocate(&self, size: usize) {
         let mut rt = self.0.lock().unwrap();
         rt.allocated_space -= size;
@@ -524,7 +534,7 @@ pub struct SystemRuntimeFrame<'p, 's, 'r>{
 }
 
 impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
-    fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
+    pub(crate) fn from_parent(parent: &'p RuntimeFrame<'s, 'r>, stack: DinoStack<'s>, tca: TailCallAvailability) -> Self {
         Self{
             stack,
             parent,
@@ -544,17 +554,17 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
         if let ControlFlow::Break(ret) = self.eval_pop_tca(TailCallAvailability::Disallowed)?{
             Ok(ret)
         } else {
-            unreachable!()
+            self.runtime().allocate(Err("stack is unexpectedly empty".into()))
         }
     }
 
-    pub fn call(&self, func: &AllocatedRef<'s>, arguments: Vec<AllocatedRef<'s>>) -> DinoResult<'s> {
+    pub fn call(&self, func: &AllocatedRef<'s>, arguments: &[DinoValue<'s>]) -> DinoResult<'s> {
         let (func_ref, arguments) = if let DinObject::BindBack(bind_back) = func.as_ref() {
             (&bind_back.func, bind_back.defaults.iter().map(|d| {
                 Ok(StackItem::Value(Ok(self.runtime().clone_ref(d)?)))
-            }).chain(arguments.into_iter().map(|a| Ok(StackItem::Value(Ok(a))))).collect::<Result<Vec<_>,_>>()?)
+            }).chain(arguments.into_iter().map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?)))).collect::<Result<Vec<_>, _>>()?)
         } else {
-            (func, arguments.into_iter().map(|a| StackItem::Value(Ok(a))).collect())
+            (func, arguments.into_iter().map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?))).collect::<Result<Vec<_>, _>>()?)
         };
         match func_ref.as_ref(){
             DinObject::UserFn(..) => {

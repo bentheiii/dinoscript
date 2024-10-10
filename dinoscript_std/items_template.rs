@@ -854,10 +854,10 @@ fn setup_items<'s>()->
                     if a.len() != b.len(){
                         return to_return_value(frame.runtime().bool(false));
                     }
-                    for (a_it, b_it) in a.iter().zip(b.iter()){
-                        let a_it = frame.runtime().clone_ref(a_it)?;
-                        let b_it = frame.runtime().clone_ref(b_it)?;
-                        let res = frame.call(&fn_eq, vec![a_it, b_it])?;
+                    for (a_it, b_it) in a.iter(&frame).zip(b.iter(&frame)){
+                        let a_it = a_it?;
+                        let b_it = b_it?;
+                        let res = frame.call(&fn_eq, &[a_it, b_it])?;
                         let res = rt_unwrap_value!(res);
                         let res = rt_as_prim!(res, Bool);
                         if !*res{
@@ -918,11 +918,8 @@ fn setup_items<'s>()->
                     let NormalizedIdx::Positive(idx) = seq.idx_from_int(*idx) else {
                         return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                     };
-                    let Some(item_ref) = seq.get(idx) else {
-                        return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
-                    };
-                    let ret = frame.runtime().clone_ref(item_ref)?;
-                    to_return_value(Ok(Ok(ret)))
+                    let item = seq.get(&frame, idx)?;
+                    to_return_value(Ok(item))
                 })),
             ))
         )
@@ -1000,8 +997,11 @@ fn setup_items<'s>()->
                     let seq_len = seq.len();
                     let ret = {
                         let mut v = Vec::with_capacity(seq_len);
-                        for item_ref in seq.iter(){
-                            let item_ref = frame.runtime().clone_ref(item_ref)?;
+                        for item_ref in seq.iter(&frame){
+                            let item_ref = match item_ref?{
+                                Ok(v) => v,
+                                other => return to_return_value(Ok(other)),
+                            };
                             v.push(item_ref);
                         }
                         v
