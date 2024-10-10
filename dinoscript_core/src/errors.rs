@@ -3,7 +3,9 @@ use derive_more::Debug;
 
 use crate::{dinobj::Allocatable, runtime::Runtime};
 
-pub type RuntimeViolation = ();
+#[derive(Debug)]
+pub struct RuntimeViolation(());
+
 #[derive(Debug)]
 pub enum RuntimeError{
     Borrowed(&'static str),

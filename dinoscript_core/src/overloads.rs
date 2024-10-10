@@ -32,7 +32,7 @@ impl<'s> BindingResolution<'s> {
                         }
         
                         assert_eq!(assign_args.len(), inp_args.len());
-                        assign_args.iter().zip(inp_args.iter()).map(|(a,i)| self.assign(a, i)).collect()
+                        assign_args.iter().zip(inp_args.iter()).try_for_each(|(a,i)| self.assign(a, i))
                     }
                     Ty::Unknown => {
                         Ok(())
@@ -42,7 +42,7 @@ impl<'s> BindingResolution<'s> {
             },
             Ty::Tuple(assign_tup) => {
                 if let Ty::Tuple(inp_tup) = input_type.as_ref(){
-                    assign_tup.iter().zip(inp_tup.iter()).map(|(a,i)| self.assign(a,i)).collect()
+                    assign_tup.iter().zip(inp_tup.iter()).try_for_each(|(a,i)| self.assign(a,i))
                 } else {
                     Err(())
                 }
@@ -58,7 +58,7 @@ impl<'s> BindingResolution<'s> {
                     Err(())
                 }
             }
-            Ty::Generic(Generic {idx, gen_id}) if self.gen_id.is_some_and(|gid| gen_id == gen_id)  => {
+            Ty::Generic(Generic {idx, gen_id}) if self.gen_id.is_some_and(|gid| gen_id == &gid)  => {
                 let bound_type = &self.bound_generics[*idx];
                 self.bound_generics[*idx] = combine_types(bound_type, input_type)?;
                 Ok(())
@@ -81,7 +81,7 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
                 if a_spec.args.len() != b_spec.args.len(){
                     unreachable!()
                 }
-                if a_spec.args.len() == 0{
+                if a_spec.args.is_empty(){
                     return Ok(a.clone())
                 }
                 let args = a_spec.args.iter().zip(b_spec.args.iter()).map(|(a,b)| combine_types(a,b)).collect::<Result<Vec<_>,_>>()?;
@@ -94,7 +94,7 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
             if a_tup.len() != b_tup.len(){
                 return Err(())
             }
-            if a_tup.len() == 0{
+            if a_tup.is_empty(){
                 return Ok(a.clone())
             }
             let tup = a_tup.iter().zip(b_tup.iter()).map(|(a,b)| combine_types(a,b)).collect::<Result<Vec<_>,_>>()?;

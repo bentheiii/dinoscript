@@ -225,7 +225,7 @@ fn parse_expr2<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
     return Ok(ret);
 }
 
-fn parse_expr1<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
+fn parse_expr1(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression1));
     let mut iter_rev = input.into_inner().rev();
     let mut expr = parse_expr2(iter_rev.next().unwrap())?;
@@ -265,7 +265,7 @@ static BIN_PRATT: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
         .op(Op::infix(Rule::BINARY_POW, Assoc::Right))
 });
 
-fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
+fn parse_expr(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression));
     (*BIN_PRATT)
         .map_primary(parse_expr1)
@@ -296,10 +296,9 @@ fn parse_expr<'s>(input: Pair<'s, Rule>) -> Result<ExprWithPair<'s>, ()> {
             }).with_pair(op_pair))
         })
         .parse(input.into_inner())
-        .map(|expr| expr)
 }
 
-fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
+fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()>{
     debug_assert!(matches!(input.as_rule(), Rule::function));
     let pair = input.clone();
     let mut inners = input.into_inner();
@@ -365,14 +364,14 @@ fn parse_function<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()>{
     }).with_pair(pair));
 }
 
-pub fn parse_raw_function<'s>(input: &'s str) -> Result<StmtWithPair<'s>, pest::error::Error<Rule>> {
+pub fn parse_raw_function(input: &str) -> Result<StmtWithPair<'_>, Box<pest::error::Error<Rule>>> {
     return parse_function(DinoParse::parse(Rule::function, input)?
         .next()
         .unwrap())
         .map_err(|_e| todo!());
 }
 
-fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()> {
+fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::declaration));
     let input_marker = input.clone();
     let mut inner = input.into_inner();
@@ -425,12 +424,12 @@ fn parse_statement<'s>(input: Pair<'s, Rule>) -> Result<StmtWithPair<'s>, ()> {
     }
 }
 
-fn parse_execution<'s>(input: Pair<'s, Rule>) -> Result<Vec<StmtWithPair<'s>>, ()> {
+fn parse_execution(input: Pair<'_, Rule>) -> Result<Vec<StmtWithPair<'_>>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::execution));
     return input.into_inner().map(parse_statement).collect();
 }
 
-pub fn parse_raw_statements<'s>(input: &'s str) -> Result<Vec<StmtWithPair<'s>>, pest::error::Error<Rule>> {
+pub fn parse_raw_statements(input: &str) -> Result<Vec<StmtWithPair<'_>>, Box<pest::error::Error<Rule>>> {
     return DinoParse::parse(Rule::header, input)?
         .next()
         .unwrap()

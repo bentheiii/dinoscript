@@ -20,6 +20,8 @@ pub enum DinObject<'s> {
     Tail,
 }
 
+unsafe impl Send for DinObject<'_> {}
+
 impl<'s> DinObject<'s>{
     pub fn allocated_size(&self) -> usize {
         size_of::<Self>() + match self {

@@ -1,19 +1,19 @@
 use std::{ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
-    ast::statement::{FnArgDefault, ResolveOverload, Stmt}, bytecode::{Command, SourceId}, compilation_scope::{
+    bytecode::{Command, SourceId}, compilation_scope::{
         self, ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate}, CompilationScope, NamedItem, NamedType
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, maybe_owned::MaybeOwned, sequence::{NormalizedIdx, Sequence}
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen}, sequence::{NormalizedIdx, Sequence}
 };
 // pragma: skip 2
 use std::collections::HashMap;
-use dinoscript_core::bytecode::to_in_code;
+use dinoscript_core::{bytecode::to_in_code, ast::statement::{FnArgDefault, ResolveOverload, Stmt}, maybe_owned::MaybeOwned};
 
 pub struct Builtins<'s> {
     pub int: Arc<Ty<'s>>,
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
     pub str: Arc<Ty<'s>>,
-    pub Sequence: Arc<TyTemplate<'s>>,
+    pub sequence: Arc<TyTemplate<'s>>,
 }
 
 impl<'s> Builtins<'s> {
@@ -34,7 +34,7 @@ impl<'s> Builtins<'s> {
     }
 
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
-        self.Sequence.instantiate(vec![ty])
+        self.sequence.instantiate(vec![ty])
     }
 }
 
@@ -56,7 +56,7 @@ impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
     }
 
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
-        self.Sequence.instantiate(vec![ty])
+        self.sequence.instantiate(vec![ty])
     }
 }
 
@@ -149,7 +149,7 @@ pub(crate) struct ItemsBuilder<'p, 's> {
     pub(crate) replacements: HashMap<&'static str, String>
 }
 
-fn signature_code_from_statement<'s>(stmt: &Stmt<'s>)->String{
+fn signature_code_from_statement(stmt: &Stmt<'_>)->String{
     let Stmt::Fn(func) = stmt else {
         panic!("expected function statement, got {:?}", stmt);
     };
@@ -192,7 +192,7 @@ fn signature_code_from_statement<'s>(stmt: &Stmt<'s>)->String{
 }
 
 impl<'p, 's> ItemsBuilder<'p, 's> {
-    fn add_item<'c>(&'c mut self, item: SetupItem<'s, Builtins<'s>>) -> () {
+    fn add_item<'c>(&'c mut self, item: SetupItem<'s, Builtins<'s>>) {
         item.push_to_compilation(&mut self.scope, self.source_id, || {
             let ret = self.next_id;
             self.next_id += 1;
@@ -200,7 +200,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         });
     }
 
-    fn build_source<'c>(&'c mut self, replacement_name: &'static str, code: &'static str) -> () {
+    fn build_source(&mut self, replacement_name: &'static str, code: &'static str) {
         let func_stmt = dinoscript_core::grammar::parse_raw_function(code).unwrap();
         let mut sink = Vec::new();
         if let Err(err) =self.scope.feed_statement(&func_stmt, &mut sink){
@@ -239,9 +239,9 @@ fn prepare_build<'p>()->ItemsBuilder<'p, 'static>{
 // pragma:replace-end
 
 pub(crate) const SOURCE_ID: SourceId = "core";
-pub(crate) fn pre_items_setup<'p, 's>(scope: &mut CompilationScope<'p, 's, Builtins<'s>>)->Builtins<'s>{
-    fn register_type<'p, 's, B>(
-        scope: &mut CompilationScope<'p, 's, B>,
+pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<'s>>)->Builtins<'s>{
+    fn register_type<'s, B>(
+        scope: &mut CompilationScope<'_, 's, B>,
         name: &'s str,
         template: TyTemplate<'s>,
     ) -> Arc<TyTemplate<'s>> {
@@ -261,10 +261,10 @@ pub(crate) fn pre_items_setup<'p, 's>(scope: &mut CompilationScope<'p, 's, Built
         TemplateGenericSpecs::new(GenericSetId::unique(), 1)
     )));
 
-    Builtins { int, float, bool, str, Sequence: sequence }
+    Builtins { int, float, bool, str, sequence }
 }
 
-fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
+fn to_return_value(result: DinoResult<'_>)->SourceFnResult<'_>{
     match result {
         Ok(v) => Ok(ControlFlow::Break(v)),
         Err(e) => Err(e),
@@ -274,11 +274,12 @@ fn to_return_value<'s>(result: DinoResult<'s>)->SourceFnResult<'s>{
 
 
 pub(crate)
-fn setup_items<'a, 's>()->
 // pragma:replace-start
+fn setup_items<'a, 's>()->
 ItemsBuilder<'a, 's>
 // pragma:replace-with-raw
 /*
+fn setup_items<'s>()->
  Vec<SetupItem<'s, Builtins<'s>>>
 */
 // pragma:replace-end

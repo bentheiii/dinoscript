@@ -18,7 +18,7 @@ pub struct StdPack;
 impl DinoPack for StdPack {
     type Builtins<'s> = Builtins<'s>;
 
-    fn setup_compiler<'p, 's>(&self, scope: &mut CompilationScope<'p, 's, Self::Builtins<'s>>) {
+    fn setup_compiler<'s>(&self, scope: &mut CompilationScope<'_, 's, Self::Builtins<'s>>) {
         let source_id = SOURCE_ID;
 
         let builtins = pre_items_setup(scope);
@@ -42,7 +42,7 @@ impl DinoPack for StdPack {
         let mut items = Vec::new();
 
         for item in setup_items() {
-            items.push(item.to_dinobject(&frame.runtime).unwrap());
+            items.push(item.to_dinobject(frame.runtime).unwrap());
         }
 
         frame.add_source(source_id, items);

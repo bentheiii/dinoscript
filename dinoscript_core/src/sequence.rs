@@ -238,9 +238,10 @@ impl<'s> Sequence<'s> {
 
     pub fn is_empty(&self) -> bool {
         if let Self::Array(array) = self {
-            return array.is_empty();
+            array.is_empty()
+        } else {
+            false
         }
-        return false;
     }
 
     pub fn iter<'a>(&'a self)->Box<dyn Iterator<Item=&'a AllocatedRef<'s>> + 'a>{

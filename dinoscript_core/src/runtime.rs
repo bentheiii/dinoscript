@@ -20,6 +20,8 @@ struct SharedRuntime<'s> {
     nil: Option<AllocatedRef<'s>>,
 }
 
+unsafe impl Send for SharedRuntime<'_> {}
+
 pub(crate) const REPORT_MEMORY_USAGE: bool = false;
 pub(crate) const INTERN_CONSTS: bool = true;
 
@@ -36,7 +38,9 @@ impl<'s> SharedRuntime<'s>{
     }
 
     fn clone_true(&mut self) -> DinoResult<'s> {
-        assert!(INTERN_CONSTS);
+        if !INTERN_CONSTS{
+            unreachable!()
+        }
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.true_.as_ref().unwrap();
@@ -44,7 +48,9 @@ impl<'s> SharedRuntime<'s>{
     }
 
     fn clone_false(&mut self) -> DinoResult<'s> {
-        assert!(INTERN_CONSTS);
+        if !INTERN_CONSTS{
+            unreachable!()
+        }
         self.allocated_space += AllocatedRef::SIZE;
         // todo check against max size
         let r = self.false_.as_ref().unwrap();
@@ -136,6 +142,12 @@ impl<'s> Runtime<'s> {
         if REPORT_MEMORY_USAGE {
             println!("total allocated space: {} bytes", rt.allocated_space);
         }
+    }
+}
+
+impl Default for Runtime<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -235,13 +247,13 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     match func_ref.as_ref() {
                         DinObject::UserFn(_) => {
                             // todo the frame could hold a ref to the user_fn instead of cloning the captures
-                            let func = self.runtime.clone_ref(&func_ref)?;
+                            let func = self.runtime.clone_ref(func_ref)?;
                             let mut child_frame = self.child(func);
                             let val = child_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
                         }
                         DinObject::SourceFn(source_fn) => {
-                            let mut frame = SystemRuntimeFrame::from_parent(&self, arguments, tca);
+                            let mut frame = SystemRuntimeFrame::from_parent(self, arguments, tca);
                             let ret = source_fn(&mut frame)?;
                             match ret {
                                 ControlFlow::Break(val) => {
@@ -257,7 +269,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             let Some(user_fn) = self.user_fn.as_ref() else {
                                 panic!("tail call with no user function")
                             };
-                            let func = self.runtime.clone_ref(&user_fn)?;
+                            let func = self.runtime.clone_ref(user_fn)?;
                             let mut new_frame = self.child(func);
                             let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
@@ -545,7 +557,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
         };
         match func_ref.as_ref(){
             DinObject::UserFn(..) => {
-                let func = self.runtime().clone_ref(&func_ref)?;
+                let func = self.runtime().clone_ref(func_ref)?;
                 let mut new_frame = self.parent.child(func);
                 new_frame.exec_self_fn(arguments)
             }
@@ -566,7 +578,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                 let Some(user_fn) = self.parent.user_fn.as_ref() else {
                     panic!("tail call with no user function")
                 };
-                let func = self.runtime().clone_ref(&user_fn)?;
+                let func = self.runtime().clone_ref(user_fn)?;
                 let mut new_frame = self.parent.child(func);
                 new_frame.exec_self_fn(arguments)
             }
@@ -592,7 +604,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             if tca.is_allowed() && self.tca.is_allowed() && self.parent.user_fn.as_ref().is_some_and(|t| Arc::ptr_eq(&func.0, &t.0)){
                                 return Ok(ControlFlow::Continue(arguments));
                             }
-                            let func = self.runtime().clone_ref(&func_ref)?;
+                            let func = self.runtime().clone_ref(func_ref)?;
                             let mut new_frame = self.parent.child(func);
                             let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
@@ -617,7 +629,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r>{
                             if tca.is_allowed() && self.tca.is_allowed(){
                                 return Ok(ControlFlow::Continue(arguments));
                             }
-                            let func = self.runtime().clone_ref(&user_fn)?;
+                            let func = self.runtime().clone_ref(user_fn)?;
                             let mut new_frame = self.parent.child(func);
                             let val = new_frame.exec_self_fn(arguments)?;
                             self.stack.push(StackItem::Value(val));
