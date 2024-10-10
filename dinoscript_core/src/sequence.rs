@@ -43,6 +43,10 @@ impl<'s> Sequence<'s> {
     pub fn iter<'a>(&'a self)->Box<dyn Iterator<Item=&'a AllocatedRef<'s>> + 'a>{
         self.0.iter()
     }
+
+    pub fn is_array(&self)->bool{
+        matches!(self.0, SequenceInner::Array(_))
+    }
 }
 
 #[derive(Debug)]

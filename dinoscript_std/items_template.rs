@@ -961,6 +961,45 @@ fn setup_items<'s>()->
             ))
         )
         ,
+        // pragma:unwrap
+        builder.add_item(
+            SetupItem::Function(SetupFunction::new(
+                |bi: &Builtins<'_>| {
+                    let gen = SignatureGen::new(vec!["T"]);
+                    Signature::new_generic(
+                        "to_array",
+                        vec![
+                            arg_gen!(bi, gen, seq: Sequence<T>),
+                        ],
+                        ty_gen!(bi, gen, Sequence<T>),
+                        gen,
+                    )
+                },
+                SetupFunctionBody::System(Box::new(|frame| {
+                    let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                    let seq = rt_as_ext!(seq_ref, Sequence);
+                    
+                    if seq.is_array(){
+                        return to_return_value(Ok(Ok(frame.runtime().clone_ref(&seq_ref)?)));
+                    }
+                    
+                    let seq_len = seq.len();
+                    let ret = {
+                        let mut v = Vec::with_capacity(seq_len);
+                        for item_ref in seq.iter(){
+                            let item_ref = frame.runtime().clone_ref(item_ref)?;
+                            v.push(item_ref);
+                        }
+                        v
+                    };
+
+                    let ret = Sequence::new_array(ret);
+                    to_return_value(frame.runtime().allocate_ext(ret))
+                })),
+            ))
+        )
+        ,
         // endregion sequence
         // region:int-1
         // pragma:replace-start

@@ -107,7 +107,7 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
             } else if let Some(whole) = to_parse.parse::<f64>().ok() {
                 Ok(Expr::LitFloat(whole).with_pair(inner))
             } else {
-                Err(())
+                unreachable!() // todo is this unreachable?
             }
         }
         Rule::expression => {
