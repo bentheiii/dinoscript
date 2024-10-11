@@ -55,6 +55,12 @@ pub enum CompilationError<'c, 's> {
         param_n: usize,
         overload_name: Cow<'s, str>,
     },
+    VariantTypeMismtach {
+        union_name: Cow<'s, str>,
+        variant_name: Cow<'s, str>,
+        expected_ty: Arc<Ty<'s>>,
+        actual_ty: Arc<Ty<'s>>,
+    },
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -151,6 +157,16 @@ impl Display for CompilationError<'_, '_> {
                 f,
                 "Failed to resolve default value for parameter {} in function {} overload {}",
                 param_n, fn_name, overload_name
+            ),
+            CompilationError::VariantTypeMismtach {
+                union_name,
+                variant_name,
+                expected_ty,
+                actual_ty,
+            } => write!(
+                f,
+                "Type mismatch in union {}: expected type of variant {} to be {}, got {}",
+                union_name, variant_name, expected_ty, actual_ty
             ),
         }
     }

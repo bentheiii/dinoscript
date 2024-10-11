@@ -311,3 +311,8 @@ fn test_script_043() {
 fn test_script_044() {
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_045() {
+    test_script_from_name(function_name!());
+}

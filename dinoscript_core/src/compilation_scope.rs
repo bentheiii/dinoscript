@@ -169,6 +169,7 @@ pub mod ty {
     impl<'s> Ty<'s> {
         pub fn resolve(
             self: &Arc<Self>,
+            // todo tail should really be template
             tail: Option<&Arc<Self>>,
             generic_args: &Vec<Arc<Self>>,
             gen_id: Option<GenericSetId>,
@@ -304,7 +305,7 @@ pub mod ty {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NamedItem<'s> {
     Overloads(Overloads<'s>),
     Variable(Variable<'s>),
@@ -332,7 +333,7 @@ impl Display for NamedType<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Overloads<'s> {
     pub overloads: Vec<Overload<'s>>,
 }
@@ -349,8 +350,7 @@ impl<'s> OverloadGenericParams<'s> {
     }
 }
 
-// todo why is this clone?
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Overload<'s> {
     generic_params: Option<OverloadGenericParams<'s>>,
     args: Vec<OverloadArg<'s>>,
@@ -1062,19 +1062,28 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 ..
                             }) = named_template.as_ref()
                             {
-                                if generics.is_some() {
-                                    todo!()
-                                }
                                 let Some((variant_tag, _, variant)) = fields.get_full(variant_name) else {
                                     todo!("variant not found")
                                 };
                                 if arg_sinks.len() != 1 {
                                     todo!("wrong number of arguments")
                                 }
+                                let generic_id = named_template.generic_id();
+                                let mut resolution = BindingResolution::new(
+                                    generic_id,
+                                    generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default(),
+                                );
+                                let expected_ty = variant.raw_ty.clone(); // todo we should resolve this
+                                let arg_ty = arg_types.first().unwrap();
+                                if resolution.assign(&expected_ty, arg_ty).is_err() {
+                                    return Err(CompilationError::VariantTypeMismtach { union_name: obj_name.clone(), variant_name: variant_name.clone(), expected_ty , actual_ty: arg_ty.clone() }.with_pair(expr.pair.clone()));
+                                }
+                                let resolved_ty = named_template.instantiate(resolution.bound_generics.into_iter().collect());
+                                
                                 // todo assert that the type is correct
                                 sink.extend(arg_sinks.into_iter().next().unwrap());
                                 sink.push(Command::Variant(variant_tag));
-                                return Ok(named_template.instantiate(vec![]));
+                                return Ok(resolved_ty);
                             }
                         }
                     }

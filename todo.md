@@ -6,3 +6,5 @@
 * generic specialization
 * intern zero and one
 * limit resolution default? we can probably make an infinite loop with this
+* cross-recursive types
+* function equality/hashing

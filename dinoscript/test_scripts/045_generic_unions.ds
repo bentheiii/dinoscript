@@ -1,0 +1,29 @@
+union Foo<T, U>(
+    i: int,
+    t: Sequence<T>,
+    u: (U)->(bool)
+)
+
+fn do_t<T, U>(f: Foo<T, U>)->T{
+    f!:t[0]
+}
+
+fn do_u<T>(f: Foo<T, int>)->bool{
+    f!:u(-3)
+}
+
+fn is_postive(n: int)->bool{
+    n > 0
+}
+
+fn main()->bool{
+    let f_t = Foo::t([3, 2, 1]);
+    let f_u = Foo::u(is_postive);
+    let f_i = Foo::i(7);
+
+    assert(f_t!:t == [3, 2, 1])
+    && assert(f_u!:u(3))
+    && assert(f_i!:i == 7)
+    && assert(do_t(f_t) == 3)
+    && assert(do_u(f_u) == false)
+}
