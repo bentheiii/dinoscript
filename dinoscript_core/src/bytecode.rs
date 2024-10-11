@@ -19,12 +19,12 @@ pub enum Command<'s> {
     MakePending(usize),             // MPE
     BindBack(usize),                // BKB
 
-    Attr(usize),       // ATR
-    Struct(usize),     // STR
-    Variant(usize),    // VAR
-    VariantAccess(usize), // VAC
+    Attr(usize),             // ATR
+    Struct(usize),           // STR
+    Variant(usize),          // VAR
+    VariantAccess(usize),    // VAC
     VariantAccessOpt(usize), // VAP
-    Array(usize),      // ARR
+    Array(usize),            // ARR
 }
 
 impl<'s> Command<'s> {

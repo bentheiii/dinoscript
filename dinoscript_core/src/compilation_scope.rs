@@ -139,6 +139,12 @@ pub mod ty {
         pub idx: usize,
     }
 
+    impl<'s> Field<'s> {
+        pub fn new(raw_ty: Arc<Ty<'s>>, idx: usize) -> Self {
+            Self { raw_ty, idx }
+        }
+    }
+
     #[derive(Debug, Clone)]
     pub enum CompoundKind {
         Struct,
@@ -542,6 +548,7 @@ pub trait Builtins<'s> {
     fn bool(&self) -> Arc<Ty<'s>>;
     fn str(&self) -> Arc<Ty<'s>>;
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
+    fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
 }
 enum AdditionalParam<'s> {
     Value(usize),
@@ -1051,7 +1058,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                 }
 
-                if let Expr::Attr(Attr { obj, name: variant_name }) = &expr.as_ref().inner {
+                if let Expr::Attr(Attr {
+                    obj,
+                    name: variant_name,
+                }) = &expr.as_ref().inner
+                {
                     if let Expr::Ref(obj_name) = &obj.as_ref().inner {
                         let named_item = self.get_named_item(obj_name);
                         if let Some(RelativeNamedItem::Type(NamedType::Template(named_template))) = named_item {
@@ -1076,10 +1087,17 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 let expected_ty = variant.raw_ty.clone(); // todo we should resolve this
                                 let arg_ty = arg_types.first().unwrap();
                                 if resolution.assign(&expected_ty, arg_ty).is_err() {
-                                    return Err(CompilationError::VariantTypeMismtach { union_name: obj_name.clone(), variant_name: variant_name.clone(), expected_ty , actual_ty: arg_ty.clone() }.with_pair(expr.pair.clone()));
+                                    return Err(CompilationError::VariantTypeMismtach {
+                                        union_name: obj_name.clone(),
+                                        variant_name: variant_name.clone(),
+                                        expected_ty,
+                                        actual_ty: arg_ty.clone(),
+                                    }
+                                    .with_pair(expr.pair.clone()));
                                 }
-                                let resolved_ty = named_template.instantiate(resolution.bound_generics.into_iter().collect());
-                                
+                                let resolved_ty =
+                                    named_template.instantiate(resolution.bound_generics.into_iter().collect());
+
                                 // todo assert that the type is correct
                                 sink.extend(arg_sinks.into_iter().next().unwrap());
                                 sink.push(Command::Variant(variant_tag));

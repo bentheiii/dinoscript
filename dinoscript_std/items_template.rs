@@ -2,7 +2,10 @@ use dinoscript_core::{
     bytecode::{Command, SourceId},
     compilation_scope::{
         self,
-        ty::{BuiltinTemplate, Fn, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate},
+        ty::{
+            BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
+            Ty, TyTemplate,
+        },
         CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
@@ -10,7 +13,7 @@ use dinoscript_core::{
     sequence::{NormalizedIdx, Sequence},
     stack::Stack,
 };
-use std::{ops::ControlFlow, sync::Arc};
+use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt},
@@ -27,6 +30,7 @@ pub struct Builtins<'s> {
 
     pub sequence: Arc<TyTemplate<'s>>,
     pub stack: Arc<TyTemplate<'s>>,
+    pub optional: Arc<TyTemplate<'s>>,
 }
 
 impl<'s> Builtins<'s> {
@@ -53,6 +57,10 @@ impl<'s> Builtins<'s> {
     fn stack(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.stack.instantiate(vec![ty])
     }
+
+    fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.optional.instantiate(vec![ty])
+    }
 }
 
 impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
@@ -75,6 +83,10 @@ impl<'s> compilation_scope::Builtins<'s> for Builtins<'s> {
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.sequence.instantiate(vec![ty])
     }
+
+    fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.optional.instantiate(vec![ty])
+    }
 }
 
 macro_rules! ty_gen {
@@ -95,6 +107,9 @@ macro_rules! ty_gen {
     };
     ($b:ident, $g:expr, Stack<$ty:tt>) => {
         $b.stack(ty_gen!($b, $g, $ty))
+    };
+    ($b:ident, $g:expr, Optional<$ty:tt>) => {
+        $b.optional(ty_gen!($b, $g, $ty))
     };
     ($b:ident, $g:expr, $id:ident) => {
         $g.get_gen(stringify!($id))
@@ -309,6 +324,25 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             TemplateGenericSpecs::new(GenericSetId::unique(), 1),
         )),
     );
+    let optional_gen_id = GenericSetId::unique();
+    let optional = register_type(
+        scope,
+        "Optional",
+        TyTemplate::Compound(CompoundTemplate::new(
+            "Optional",
+            CompoundKind::Union,
+            Some(TemplateGenericSpecs::new(optional_gen_id, 1)),
+            vec![
+                (
+                    "Some".into(),
+                    Field::new(Arc::new(Ty::Generic(Generic::new(0, optional_gen_id))), 0),
+                ),
+                ("None".into(), Field::new(Arc::new(Ty::Tuple(vec![])), 1)),
+            ]
+            .into_iter()
+            .collect(),
+        )),
+    );
 
     Builtins {
         int,
@@ -317,6 +351,7 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
         str,
         sequence,
         stack,
+        optional,
     }
 }
 
@@ -955,6 +990,16 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             "neq",
             r#"fn neq<T0, T1>(x: T0, y: T1, fn_eq: (T0, T1)->(bool) ~= eq)->bool{
                 !fn_eq(x, y)
+            }"#,
+        ), // pragma:replace-end
+        // endregion:generic-1
+        // region:optional-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "some",
+            r#"fn some<T>(value: T)->Optional<T>{
+                Optional::Some(value)
             }"#,
         ), // pragma:replace-end
            // endregion:generic-1

@@ -497,7 +497,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     unreachable!()
                 };
                 let Ok(val) = val else { todo!() };
-                let variant = self.runtime.allocate(Ok(DinObject::Variant(VariantObject::new(*tag, val))))?;
+                let variant = self
+                    .runtime
+                    .allocate(Ok(DinObject::Variant(VariantObject::new(*tag, val))))?;
                 self.stack.push(StackItem::Value(variant));
                 Ok(ControlFlow::Break(()))
             }
@@ -510,7 +512,8 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match val.as_ref() {
                     DinObject::Variant(variant) => {
                         if variant.tag() == *expected_tag {
-                            self.stack.push(StackItem::Value(Ok(self.runtime.clone_ref(variant.obj())?)));
+                            self.stack
+                                .push(StackItem::Value(Ok(self.runtime.clone_ref(variant.obj())?)));
                             Ok(ControlFlow::Break(()))
                         } else {
                             todo!()
