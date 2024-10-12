@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     bytecode::Command,
-    errors::{AllocatedRuntimeError, RuntimeViolation},
+    errors::{AllocatedErrRef, AllocatedRuntimeError, RuntimeViolation},
     runtime::{Runtime, SystemRuntimeFrame, REPORT_MEMORY_USAGE},
 };
 
@@ -134,7 +134,7 @@ pub trait ExtendedObject: Debug {
     fn allocated_size(&self) -> usize;
 }
 
-pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedRuntimeError<'s>>;
+pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedErrRef<'s>>;
 pub type DinoResult<'s> = Result<DinoValue<'s>, RuntimeViolation>;
 
 #[derive(Debug)]
@@ -147,8 +147,16 @@ pub type DinoStack<'s> = Vec<StackItem<'s>>;
 
 #[derive(Debug)]
 pub struct Pending<'s> {
-    pub func: AllocatedRef<'s>,
+    pub functor: PendingFunctor<'s>,
     pub arguments: Vec<StackItem<'s>>,
+}
+
+#[derive(Debug)]
+pub enum PendingFunctor<'s> {
+    Function(AllocatedRef<'s>),
+    Variant(usize),
+    VariantSafe(usize),
+    Attr(usize),
 }
 
 #[derive(Debug)]

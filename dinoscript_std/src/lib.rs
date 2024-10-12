@@ -34,6 +34,7 @@ impl DinoPack for StdPack {
         let mut items = Vec::new();
 
         for item in setup_items() {
+            // todo don't unwrap here
             items.push(item.to_dinobject(frame.runtime).unwrap());
         }
 

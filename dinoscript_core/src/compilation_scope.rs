@@ -321,7 +321,13 @@ pub enum NamedItem<'s> {
 #[derive(Debug, Clone)]
 pub struct Variable<'s> {
     ty: Arc<Ty<'s>>,
-    cell_idx: usize,
+    loc: Location,
+}
+
+impl<'s> Variable<'s> {
+    pub fn new(ty: Arc<Ty<'s>>, loc: Location) -> Self {
+        Self { ty, loc }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -361,7 +367,7 @@ pub struct Overload<'s> {
     generic_params: Option<OverloadGenericParams<'s>>,
     args: Vec<OverloadArg<'s>>,
     return_ty: Arc<Ty<'s>>,
-    loc: OverloadLoc,
+    loc: Location,
     min_args_n: usize,
 }
 
@@ -381,7 +387,7 @@ impl<'s> Overload<'s> {
         generic_params: Option<OverloadGenericParams<'s>>,
         args: Vec<OverloadArg<'s>>,
         return_ty: Arc<Ty<'s>>,
-        loc: OverloadLoc,
+        loc: Location,
     ) -> Self {
         let min_args_n = args.iter().take_while(|arg| arg.default.is_none()).count();
         Self {
@@ -393,19 +399,23 @@ impl<'s> Overload<'s> {
         }
     }
 
-    pub fn loc(&self) -> &OverloadLoc {
+    pub fn loc(&self) -> &Location {
         &self.loc
+    }
+
+    pub fn set_loc(&mut self, loc: Location) {
+        self.loc = loc;
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum OverloadLoc {
+pub enum Location {
     Cell(usize),
     // this will only be in the root scope
     System(SystemLoc),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct SystemLoc {
     pub source: SourceId,
     pub id: usize,
@@ -589,6 +599,16 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
             }
         }
     }
+
+    pub fn add_value(&mut self, name: Cow<'s, str>, ty: Arc<Ty<'s>>, loc: Location) {
+        let existing_name = self.names.entry(name);
+        match existing_name {
+            Entry::Occupied(_) => todo!(),
+            Entry::Vacant(entry) => {
+                entry.insert(NamedItem::Variable(Variable::new(ty, loc)));
+            }
+        }
+    }
 }
 
 impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
@@ -727,9 +747,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         .map(|overload| RelativeOverload {
                             overload,
                             loc: match &overload.loc {
-                                OverloadLoc::Cell(cell_idx) if self.is_root() => RelativeLocation::Global(*cell_idx),
-                                OverloadLoc::Cell(cell_idx) => RelativeLocation::Local(*cell_idx),
-                                OverloadLoc::System(system_loc) => RelativeLocation::System(system_loc.clone()),
+                                Location::Cell(cell_idx) if self.is_root() => RelativeLocation::Global(*cell_idx),
+                                Location::Cell(cell_idx) => RelativeLocation::Local(*cell_idx),
+                                Location::System(system_loc) => RelativeLocation::System(system_loc.clone()),
                             },
                         })
                         .collect(),
@@ -746,9 +766,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 Some(RelativeNamedItem::Overloads(rel_overloads))
             }
             Some(NamedItem::Variable(variable)) => {
-                let loc = match variable.cell_idx {
-                    cell_idx if self.is_root() => RelativeLocation::Global(cell_idx),
-                    cell_idx => RelativeLocation::Local(cell_idx),
+                let loc = match variable.loc {
+                    Location::Cell(cell_idx) if self.is_root() => RelativeLocation::Global(cell_idx),
+                    Location::Cell(cell_idx) => RelativeLocation::Local(cell_idx),
+                    Location::System(system_loc) => RelativeLocation::System(system_loc.clone()),
                 };
                 Some(RelativeNamedItem::Variable(RelativeNamedItemVariable {
                     loc,
@@ -785,11 +806,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         // [argN, ..., arg0]
         // where arg0 is the first argument
         for (name, ty) in params {
+            let cell_idx = self.get_cell_idx();
             let variable = Variable {
                 ty,
-                cell_idx: self.get_cell_idx(),
+                loc: Location::Cell(cell_idx),
             };
-            sink.push(Command::PopToCell(variable.cell_idx));
+            sink.push(Command::PopToCell(cell_idx));
             self.names.insert(name, NamedItem::Variable(variable));
         }
     }
@@ -1386,7 +1408,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     var.clone(),
                     NamedItem::Variable(Variable {
                         ty: declared_ty,
-                        cell_idx,
+                        loc: Location::Cell(cell_idx),
                     }),
                 );
                 Ok(())
@@ -1460,7 +1482,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
 
                 // todo check that we don't shadow a variable
                 let gen_id = gen_params.as_ref().map(|g| g.gen_id);
-                let new_overload = Overload::new(gen_params, args, expected_return_ty, OverloadLoc::Cell(fn_cell_idx));
+                let new_overload = Overload::new(gen_params, args, expected_return_ty, Location::Cell(fn_cell_idx));
                 self.add_overload(name.clone(), new_overload);
 
                 let mut subscope = self.child(gen_id);

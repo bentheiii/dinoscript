@@ -9,14 +9,14 @@ pub struct RuntimeViolation(());
 #[derive(Debug)]
 pub enum RuntimeError {
     Borrowed(&'static str),
-    Owned { msg: Arc<str>, is_first_owner: bool },
+    Owned(String),
 }
 
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Borrowed(s) => write!(f, "{}", s),
-            Self::Owned { msg, .. } => write!(f, "{}", msg),
+            Self::Owned(s) => write!(f, "{}", s),
         }
     }
 }
@@ -29,10 +29,7 @@ impl From<&'static str> for RuntimeError {
 
 impl From<String> for RuntimeError {
     fn from(s: String) -> Self {
-        Self::Owned {
-            msg: Arc::from(s),
-            is_first_owner: true,
-        }
+        Self::Owned(s)
     }
 }
 
@@ -43,6 +40,8 @@ pub struct AllocatedRuntimeError<'s> {
     runtime: Runtime<'s>,
 }
 
+
+
 impl<'s> Error for AllocatedRuntimeError<'s> {}
 
 impl<'s> Display for AllocatedRuntimeError<'s> {
@@ -50,28 +49,50 @@ impl<'s> Display for AllocatedRuntimeError<'s> {
         write!(f, "{}", self.err)
     }
 }
-
-impl<'s> Allocatable<'s> for RuntimeError {
-    type Output = AllocatedRuntimeError<'s>;
-
-    fn obj_size(&self) -> usize {
-        std::mem::size_of::<Self::Output>()
-            + match self {
-                Self::Owned {
-                    msg,
-                    is_first_owner: true,
-                } => msg.len(),
-                _ => 0,
-            }
-    }
-
-    fn allocate(self, runtime: Runtime<'s>) -> Self::Output {
-        AllocatedRuntimeError { err: self, runtime }
-    }
-}
-
 impl<'s> Drop for AllocatedRuntimeError<'s> {
     fn drop(&mut self) {
         self.runtime.deallocate(self.err.obj_size());
     }
 }
+
+#[derive(Debug)]
+pub struct AllocatedErrRef<'s>(Arc<AllocatedRuntimeError<'s>>);
+
+impl<'s> AllocatedErrRef<'s> {
+    pub fn new(ptr: Arc<AllocatedRuntimeError<'s>>) -> Self {
+        Self(ptr)
+    }
+
+    pub(crate) unsafe fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl Display for AllocatedErrRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.err)
+    }
+}
+
+impl<'s> Drop for AllocatedErrRef<'s> {
+    fn drop(&mut self) {
+        self.0.runtime.deallocate(self.0.err.obj_size());
+    }
+}
+
+impl<'s> Allocatable<'s> for RuntimeError {
+    type Output = AllocatedErrRef<'s>;
+
+    fn obj_size(&self) -> usize {
+        std::mem::size_of::<AllocatedRuntimeError>()
+        + match self {
+            Self::Owned(s) => s.len(),
+            _ => 0,
+        }
+    }
+
+    fn allocate(self, runtime: Runtime<'s>) -> Self::Output {
+        Self::Output::new(Arc::new(AllocatedRuntimeError { err: self, runtime }))
+    }
+}
+

@@ -253,7 +253,7 @@ impl<'s> SequenceInner<'s> {
             debug_assert!(!matches!(part_seq, Self::Concat(_)), "concat should not be nested");
             debug_assert!(!part_seq.is_empty(), "concat should not have empty parts");
             end_idx += part_seq.len();
-            let part = runtime.clone_ref(part)?;
+            let part = runtime.clone_ok_ref(part)?;
             parts.push(SequenceConcatPart { seq: part, end_idx });
         }
         debug_assert!(parts.len() != 1, "concat should have at least two parts, or be empty");
@@ -288,7 +288,7 @@ impl<'s> SequenceInner<'s> {
         );
         match source_seq {
             Self::Slice(slc) => {
-                let source = runtime.clone_ref(&slc.source)?;
+                let source = runtime.clone_ok_ref(&slc.source)?;
                 Ok(Self::Slice(SequenceSlice {
                     source,
                     start_idx: slc.start_idx + start_idx,
@@ -326,7 +326,7 @@ impl<'s> SequenceInner<'s> {
                 let Some(orig) = array.get(index) else {
                     return frame.runtime().allocate(Err("Index out of bounds".into()));
                 };
-                Ok(Ok(frame.runtime().clone_ref(orig)?))
+                Ok(Ok(frame.runtime().clone_ok_ref(orig)?))
             }
             Self::Concat(parts) => {
                 if index >= parts.last().end_idx {
@@ -388,7 +388,7 @@ impl<'s> SequenceInner<'s> {
         frame: &'a SystemRuntimeFrame<'_, 's, '_>,
     ) -> Box<dyn Iterator<Item = DinoResult<'s>> + 'a> {
         match self {
-            Self::Array(array) => Box::new(array.iter().map(|r| Ok(Ok(frame.runtime().clone_ref(r)?)))),
+            Self::Array(array) => Box::new(array.iter().map(|r| Ok(Ok(frame.runtime().clone_ok_ref(r)?)))),
             Self::Concat(array) => {
                 let mut iter = Vec::with_capacity(array.len());
                 for part in array.iter() {
@@ -403,7 +403,7 @@ impl<'s> SequenceInner<'s> {
                     Self::Array(array) => Box::new(
                         array
                             .iter()
-                            .map(|r| Ok(Ok(frame.runtime().clone_ref(r)?)))
+                            .map(|r| Ok(Ok(frame.runtime().clone_ok_ref(r)?)))
                             .skip(slc.start_idx)
                             .take(slc.end_idx - slc.start_idx),
                     ),
@@ -723,7 +723,7 @@ mod tests {
             .unwrap();
 
         let slc = |start, end| {
-            SequenceInner::new_slice(&runtime, runtime.clone_ref(&inner).unwrap(), start, end)
+            SequenceInner::new_slice(&runtime, runtime.clone_ok_ref(&inner).unwrap(), start, end)
                 .unwrap()
                 .iter(&frame)
                 .map(|r| *as_prim!(r.unwrap().unwrap(), Int).unwrap())

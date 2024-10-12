@@ -17,15 +17,15 @@ pub mod utils {
     use crate::{
         bytecode::SourceId,
         compilation_scope::{
-            ty::{Generic, GenericSetId, Ty},
-            CompilationScope, Overload, OverloadArg, OverloadGenericParams, OverloadLoc, OverloadResolve, SystemLoc,
+            ty::{Generic, GenericSetId, Ty}, CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc
         },
-        dinobj::{AllocatedRef, DinObject, SourceFnFunc, UserFn},
+        dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnFunc, UserFn},
         errors::RuntimeViolation,
         runtime::Runtime,
     };
 
     pub enum SetupItem<'s, C> {
+        Value(SetupValue<'s, C>),
         Function(SetupFunction<'s, C>),
     }
 
@@ -44,12 +44,20 @@ pub mod utils {
                     );
                     scope.add_overload(name, overload);
                 }
+                SetupItem::Value(v) => {
+                    let id = id_generator();
+                    let ty = (v.ty_factory)(scope.builtins.as_ref().unwrap().as_ref());
+                    scope.add_value(v.name, ty, Location::System(SystemLoc::new(source, id)));
+                }
             }
         }
 
-        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
+        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> DinoResult<'s> {
             match self {
                 SetupItem::Function(f) => f.to_dinobject(runtime),
+                SetupItem::Value(v) => {
+                    (v.value)(runtime)
+                },
             }
         }
     }
@@ -69,15 +77,22 @@ pub mod utils {
             (sig.name.clone(), sig.to_overload(loc))
         }
 
-        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-            Ok(runtime
+        pub fn to_dinobject(self, runtime: &Runtime<'s>) -> DinoResult<'s> {
+            runtime
                 .allocate(Ok(match self.body {
                     SetupFunctionBody::System(f) => DinObject::SourceFn(f),
                     SetupFunctionBody::User(f) => DinObject::UserFn(f),
-                }))?
-                .unwrap())
+                }))
         }
     }
+
+
+    pub struct SetupValue<'s, C> {
+        pub name: Cow<'s, str>,
+        pub ty_factory: fn(&C) -> Arc<Ty<'s>>,
+        pub value: fn(&Runtime<'s>) -> DinoResult<'s>,
+    }
+
 
     pub struct SignatureGen<'s> {
         id: GenericSetId,
@@ -154,7 +169,7 @@ pub mod utils {
                 gen_params,
                 self.args.iter().map(Arg::to_overload_arg).collect(),
                 self.ret.clone(),
-                OverloadLoc::System(loc),
+                Location::System(loc),
             )
         }
     }

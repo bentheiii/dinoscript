@@ -1,19 +1,12 @@
 use dinoscript_core::{
-    bytecode::{Command, SourceId},
-    compilation_scope::{
-        self,
-        ty::{
+    bytecode::{Command, SourceId}, compilation_scope::{
+        self, ty::{
             BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
-        },
-        CompilationScope, NamedItem, NamedType,
-    },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, Signature, SignatureGen},
-    sequence::{NormalizedIdx, Sequence},
-    stack::Stack,
+        }, CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, runtime::Runtime, sequence::{NormalizedIdx, Sequence}, stack::Stack
 };
-use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
+use std::{ops::ControlFlow, sync::Arc};
 // pragma: skip 6
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt},
@@ -182,7 +175,7 @@ pub(crate) struct ItemsBuilder<'p, 's> {
     pub(crate) replacements: HashMap<&'static str, String>,
 }
 
-fn signature_code_from_statement(stmt: &Stmt<'_>) -> String {
+fn signature_code_and_name_from_statement<'a>(stmt: &'a Stmt<'_>) -> (&'a str, String) {
     let Stmt::Fn(func) = stmt else {
         panic!("expected function statement, got {:?}", stmt);
     };
@@ -215,7 +208,7 @@ fn signature_code_from_statement(stmt: &Stmt<'_>) -> String {
     }
     let args_tokens = args_tokens.join(",\n                ");
     let ret_token = ret.inner.to_in_code();
-    format!(
+    (name, format!(
         "
     |bi: &Builtins<'_>| {{
         let gen = SignatureGen::new(vec![{gen_params_tokens}] as Vec<&'static str>);
@@ -229,10 +222,16 @@ fn signature_code_from_statement(stmt: &Stmt<'_>) -> String {
         )
     }}
     "
-    )
+    ))
 }
 
 impl<'p, 's> ItemsBuilder<'p, 's> {
+    fn get_next_id(&mut self) -> usize {
+        let ret = self.next_id;
+        self.next_id += 1;
+        ret
+    }
+
     fn add_item<'c>(&'c mut self, item: SetupItem<'s, Builtins<'s>>) {
         item.push_to_compilation(&mut self.scope, self.source_id, || {
             let ret = self.next_id;
@@ -242,6 +241,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
     }
 
     fn build_source(&mut self, replacement_name: &'static str, code: &'static str) {
+        let next_id = self.get_next_id();
         let func_stmt = dinoscript_core::grammar::parse_raw_function(code).unwrap();
         let mut sink = Vec::new();
         if let Err(err) = self.scope.feed_statement(&func_stmt, &mut sink) {
@@ -258,7 +258,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         let n_cells = mk_func.n_cells;
         let commands = to_in_code(&mk_func.commands, "                    ");
         // now we need the signature, we could re-create it from the statement, but it's easier (for now at least) to just get it from the code
-        let signature = signature_code_from_statement(&func_stmt.inner);
+        let (fn_name, signature) = signature_code_and_name_from_statement(&func_stmt.inner);
         let replacement = format!(
             "SetupItem::Function(SetupFunction::new(
             {signature},
@@ -271,6 +271,12 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         )),\n"
         );
         assert!(self.replacements.insert(replacement_name, replacement).is_none());
+        // finally, we need to patch the newly created function in the scope, that it will target source, and not the current scope
+        let NamedItem::Overloads(Overloads{ overloads }) = self.scope.names.get_mut(fn_name.into()).unwrap() else {
+            panic!("Expected an overload in name {}", fn_name);
+        };
+        let overload = overloads.last_mut().unwrap();
+        overload.set_loc(Location::System(SystemLoc::new(self.source_id, next_id)));
     }
 }
 
@@ -373,6 +379,49 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
     // pragma:skip 1
     let mut builder = prepare_build();
     vec![
+        // region:option
+        // pragma:unwrap
+        builder.add_item(SetupItem::Value(SetupValue {
+            name: "none".into(),
+            ty_factory: |bi| bi.optional(Ty::unknown()),
+            value: |rt: &Runtime<'_>| rt.none(),
+        })),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("is_some", vec![arg_gen!(bi, gen, a: Optional<T>)], ty!(bi, bool), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a_ref, Variant);
+                let tag = a.tag();
+                to_return_value(frame.runtime().bool(tag == 0))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T", "U"]);
+                Signature::new_generic("map_or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, f: (T)->(U)), arg_gen!(bi, gen, d: U)], ty_gen!(bi, gen, U), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a_ref, Variant);
+                
+                if a.tag() == 0 {
+                    let f = rt_unwrap_value!(frame.eval_pop()?);
+                    let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
+                    to_return_value(frame.call(&f, &[obj]))
+                } else {
+                    frame.stack.pop().unwrap();
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
+        // endregion
         // region:generic
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
@@ -384,6 +433,19 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let a = frame.eval_pop()?;
                 println!("Debug: {:?}", a);
                 to_return_value(Ok(a))
+            })),
+        ))),
+        // endregion
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                Signature::new("error", vec![arg!(bi, a: str)], Ty::unknown())
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a, Str);
+                to_return_value(frame.runtime().allocate(Err(RuntimeError::Owned(a.to_string()))))
             })),
         ))),
         // endregion
@@ -946,7 +1008,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let mut arr = Vec::with_capacity(stack.len());
                 for item_ref in stack.iter() {
-                    let item_ref = frame.runtime().clone_ref(item_ref)?;
+                    let item_ref = frame.runtime().clone_ok_ref(item_ref)?;
                     arr.push(item_ref);
                 }
                 arr.reverse();
@@ -997,12 +1059,37 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id
+            "eq",
+            r#"fn eq<T, U>(a: Optional<T>, b: Optional<U>, fn_eq: (T,U)->(bool) ~= eq)->bool{
+                if(is_some(a),
+                    if(is_some(b),
+                        fn_eq(a!:Some, b!:Some),
+                        false
+                    ),
+                    !b.is_some()
+                )
+            }"#,
+        ), // pragma:replace-end
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
             "some",
             r#"fn some<T>(value: T)->Optional<T>{
                 Optional::Some(value)
             }"#,
         ), // pragma:replace-end
-           // endregion:generic-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "map",
+            r#"fn map<T, U>(a: Optional<T>, func: (T)->(U))->Optional<U>{
+                if(is_some(a),
+                    some(func(a!:Some)),
+                    none
+                )
+            }"#,
+        ), // pragma:replace-end
+           // endregion:optional-1
     ]
     // pragma:skip 2
     ;

@@ -1,7 +1,7 @@
 use std::fs;
 
 use dinoscript_core::bytecode::Command;
-use dinoscript_core::compilation_scope::{NamedItem, OverloadLoc};
+use dinoscript_core::compilation_scope::{NamedItem, Location};
 use dinoscript_core::dinobj::{DinObject, StackItem};
 use dinoscript_core::dinopack::DinoPack;
 use dinoscript_core::runtime::{Runtime, RuntimeFrame};
@@ -46,7 +46,7 @@ fn test_script(script_number: usize) {
         panic!("main is not an overload");
     };
     let main_loc = main_overload.overloads.first().expect("main overload not found").loc();
-    let OverloadLoc::Cell(main_cell) = main_loc else {
+    let Location::Cell(main_cell) = main_loc else {
         panic!("main overload is not a cell");
     };
     let main_cell = *main_cell;
@@ -314,5 +314,15 @@ fn test_script_044() {
 
 #[test]
 fn test_script_045() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_046() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_047() {
     test_script_from_name(function_name!());
 }
