@@ -8,3 +8,4 @@
 * limit resolution default? we can probably make an infinite loop with this
 * cross-recursive types
 * function equality/hashing
+* method with specializations (a.cast<...>)

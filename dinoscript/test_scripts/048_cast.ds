@@ -1,0 +1,3 @@
+fn main()->bool{
+    assert((some(15) || cast{int}(error(''))) == 15)
+}

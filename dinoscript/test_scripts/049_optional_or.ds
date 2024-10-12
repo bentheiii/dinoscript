@@ -1,0 +1,10 @@
+fn main()->bool{
+    assert((some(15) || 16) == 15)
+    && assert((some(15) || cast{int}(error(''))) == 15)
+    && assert((none || 16) == 16)
+
+    && assert((some(15) || some(16)) == some(15))
+    && assert((some(15) || cast{Optional<int>}(error(''))) == some(15))
+    && assert((some(15) || none) == some(15))
+    && assert((cast{Optional<int>}(none) || some(16)) == some(16))
+}

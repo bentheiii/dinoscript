@@ -386,6 +386,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             ty_factory: |bi| bi.optional(Ty::unknown()),
             value: |rt: &Runtime<'_>| rt.none(),
         })),
+
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
@@ -421,6 +422,44 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 }
             })),
         ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)], ty_gen!(bi, gen, Optional<T>), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a_ref, Variant);
+                
+                if a.tag() == 0 {
+                    to_return_value(Ok(Ok(a_ref)))
+                } else {
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
+        // endregion
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: T)], ty_gen!(bi, gen, T), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a_ref, Variant);
+                
+                if a.tag() == 0 {
+                    let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
+                    to_return_value(Ok(obj))
+                } else {
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
         // endregion
         // region:generic
         // pragma:unwrap
@@ -431,7 +470,6 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = frame.eval_pop()?;
-                println!("Debug: {:?}", a);
                 to_return_value(Ok(a))
             })),
         ))),
@@ -443,9 +481,19 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = rt_unwrap_value!(frame.eval_pop()?);
-
+                
                 let a = rt_as_prim!(a, Str);
                 to_return_value(frame.runtime().allocate(Err(RuntimeError::Owned(a.to_string()))))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("cast", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                frame.eval_pop_tca(TailCallAvailability::Allowed)
             })),
         ))),
         // endregion
