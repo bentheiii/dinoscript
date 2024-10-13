@@ -11,7 +11,7 @@ use crate::{
         PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject, VariantTag,
     },
     errors::{AllocatedErrRef, RuntimeError, RuntimeViolation},
-    lib_objects::optional::{self, tag},
+    lib_objects::optional::{self},
     lib_objects::sequence::Sequence,
 };
 
@@ -707,7 +707,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                     .map(|d| Ok(StackItem::Value(Ok(self.runtime().clone_ok_ref(d)?))))
                     .chain(
                         arguments
-                            .into_iter()
+                            .iter()
                             .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?))),
                     )
                     .collect::<Result<Vec<_>, _>>()?,
@@ -716,7 +716,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
             (
                 func,
                 arguments
-                    .into_iter()
+                    .iter()
                     .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?)))
                     .collect::<Result<Vec<_>, _>>()?,
             )

@@ -509,7 +509,7 @@ impl RelativeLocation {
                 cell_idx: capture.cell_idx,
             }),
             RelativeLocation::Global(cell_idx) => RelativeLocation::Global(*cell_idx),
-            RelativeLocation::System(system_loc) => RelativeLocation::System(system_loc.clone()),
+            RelativeLocation::System(system_loc) => RelativeLocation::System(*system_loc),
         }
     }
 
@@ -754,7 +754,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             loc: match &overload.loc {
                                 Location::Cell(cell_idx) if self.is_root() => RelativeLocation::Global(*cell_idx),
                                 Location::Cell(cell_idx) => RelativeLocation::Local(*cell_idx),
-                                Location::System(system_loc) => RelativeLocation::System(system_loc.clone()),
+                                Location::System(system_loc) => RelativeLocation::System(*system_loc),
                             },
                         })
                         .collect(),
@@ -774,7 +774,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let loc = match variable.loc {
                     Location::Cell(cell_idx) if self.is_root() => RelativeLocation::Global(cell_idx),
                     Location::Cell(cell_idx) => RelativeLocation::Local(cell_idx),
-                    Location::System(system_loc) => RelativeLocation::System(system_loc.clone()),
+                    Location::System(system_loc) => RelativeLocation::System(system_loc),
                 };
                 Some(RelativeNamedItem::Variable(RelativeNamedItemVariable {
                     loc,
@@ -961,10 +961,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }
             return Ok(resolved_overloads.into_iter().next().unwrap());
         }
-        return Err(CompilationError::NoOverloads {
+        Err(CompilationError::NoOverloads {
             name: name.clone(),
             arg_types: arg_types.to_owned(),
-        });
+        })
     }
 
     fn feed_additional_param<'c: 's>(

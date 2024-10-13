@@ -20,8 +20,7 @@ pub mod utils {
             ty::{Generic, GenericSetId, Ty},
             CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc,
         },
-        dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnFunc, UserFn},
-        errors::RuntimeViolation,
+        dinobj::{DinObject, DinoResult, SourceFnFunc, UserFn},
         runtime::Runtime,
     };
 

@@ -11,7 +11,7 @@ use dinoscript_core::{
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
     dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
     errors::RuntimeError,
-    lib_objects::optional::{self, tag},
+    lib_objects::optional::{self},
     lib_objects::sequence::{NormalizedIdx, Sequence},
     lib_objects::stack::Stack,
     runtime::Runtime,
@@ -285,7 +285,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         );
         assert!(self.replacements.insert(replacement_name, replacement).is_none());
         // finally, we need to patch the newly created function in the scope, that it will target source, and not the current scope
-        let NamedItem::Overloads(Overloads { overloads }) = self.scope.names.get_mut(fn_name.into()).unwrap() else {
+        let NamedItem::Overloads(Overloads { overloads }) = self.scope.names.get_mut(fn_name).unwrap() else {
             panic!("Expected an overload in name {}", fn_name);
         };
         let overload = overloads.last_mut().unwrap();
@@ -909,7 +909,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 if a.len() != b.len() {
                     return to_return_value(frame.runtime().bool(false));
                 }
-                for (a_it, b_it) in a.iter(&frame).zip(b.iter(&frame)) {
+                for (a_it, b_it) in a.iter(frame).zip(b.iter(frame)) {
                     let a_it = a_it?;
                     let b_it = b_it?;
                     let res = frame.call(&fn_eq, &[a_it, b_it])?;
@@ -956,7 +956,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let NormalizedIdx::Positive(idx) = seq.idx_from_int(*idx) else {
                     return to_return_value(frame.runtime().allocate(Err("Index out of range".into())));
                 };
-                let item = seq.get(&frame, idx)?;
+                let item = seq.get(frame, idx)?;
                 to_return_value(Ok(item))
             })),
         ))),
@@ -1050,7 +1050,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let seq_len = seq.len();
                 let ret = {
                     let mut v = Vec::with_capacity(seq_len);
-                    for item_ref in seq.iter(&frame) {
+                    for item_ref in seq.iter(frame) {
                         let item_ref = match item_ref? {
                             Ok(v) => v,
                             other => return to_return_value(Ok(other)),

@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     bytecode::Command,
-    errors::{AllocatedErrRef, AllocatedRuntimeError, RuntimeViolation},
+    errors::{AllocatedErrRef, RuntimeViolation},
     runtime::{Runtime, SystemRuntimeFrame, REPORT_MEMORY_USAGE},
 };
 

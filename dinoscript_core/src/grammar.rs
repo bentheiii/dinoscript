@@ -117,7 +117,7 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 })
             {
                 Ok(Expr::LitInt(whole).with_pair(inner))
-            } else if let Some(whole) = to_parse.parse::<f64>().ok() {
+            } else if let Ok(whole) = to_parse.parse::<f64>() {
                 Ok(Expr::LitFloat(whole).with_pair(inner))
             } else {
                 unreachable!() // todo is this unreachable?
