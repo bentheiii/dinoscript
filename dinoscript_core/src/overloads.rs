@@ -116,12 +116,9 @@ impl<'s> BindingResolution<'s> {
             },
             Ty::Unknown => {
                 // since this indicates functions that should never actually be called, we only accept arguments that could never actually form
-                println!("Unknown type in assign");
                 if let Ty::Unknown = input_type.as_ref() {
-                    println!("\tassign_type: {} OK", assign_type);
                     Ok(())
                 } else {
-                    println!("\tassign_type: {} FAIL", assign_type);
                     Err(())
                 }
             }

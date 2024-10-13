@@ -109,18 +109,27 @@ impl<'s> BindBack<'s> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VariantTag(usize);
+
+impl VariantTag {
+    pub const fn new(tag: usize) -> Self {
+        Self(tag)
+    }
+}
+
 #[derive(Debug)]
 pub struct VariantObject<'s> {
-    tag: usize,
+    tag: VariantTag,
     obj: AllocatedRef<'s>,
 }
 
 impl<'s> VariantObject<'s> {
-    pub fn new(tag: usize, obj: AllocatedRef<'s>) -> Self {
-        Self { tag, obj }
+    pub fn new(tag: impl Into<VariantTag>, obj: AllocatedRef<'s>) -> Self {
+        Self { tag: tag.into(), obj }
     }
 
-    pub fn tag(&self) -> usize {
+    pub fn tag(&self) -> VariantTag {
         self.tag
     }
 
@@ -154,8 +163,8 @@ pub struct Pending<'s> {
 #[derive(Debug)]
 pub enum PendingFunctor<'s> {
     Function(AllocatedRef<'s>),
-    Variant(usize),
-    VariantSafe(usize),
+    Variant(VariantTag),
+    VariantSafe(VariantTag),
     Attr(usize),
 }
 

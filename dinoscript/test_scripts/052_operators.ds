@@ -1,0 +1,12 @@
+struct Point (x: int, y:int)
+fn add(p0: Point, p1: Point) -> Point {
+    Point(p0::x + p1::x, p0::y + p1::y)
+}
+
+fn eq(p0: Point, p1: Point) -> bool {
+    p0::x == p1::x && p0::y == p1::y
+}
+
+fn main() -> bool{
+    assert(Point(1,2) + Point(3,4) == Point(4,6))
+}

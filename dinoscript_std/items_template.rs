@@ -1,19 +1,12 @@
 use dinoscript_core::{
-    bytecode::{Command, SourceId},
-    compilation_scope::{
+    bytecode::{Command, SourceId}, compilation_scope::{
         self,
         ty::{
             BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
-    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
-    errors::RuntimeError,
-    runtime::Runtime,
-    sequence::{NormalizedIdx, Sequence},
-    stack::Stack,
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, lib_objects::optional::{self, tag}, runtime::Runtime, sequence::{NormalizedIdx, Sequence}, stack::Stack
 };
 use std::{ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -414,7 +407,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let a = rt_as_prim!(a_ref, Variant);
 
-                if a.tag() == 1 {
+                if a.tag() == optional::tag::NONE {
                     to_return_value(Ok(Ok(a_ref)))
                 } else {
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
@@ -432,7 +425,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let a = rt_as_prim!(a_ref, Variant);
                 let tag = a.tag();
-                to_return_value(frame.runtime().bool(tag == 0))
+                to_return_value(frame.runtime().bool(tag == optional::tag::SOME))
             })),
         ))),
         // pragma:unwrap
@@ -455,7 +448,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let a = rt_as_prim!(a_ref, Variant);
 
-                if a.tag() == 0 {
+                if a.tag() == optional::tag::SOME {
                     let f = rt_unwrap_value!(frame.eval_pop()?);
                     let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
                     to_return_value(frame.call(&f, &[obj]))
@@ -481,7 +474,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let a = rt_as_prim!(a_ref, Variant);
 
-                if a.tag() == 0 {
+                if a.tag() == optional::tag::SOME {
                     to_return_value(Ok(Ok(a_ref)))
                 } else {
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
@@ -505,7 +498,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let a = rt_as_prim!(a_ref, Variant);
 
-                if a.tag() == 0 {
+                if a.tag() == optional::tag::SOME {
                     let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
                     to_return_value(Ok(obj))
                 } else {

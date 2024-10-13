@@ -11,7 +11,7 @@ use glob::glob;
 use itertools::Itertools;
 use stdext::function_name;
 
-const SHOW_COMMANDS: bool = true;
+const SHOW_COMMANDS: bool = false;
 
 fn test_script(script_number: usize) {
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
@@ -346,5 +346,20 @@ fn test_script_050() {
 
 #[test]
 fn test_script_051() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_052() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_053() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_054() {
     test_script_from_name(function_name!());
 }

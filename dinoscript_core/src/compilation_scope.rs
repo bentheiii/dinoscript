@@ -902,10 +902,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 let Ty::Fn(expected_signature) = resolved_ty.as_ref() else {
                                     unreachable!()
                                 };
-                                println!(
-                                    "resolving overload: {} with args {:?}",
-                                    ov_name, expected_signature.args
-                                );
                                 // todo avoid infinite recursion (note that it might be a double recursion)
                                 let candidate = match self.get_named_item(ov_name) {
                                     Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
@@ -918,7 +914,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                         todo!()
                                     }
                                 };
-                                println!("\tresolved with {:?}", candidate);
                                 let candidate = match candidate {
                                     Ok(candidate) => candidate,
                                     Err(_) => {

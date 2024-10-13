@@ -5,13 +5,10 @@ use std::{
 };
 
 use crate::{
-    bytecode::{Command, SourceId},
-    dinobj::{
+    bytecode::{Command, SourceId}, dinobj::{
         Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending,
-        PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject,
-    },
-    errors::{AllocatedErrRef, RuntimeError, RuntimeViolation},
-    sequence::Sequence,
+        PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject, VariantTag,
+    }, errors::{AllocatedErrRef, RuntimeError, RuntimeViolation}, lib_objects::optional::{self, tag}, sequence::Sequence
 };
 
 #[derive(Debug)]
@@ -121,7 +118,7 @@ impl<'s> Runtime<'s> {
         let nil = ret.allocate(Ok(DinObject::Struct(vec![]))).unwrap().unwrap();
         let none = ret
             .allocate(Ok(DinObject::Variant(VariantObject::new(
-                1,
+                optional::tag::NONE,
                 ret.clone_ok_ref(&nil).unwrap(),
             ))))
             .unwrap()
@@ -156,7 +153,7 @@ impl<'s> Runtime<'s> {
             let mut rt = self.0.lock().unwrap();
             rt.clone_none()
         } else {
-            self.allocate(Ok(DinObject::Variant(VariantObject::new(1, self.nil()?.unwrap()))))
+            self.allocate(Ok(DinObject::Variant(VariantObject::new(optional::tag::NONE, self.nil()?.unwrap()))))
         }
     }
 
@@ -355,7 +352,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                                 .runtime
                                                 .clone_ok_ref(variant.obj())?)));
                                         } else {
-                                            todo!("expected tag {}, got {}", expected_tag, variant.tag())
+                                            todo!("expected tag {:?}, got {:?}", expected_tag, variant.tag())
                                         }
                                     }
                                     _ => todo!(),
@@ -365,8 +362,33 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::VariantSafe(..) => {
-                            todo!()
+                        PendingFunctor::VariantSafe(expected_tag) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            self.eval_top(TailCallAvailability::Disallowed)?;
+                            let StackItem::Value(arg) = self.stack.pop().unwrap() else {
+                                unreachable!()
+                            };
+                            let val = match arg {
+                                Ok(arg) => match arg.as_ref() {
+                                    DinObject::Variant(variant) => {
+                                        if variant.tag() == expected_tag {
+                                            // todo we can make an optimization here, if the tag is already 0
+                                            self.runtime.allocate(Ok(DinObject::Variant(VariantObject::new(
+                                                optional::tag::SOME,
+                                                self.runtime.clone_ok_ref(variant.obj())?,
+                                            ))))?
+                                        } else {
+                                            self.runtime.none()?
+                                        }
+                                    }
+                                    _ => todo!(),
+                                },
+                                Err(e) => {
+                                    todo!("handle error: {}", e)
+                                }
+                            };
+                            self.stack.push(StackItem::Value(val));
                         }
                         PendingFunctor::Attr(..) => {
                             todo!()
@@ -569,20 +591,25 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 let Ok(val) = val else { todo!() };
                 let variant = self
                     .runtime
-                    .allocate(Ok(DinObject::Variant(VariantObject::new(*tag, val))))?;
+                    .allocate(Ok(DinObject::Variant(VariantObject::new(VariantTag::new(*tag), val))))?;
                 self.stack.push(StackItem::Value(variant));
                 Ok(ControlFlow::Break(()))
             }
             Command::VariantAccess(expected_tag) => {
                 let arg = self.stack.pop().unwrap();
                 self.stack.push(StackItem::Pending(Pending {
-                    functor: PendingFunctor::Variant(*expected_tag),
+                    functor: PendingFunctor::Variant(VariantTag::new(*expected_tag)),
                     arguments: vec![arg],
                 }));
                 Ok(ControlFlow::Break(()))
             }
-            Command::VariantAccessOpt(..) => {
-                todo!()
+            Command::VariantAccessOpt(expected_tag) => {
+                let arg = self.stack.pop().unwrap();
+                self.stack.push(StackItem::Pending(Pending {
+                    functor: PendingFunctor::VariantSafe(VariantTag::new(*expected_tag)),
+                    arguments: vec![arg],
+                }));
+                Ok(ControlFlow::Break(()))
             }
             Command::Array(i) => {
                 let mut items = Vec::with_capacity(*i);
@@ -792,7 +819,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                                 .runtime()
                                                 .clone_ok_ref(variant.obj())?)));
                                         } else {
-                                            todo!("expected tag {}, got {}", expected_tag, variant.tag())
+                                            todo!("expected tag {:?}, got {:?}", expected_tag, variant.tag())
                                         }
                                     }
                                     _ => todo!(),
@@ -802,8 +829,30 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::VariantSafe(..) => {
-                            todo!()
+                        PendingFunctor::VariantSafe(expected_tag) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            let arg = self.eval_pop()?;
+                            let val = match arg {
+                                Ok(arg) => match arg.as_ref() {
+                                    DinObject::Variant(variant) => {
+                                        if variant.tag() == expected_tag {
+                                            // todo we can make an optimization here, if the tag is already 0
+                                            self.runtime().allocate(Ok(DinObject::Variant(VariantObject::new(
+                                                optional::tag::SOME,
+                                                self.runtime().clone_ok_ref(variant.obj())?,
+                                            ))))?
+                                        } else {
+                                            self.runtime().none()?
+                                        }
+                                    }
+                                    _ => todo!(),
+                                },
+                                Err(e) => {
+                                    todo!("handle error: {}", e)
+                                }
+                            };
+                            self.stack.push(StackItem::Value(val));
                         }
                         PendingFunctor::Attr(..) => {
                             todo!()
