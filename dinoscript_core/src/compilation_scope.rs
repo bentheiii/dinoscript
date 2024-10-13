@@ -66,8 +66,8 @@ pub mod ty {
 
         pub fn n_generics(&self) -> usize {
             match self {
-                TyTemplate::Builtin(template) => template.generics.as_ref(),
-                TyTemplate::Compound(template) => template.generics.as_ref(),
+                Self::Builtin(template) => template.generics.as_ref(),
+                Self::Compound(template) => template.generics.as_ref(),
             }
             .map_or(0, |specs| specs.n_generics.get())
         }
@@ -169,15 +169,15 @@ pub mod ty {
         // only applicable inside compound templates and generic functions
         Generic(Generic),
         // only applicable inside compound templates
-        Tail,
+        Tail(Vec<Arc<Ty<'s>>>),
         Unknown,
     }
 
     impl<'s> Ty<'s> {
-        pub fn resolve(
+        pub fn resolve<'a>(
             self: &Arc<Self>,
             // todo tail should really be template
-            tail: Option<&Arc<Self>>,
+            tail: Option<&Arc<TyTemplate<'s>>>,
             generic_args: &Vec<Arc<Self>>,
             gen_id: Option<GenericSetId>,
         ) -> Arc<Self> {
@@ -203,7 +203,11 @@ pub mod ty {
                 ))),
                 Ty::Generic(gen) if gen_id.is_some_and(|gid| gen.gen_id == gid) => generic_args[gen.idx].clone(),
                 Ty::Generic(_) | Ty::Unknown => self.clone(),
-                Ty::Tail => tail.unwrap().clone(),
+                Ty::Tail(tys) => {
+                    let tail_template = tail.unwrap();
+                    let args = tys.iter().map(|ty| ty.resolve(tail, generic_args, gen_id)).collect();
+                    tail_template.instantiate(args)
+                },
             }
         }
 
@@ -256,8 +260,8 @@ pub mod ty {
                 Ty::Generic(gen) => {
                     write!(f, "T_{}", gen.idx)
                 }
-                Ty::Tail => {
-                    write!(f, "...")
+                Ty::Tail(args) => {
+                    write!(f, "Self<{}>", args.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", "))
                 }
                 Ty::Unknown => {
                     write!(f, "?")
@@ -299,13 +303,13 @@ pub mod ty {
     }
 
     impl<'s> Specialized<'s> {
-        pub fn get_field(&self, name: &Cow<'s, str>, tail: &Arc<Ty<'s>>) -> Option<Field<'s>> {
+        pub fn get_field(&self, name: &Cow<'s, str>) -> Option<Field<'s>> {
             let raw = match self.template.as_ref() {
                 TyTemplate::Compound(template) => template.fields.get(name),
                 _ => None,
             };
             raw.map(|field| Field {
-                raw_ty: field.raw_ty.resolve(Some(tail), &self.args, self.template.generic_id()),
+                raw_ty: field.raw_ty.resolve(Some(&self.template), &self.args, self.template.generic_id()),
                 idx: field.idx,
             })
         }
@@ -692,22 +696,23 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         &self,
         ty: &ast::ty::TyWithPair<'c>,
         gen_params: &Option<OverloadGenericParams>,
+        tail_name: Option<&Cow<'s, str>>,
     ) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
         // todo gen-aprams should be option<&...>, not &option<...>
         match &ty.inner {
             ast::ty::Ty::Tuple(inners) => {
                 let inners = inners
                     .iter()
-                    .map(|inner| self.parse_type(inner, gen_params))
+                    .map(|inner| self.parse_type(inner, gen_params, tail_name))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Arc::new(Ty::Tuple(inners)))
             }
             ast::ty::Ty::Fn(ast::ty::FnTy { args, ret }) => {
                 let args = args
                     .iter()
-                    .map(|arg| self.parse_type(arg, gen_params))
+                    .map(|arg| self.parse_type(arg, gen_params, tail_name))
                     .collect::<Result<Vec<_>, _>>()?;
-                let return_ty = self.parse_type(ret, gen_params)?;
+                let return_ty = self.parse_type(ret, gen_params, tail_name)?;
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
             ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
@@ -718,13 +723,22 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
                         }
                     }
+                    if let Some(tail_name_cow) = tail_name {
+                        if name == tail_name_cow {
+                            let args = args
+                                .iter()
+                                .map(|arg| self.parse_type(arg, gen_params, tail_name))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return Ok(Arc::new(Ty::Tail(args)));
+                        }
+                    }
                     return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
                 };
                 match item {
                     RelativeNamedItem::Type(NamedType::Template(template)) => {
                         let args = args
                             .iter()
-                            .map(|arg| self.parse_type(arg, gen_params))
+                            .map(|arg| self.parse_type(arg, gen_params, tail_name))
                             .collect::<Result<Vec<_>, _>>()?;
                         // todo check that the number of args match
                         Ok(template.instantiate(args))
@@ -1132,11 +1146,13 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     todo!("wrong number of arguments")
                                 }
                                 let generic_id = named_template.generic_id();
+                                let n_generics = generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default();
                                 let mut resolution = BindingResolution::new(
                                     generic_id,
                                     generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default(),
                                 );
-                                let expected_ty = variant.raw_ty.clone(); // todo we should resolve this
+                                let raw_ty = variant.raw_ty.clone();
+                                let expected_ty = raw_ty.resolve(Some(named_template), &(0..n_generics).map(|i| Arc::new(Ty::Generic(Generic::new(i, generic_id.unwrap())))).collect(), generic_id);
                                 let arg_ty = arg_types.first().unwrap();
                                 if resolution.assign(&expected_ty, arg_ty).is_err() {
                                     return Err(CompilationError::VariantTypeMismtach {
@@ -1275,7 +1291,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             Expr::Disambiguation(Disambiguation { name, arg_tys }) => {
                 let arg_tys = arg_tys
                     .iter()
-                    .map(|ty| self.parse_type(ty, &None))
+                    .map(|ty| self.parse_type(ty, &None, None))
                     .collect::<Result<Vec<_>, _>>()?;
                 match self.get_named_item(name) {
                     Some(RelativeNamedItem::Overloads(overloads)) => {
@@ -1296,16 +1312,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name) else {
                             todo!()
                         }; // raise an error
-                        println!("!!! name={name}, field.idx={}", field.idx);
                         sink.push(Command::Attr(field.idx));
-                        let resolved_type =
-                            field
-                                .raw_ty
-                                .resolve(Some(&obj_type), &specialized.args, specialized.template.generic_id());
-                        Ok(resolved_type)
+                        Ok(field.raw_ty)
                     }
                     Ty::Tuple(tup) => {
                         let Some(idx) = name.strip_prefix("item").and_then(|idx| idx.parse().ok()) else {
@@ -1333,7 +1344,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name) else {
                             todo!()
                         }; // raise an error
                         sink.push(Command::VariantAccess(field.idx));
@@ -1346,7 +1357,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
-                        let Some(field) = specialized.get_field(name, &obj_type) else {
+                        let Some(field) = specialized.get_field(name) else {
                             todo!()
                         }; // raise an error
                         sink.push(Command::VariantAccessOpt(field.idx));
@@ -1419,7 +1430,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let declared_ty = if let Some(explicit_ty) = ty {
                     // we should check that actual_ty is a subtype of ty
                     let mut assignment = BindingResolution::primitive();
-                    let ty = self.parse_type(explicit_ty, &None)?;
+                    let ty = self.parse_type(explicit_ty, &None, None)?;
                     if assignment.assign(&ty, &actual_ty).is_err() {
                         return Err(CompilationError::LetTypeMismatch {
                             var: var.clone(),
@@ -1467,12 +1478,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
                             fn_arg.name.clone(),
-                            self.parse_type(&fn_arg.ty, &gen_params)?,
+                            self.parse_type(&fn_arg.ty, &gen_params,None)?,
                             fn_arg.default.clone(),
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let expected_return_ty = self.parse_type(return_ty, &gen_params)?;
+                let expected_return_ty = self.parse_type(return_ty, &gen_params, None)?;
 
                 let mut args = Vec::with_capacity(raw_args.len());
                 let mut first_default = None;
@@ -1577,7 +1588,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
-                                raw_ty: self.parse_type(&field.ty, &ov)?,
+                                raw_ty: self.parse_type(&field.ty, &ov, Some(&compound.name))?,
                                 idx: i,
                             },
                         ))

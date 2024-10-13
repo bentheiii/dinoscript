@@ -11,3 +11,4 @@
 * method with specializations (a.cast<...>)
 * lazy parameters in ud?
 * intern unknown type
+* intern tail type

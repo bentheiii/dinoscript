@@ -8,12 +8,10 @@ use dinoscript_core::{
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
     },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject},
     dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
     errors::RuntimeError,
-    lib_objects::optional::{self},
-    lib_objects::sequence::{NormalizedIdx, Sequence},
-    lib_objects::stack::Stack,
+    lib_objects::{optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::Stack},
     runtime::Runtime,
 };
 use std::{ops::ControlFlow, sync::Arc};
@@ -796,6 +794,31 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                     to_return_value(Ok(Ok(a_ref)))
                 } else {
                     frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "then",
+                    vec![arg!(bi, b:bool), arg_gen!(bi, gen, t: T)],
+                    ty_gen!(bi, gen, Optional<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let b = rt_unwrap_value!(frame.eval_pop()?);
+
+                let b = rt_as_prim!(b, Bool);
+
+                if !b {
+                    to_return_value(frame.runtime().none())
+                } else {
+                    let inner = rt_unwrap_value!(frame.eval_pop()?);
+                    let v = DinObject::Variant(VariantObject::new(optional::tag::SOME, inner));
+                    to_return_value(frame.runtime().allocate(Ok(v)))
                 }
             })),
         ))),

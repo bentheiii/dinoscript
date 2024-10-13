@@ -122,7 +122,7 @@ impl<'s> BindingResolution<'s> {
                     Err(())
                 }
             }
-            Ty::Tail => unreachable!(),
+            Ty::Tail(..) => unreachable!(),
         }
     }
 }
@@ -187,7 +187,6 @@ pub fn combine_types<'s>(a: &Arc<Ty<'s>>, b: &Arc<Ty<'s>>) -> Result<Arc<Ty<'s>>
                 Err(())
             }
         }
-        (Ty::Tail, Ty::Tail) => Ok(a.clone()),
         (Ty::Unknown, _) => Ok(b.clone()),
         (_, Ty::Unknown) => Ok(a.clone()),
         _ => Err(()),

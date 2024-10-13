@@ -1,0 +1,39 @@
+union Chain(
+    last: int,
+    next: Chain
+)
+
+fn foo(x: Chain)->int {
+    fn helper(x0: Chain, ret: int)->int {
+        if(x0?:last.is_some(),
+            ret+x0!:last,
+            helper(x0!:next, ret+100)
+        )
+    }
+    helper(x, 0)
+}
+
+fn chain(x: int)->Chain{
+    fn helper(x0: int, ret: Chain)->Chain {
+        if(x0>100,
+            helper(x0-100, Chain::next(ret)),
+            ret
+        )
+    }
+    helper(x, Chain::last(x % 100))
+}
+
+fn eq(x: Chain, y: Chain)->bool {
+          (x?:last.is_some() && y?:last.is_some())
+            .then(x!:last == y!:last)
+        || (x?:next.is_some() && y?:next.is_some())
+            .then(eq(x!:next, y!:next))
+        || false
+    }
+
+
+fn main()->bool {
+    let z = Chain::next(Chain::next(Chain::last(5)));
+    assert(foo(z) == 205)
+    && assert(chain(205) == z)
+}
