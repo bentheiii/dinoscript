@@ -386,7 +386,24 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             ty_factory: |bi| bi.optional(Ty::unknown()),
             value: |rt: &Runtime<'_>| rt.none(),
         })),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("and", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)], ty_gen!(bi, gen, Optional<T>), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
+                let a = rt_as_prim!(a_ref, Variant);
+                
+                if a.tag() == 1 {
+                    to_return_value(Ok(Ok(a_ref)))
+                } else {
+                    frame.eval_pop_tca(TailCallAvailability::Allowed)
+                }
+            })),
+        ))),
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {

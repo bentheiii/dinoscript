@@ -20,7 +20,7 @@ use crate::{
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
     maybe_owned::MaybeOwned,
-    overloads::{combine_types, BindingResolution},
+    overloads::{combine_types, BindingResolution, OverloadPriority},
 };
 
 pub mod ty {
@@ -931,10 +931,15 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 arg_types: arg_types.to_owned(),
             });
         } else if resolved_overloads.len() > 1 {
-            return Err(CompilationError::AmbiguousOverloads {
-                name: name.clone(),
-                arg_types: arg_types.to_owned(),
-            });
+            resolved_overloads.sort_by_key(|ov| ov.priority);
+            // if the first two options are of equal priority, then we have a disambiguation error
+            let first_priority = resolved_overloads[0].priority;
+            if resolved_overloads[1].priority == first_priority {
+                return Err(CompilationError::AmbiguousOverloads {
+                    name: name.clone(),
+                    arg_types: arg_types.to_owned(),
+                });
+            }
         }
         Ok(resolved_overloads.into_iter().next().unwrap())
     }
@@ -964,6 +969,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             loc,
             output_ty,
             additional_params,
+            ..
         } = candidate;
         // TODO I'm pretty sure we can do away with reversing here
         let n_additional_params = additional_params.len();
@@ -987,6 +993,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             loc,
             output_ty,
             additional_params,
+            ..
         } = candidate;
         let n_args = arg_sinks.len();
         let n_additional_params = additional_params.len();

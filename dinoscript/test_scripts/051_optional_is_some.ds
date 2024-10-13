@@ -1,0 +1,5 @@
+fn main()->bool{
+    assert(some(15).is_some())
+    && assert(!none.is_some())
+    && assert(some(15)!:Some == 15)
+}

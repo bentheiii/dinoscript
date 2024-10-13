@@ -11,7 +11,7 @@ use glob::glob;
 use itertools::Itertools;
 use stdext::function_name;
 
-const SHOW_COMMANDS: bool = false;
+const SHOW_COMMANDS: bool = true;
 
 fn test_script(script_number: usize) {
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
@@ -35,11 +35,13 @@ fn test_script(script_number: usize) {
     let core_pack = StdPack;
     core_pack.setup_compiler(&mut scope);
     let mut commands = Vec::new();
+    println!("----compiling script {}----", script_number);
     for stmt in statements {
         if let Err(err) = scope.feed_statement(&stmt, &mut commands) {
             panic!("compilation error: {}", err);
         }
     }
+    println!("----compiled script {}----", script_number);
 
     // we need to find the "main" function
     let NamedItem::Overloads(main_overload) = scope.names.get("main").expect("main function t found") else {
@@ -334,5 +336,15 @@ fn test_script_048() {
 
 #[test]
 fn test_script_049() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_050() {
+    test_script_from_name(function_name!());
+}
+
+#[test]
+fn test_script_051() {
     test_script_from_name(function_name!());
 }

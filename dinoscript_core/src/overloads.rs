@@ -2,6 +2,14 @@ use std::sync::Arc;
 
 use crate::compilation_scope::ty::{Fn, Generic, GenericSetId, Specialized, Ty};
 
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum OverloadPriority {
+    NonGeneric = 0,
+    Generic = 1,
+}
+
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,
     pub bound_generics: Vec<Arc<Ty<'s>>>,
@@ -76,7 +84,7 @@ impl<'s> BindingResolution<'s> {
                 self.bound_generics[*idx] = combine_types(bound_type, input_type)?;
                 Ok(())
             }
-            Ty::Generic(expected_gen) => match input_type.as_ref() {
+            Ty::Generic(expected_gen)=> match input_type.as_ref() {
                 Ty::Generic(actual_gen) => {
                     if expected_gen.idx == actual_gen.idx && expected_gen.gen_id == actual_gen.gen_id {
                         Ok(())
@@ -87,12 +95,16 @@ impl<'s> BindingResolution<'s> {
                 Ty::Unknown => Ok(()),
                 _ => Err(()),
             },
-            Ty::Generic(_) => {
-                // todo
-                dbg!(assign_type, input_type, self.gen_id);
-                Err(())
-            }
-            Ty::Unknown => unreachable!(),
+            Ty::Unknown => {
+                // since this indicates functions that should never actually be called, we only accept arguments that could never actually form
+                if let Ty::Unknown = input_type.as_ref() {   
+                    //self.priority = OverloadPriority::Unknown;
+                    Ok(())
+                }
+                else {
+                    Err(())
+                }
+            },
             Ty::Tail => unreachable!(),
         }
     }
