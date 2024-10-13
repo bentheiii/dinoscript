@@ -1,4 +1,4 @@
-pub mod tag{
+pub mod tag {
     use crate::dinobj::VariantTag;
 
     pub const NONE: VariantTag = VariantTag::new(1);

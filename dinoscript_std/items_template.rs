@@ -1,12 +1,20 @@
 use dinoscript_core::{
-    bytecode::{Command, SourceId}, compilation_scope::{
+    bytecode::{Command, SourceId},
+    compilation_scope::{
         self,
         ty::{
             BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, lib_objects::optional::{self, tag}, runtime::Runtime, sequence::{NormalizedIdx, Sequence}, stack::Stack
+    },
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
+    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
+    errors::RuntimeError,
+    lib_objects::optional::{self, tag},
+    lib_objects::sequence::{NormalizedIdx, Sequence},
+    lib_objects::stack::Stack,
+    runtime::Runtime,
 };
 use std::{ops::ControlFlow, sync::Arc};
 // pragma: skip 6

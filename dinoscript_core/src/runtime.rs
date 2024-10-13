@@ -5,10 +5,14 @@ use std::{
 };
 
 use crate::{
-    bytecode::{Command, SourceId}, dinobj::{
+    bytecode::{Command, SourceId},
+    dinobj::{
         Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending,
         PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject, VariantTag,
-    }, errors::{AllocatedErrRef, RuntimeError, RuntimeViolation}, lib_objects::optional::{self, tag}, sequence::Sequence
+    },
+    errors::{AllocatedErrRef, RuntimeError, RuntimeViolation},
+    lib_objects::optional::{self, tag},
+    lib_objects::sequence::Sequence,
 };
 
 #[derive(Debug)]
@@ -153,7 +157,10 @@ impl<'s> Runtime<'s> {
             let mut rt = self.0.lock().unwrap();
             rt.clone_none()
         } else {
-            self.allocate(Ok(DinObject::Variant(VariantObject::new(optional::tag::NONE, self.nil()?.unwrap()))))
+            self.allocate(Ok(DinObject::Variant(VariantObject::new(
+                optional::tag::NONE,
+                self.nil()?.unwrap(),
+            ))))
         }
     }
 
