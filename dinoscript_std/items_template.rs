@@ -1,10 +1,19 @@
 use dinoscript_core::{
-    bytecode::{Command, SourceId}, compilation_scope::{
-        self, ty::{
+    bytecode::{Command, SourceId},
+    compilation_scope::{
+        self,
+        ty::{
             BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
-        }, CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, runtime::Runtime, sequence::{NormalizedIdx, Sequence}, stack::Stack
+        },
+        CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
+    },
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability},
+    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
+    errors::RuntimeError,
+    runtime::Runtime,
+    sequence::{NormalizedIdx, Sequence},
+    stack::Stack,
 };
 use std::{ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -208,8 +217,10 @@ fn signature_code_and_name_from_statement<'a>(stmt: &'a Stmt<'_>) -> (&'a str, S
     }
     let args_tokens = args_tokens.join(",\n                ");
     let ret_token = ret.inner.to_in_code();
-    (name, format!(
-        "
+    (
+        name,
+        format!(
+            "
     |bi: &Builtins<'_>| {{
         let gen = SignatureGen::new(vec![{gen_params_tokens}] as Vec<&'static str>);
         Signature::new_generic(
@@ -222,7 +233,8 @@ fn signature_code_and_name_from_statement<'a>(stmt: &'a Stmt<'_>) -> (&'a str, S
         )
     }}
     "
-    ))
+        ),
+    )
 }
 
 impl<'p, 's> ItemsBuilder<'p, 's> {
@@ -272,7 +284,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
         );
         assert!(self.replacements.insert(replacement_name, replacement).is_none());
         // finally, we need to patch the newly created function in the scope, that it will target source, and not the current scope
-        let NamedItem::Overloads(Overloads{ overloads }) = self.scope.names.get_mut(fn_name.into()).unwrap() else {
+        let NamedItem::Overloads(Overloads { overloads }) = self.scope.names.get_mut(fn_name.into()).unwrap() else {
             panic!("Expected an overload in name {}", fn_name);
         };
         let overload = overloads.last_mut().unwrap();
@@ -390,13 +402,18 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic("and", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)], ty_gen!(bi, gen, Optional<T>), gen)
+                Signature::new_generic(
+                    "and",
+                    vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)],
+                    ty_gen!(bi, gen, Optional<T>),
+                    gen,
+                )
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
-                
+
                 if a.tag() == 1 {
                     to_return_value(Ok(Ok(a_ref)))
                 } else {
@@ -422,13 +439,22 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T", "U"]);
-                Signature::new_generic("map_or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, f: (T)->(U)), arg_gen!(bi, gen, d: U)], ty_gen!(bi, gen, U), gen)
+                Signature::new_generic(
+                    "map_or",
+                    vec![
+                        arg_gen!(bi, gen, a: Optional<T>),
+                        arg_gen!(bi, gen, f: (T)->(U)),
+                        arg_gen!(bi, gen, d: U),
+                    ],
+                    ty_gen!(bi, gen, U),
+                    gen,
+                )
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
-                
+
                 if a.tag() == 0 {
                     let f = rt_unwrap_value!(frame.eval_pop()?);
                     let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
@@ -443,13 +469,18 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic("or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)], ty_gen!(bi, gen, Optional<T>), gen)
+                Signature::new_generic(
+                    "or",
+                    vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: Optional<T>)],
+                    ty_gen!(bi, gen, Optional<T>),
+                    gen,
+                )
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
-                
+
                 if a.tag() == 0 {
                     to_return_value(Ok(Ok(a_ref)))
                 } else {
@@ -462,13 +493,18 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic("or", vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: T)], ty_gen!(bi, gen, T), gen)
+                Signature::new_generic(
+                    "or",
+                    vec![arg_gen!(bi, gen, a: Optional<T>), arg_gen!(bi, gen, b: T)],
+                    ty_gen!(bi, gen, T),
+                    gen,
+                )
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a_ref = rt_unwrap_value!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
-                
+
                 if a.tag() == 0 {
                     let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
                     to_return_value(Ok(obj))
@@ -494,11 +530,20 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
-                Signature::new("error", vec![arg!(bi, a: str)], Ty::unknown())
+                Signature::new(
+                    "eq",
+                    vec![Arg::new("a", Ty::unknown()), Arg::new("b", Ty::unknown())],
+                    ty!(bi, bool),
+                )
             },
+            SetupFunctionBody::System(Box::new(|frame| unreachable!("unknown eq call"))),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("error", vec![arg!(bi, a: str)], Ty::unknown()),
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = rt_unwrap_value!(frame.eval_pop()?);
-                
+
                 let a = rt_as_prim!(a, Str);
                 to_return_value(frame.runtime().allocate(Err(RuntimeError::Owned(a.to_string()))))
             })),
@@ -509,9 +554,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic("cast", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
             },
-            SetupFunctionBody::System(Box::new(|frame| {
-                frame.eval_pop_tca(TailCallAvailability::Allowed)
-            })),
+            SetupFunctionBody::System(Box::new(|frame| frame.eval_pop_tca(TailCallAvailability::Allowed))),
         ))),
         // endregion
         // region:int

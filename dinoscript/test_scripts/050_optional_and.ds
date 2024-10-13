@@ -1,8 +1,8 @@
 fn main()->bool{
-    //assert((some(15) && some(16)) == some(16))
-    //&& assert((some(15) && none) == none)
-    //&& 
-    //assert(cast{Optional<int>}(none && error('')) == (none))
-    assert((none && error('')) == (none))
-    //&& assert((none && some(16)) == none)
+    assert((some(15) && some(16)) == some(16))
+    && assert((some(15) && none) == none)
+    && assert(cast{Optional<int>}(none && error('')) == (none))
+    && assert((none && error('')) == (none))
+    && assert(none == none)
+    && assert((none && some(16)) == none)
 }

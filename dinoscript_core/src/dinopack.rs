@@ -17,7 +17,8 @@ pub mod utils {
     use crate::{
         bytecode::SourceId,
         compilation_scope::{
-            ty::{Generic, GenericSetId, Ty}, CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc
+            ty::{Generic, GenericSetId, Ty},
+            CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc,
         },
         dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnFunc, UserFn},
         errors::RuntimeViolation,
@@ -55,9 +56,7 @@ pub mod utils {
         pub fn to_dinobject(self, runtime: &Runtime<'s>) -> DinoResult<'s> {
             match self {
                 SetupItem::Function(f) => f.to_dinobject(runtime),
-                SetupItem::Value(v) => {
-                    (v.value)(runtime)
-                },
+                SetupItem::Value(v) => (v.value)(runtime),
             }
         }
     }
@@ -78,21 +77,18 @@ pub mod utils {
         }
 
         pub fn to_dinobject(self, runtime: &Runtime<'s>) -> DinoResult<'s> {
-            runtime
-                .allocate(Ok(match self.body {
-                    SetupFunctionBody::System(f) => DinObject::SourceFn(f),
-                    SetupFunctionBody::User(f) => DinObject::UserFn(f),
-                }))
+            runtime.allocate(Ok(match self.body {
+                SetupFunctionBody::System(f) => DinObject::SourceFn(f),
+                SetupFunctionBody::User(f) => DinObject::UserFn(f),
+            }))
         }
     }
-
 
     pub struct SetupValue<'s, C> {
         pub name: Cow<'s, str>,
         pub ty_factory: fn(&C) -> Arc<Ty<'s>>,
         pub value: fn(&Runtime<'s>) -> DinoResult<'s>,
     }
-
 
     pub struct SignatureGen<'s> {
         id: GenericSetId,

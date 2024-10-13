@@ -40,8 +40,6 @@ pub struct AllocatedRuntimeError<'s> {
     runtime: Runtime<'s>,
 }
 
-
-
 impl<'s> Error for AllocatedRuntimeError<'s> {}
 
 impl<'s> Display for AllocatedRuntimeError<'s> {
@@ -85,14 +83,13 @@ impl<'s> Allocatable<'s> for RuntimeError {
 
     fn obj_size(&self) -> usize {
         std::mem::size_of::<AllocatedRuntimeError>()
-        + match self {
-            Self::Owned(s) => s.len(),
-            _ => 0,
-        }
+            + match self {
+                Self::Owned(s) => s.len(),
+                _ => 0,
+            }
     }
 
     fn allocate(self, runtime: Runtime<'s>) -> Self::Output {
         Self::Output::new(Arc::new(AllocatedRuntimeError { err: self, runtime }))
     }
 }
-

@@ -8,6 +8,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate};
 
 use crate::{
@@ -20,7 +21,7 @@ use crate::{
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
     maybe_owned::MaybeOwned,
-    overloads::{combine_types, BindingResolution, OverloadPriority},
+    overloads::{combine_types, BindingResolution, OverloadPriority, ResolutionPriority},
 };
 
 pub mod ty {
@@ -560,15 +561,19 @@ pub trait Builtins<'s> {
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
     fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>>;
 }
+
+#[derive(Debug)]
 enum AdditionalParam<'s> {
     Value(usize),
     OverloadResolve(OverloadCandidate<'s>),
 }
 
+#[derive(Debug)]
 struct OverloadCandidate<'s> {
     loc: RelativeLocation,
     output_ty: Arc<Ty<'s>>,
     additional_params: Vec<AdditionalParam<'s>>,
+    priority: ResolutionPriority,
 }
 
 pub struct CompilationScope<'p, 's, B> {
@@ -828,120 +833,143 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             todo!()
         }
         let is_one_option = overloads.len() == 1;
-        let mut resolved_overloads = Vec::new();
-        'outer: for rel_overload in overloads {
-            let overload = rel_overload.overload;
-            if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
-                if is_one_option {
-                    // if there's only one overload, we can raise a better error here
-                    return Err(CompilationError::ArgumentCountMismatch {
-                        func_name: name.clone(),
-                        min_n: overload.min_args_n(),
-                        max_n: overload.args.len(),
-                        actual_n: arg_types.len(),
-                    });
-                }
-                continue;
-            }
-            let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
-            let mut resolution = BindingResolution::new(
-                overload.generic_params.as_ref().map(|g| g.gen_id),
-                overload
-                    .generic_params
-                    .as_ref()
-                    .map(|g| g.generic_params.len())
-                    .unwrap_or_default(),
-            );
-            let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
-            for (i, (param, arg_ty)) in overload
-                .args
-                .iter()
-                .zip(arg_types.iter().map(Some).chain(repeat(None)))
-                .enumerate()
-            {
-                if let Some(arg_ty) = arg_ty {
-                    if resolution.assign(&param.ty, arg_ty).is_err() {
-                        if is_one_option {
-                            // if there's only one overload, we can raise a better error here
-                            return Err(CompilationError::ArgumentTypeMismatch {
-                                func_name: name.clone(),
-                                param_n: i,
-                                param_name: None,
-                                expected_ty: param.ty.clone(),
-                                actual_ty: arg_ty.clone(),
-                            });
-                        }
-                        continue 'outer;
-                    }
-                } else if let Some(default) = &param.default {
-                    match default {
-                        OverloadArgDefault::Value(cell_idx) => {
-                            additional_params.push(AdditionalParam::Value(*cell_idx));
-                        }
-                        OverloadArgDefault::OverloadResolve(OverloadResolve { name: ov_name }) => {
-                            let resolved_ty = param.ty.resolve(None, &resolution.bound_generics, gen_id);
-                            let Ty::Fn(expected_signature) = resolved_ty.as_ref() else {
-                                unreachable!()
-                            };
-                            // todo avoid infinite recursion (note that it might be a double recursion)
-                            let candidate = match self.get_named_item(ov_name) {
-                                Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
-                                    self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
-                                }
-                                Some(_) => {
-                                    todo!()
-                                }
-                                None => {
-                                    todo!()
-                                }
-                            };
-                            let candidate = match candidate {
-                                Ok(candidate) => candidate,
-                                Err(_) => {
-                                    if is_one_option {
-                                        // if there's only one overload, we can raise a better error here
-                                        // todo work the error into the error type
-                                        return Err(CompilationError::FailedDefaultResolution {
-                                            fn_name: name.clone(),
-                                            param_n: i,
-                                            overload_name: ov_name.clone(),
-                                        });
-                                    }
-                                    continue 'outer;
-                                }
-                            };
-                            additional_params.push(AdditionalParam::OverloadResolve(candidate));
-                        }
-                    }
+        let by_category = overloads
+            .into_iter()
+            .map(|rel_overload| {
+                let overload = rel_overload.overload;
+                let priority = if overload.generic_params.is_some() {
+                    OverloadPriority::Generic
                 } else {
-                    unreachable!()
+                    OverloadPriority::Specific
+                };
+                (priority, rel_overload)
+            })
+            .sorted_by_key(|(priority, _)| *priority)
+            .chunk_by(|(priority, _)| *priority);
+        for (_, overloads) in by_category.into_iter() {
+            let mut resolved_overloads = Vec::new();
+            'outer: for (_, rel_overload) in overloads {
+                let overload = rel_overload.overload;
+                if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
+                    if is_one_option {
+                        // if there's only one overload, we can raise a better error here
+                        return Err(CompilationError::ArgumentCountMismatch {
+                            func_name: name.clone(),
+                            min_n: overload.min_args_n(),
+                            max_n: overload.args.len(),
+                            actual_n: arg_types.len(),
+                        });
+                    }
+                    continue;
                 }
-            }
-            // todo assert that all generics are resolved (not unknown)
-            let output_type = overload.return_ty.resolve(None, &resolution.bound_generics, gen_id);
-            resolved_overloads.push(OverloadCandidate {
-                loc: rel_overload.loc,
-                output_ty: output_type,
-                additional_params,
-            });
-        }
-        if resolved_overloads.is_empty() {
-            return Err(CompilationError::NoOverloads {
-                name: name.clone(),
-                arg_types: arg_types.to_owned(),
-            });
-        } else if resolved_overloads.len() > 1 {
-            resolved_overloads.sort_by_key(|ov| ov.priority);
-            // if the first two options are of equal priority, then we have a disambiguation error
-            let first_priority = resolved_overloads[0].priority;
-            if resolved_overloads[1].priority == first_priority {
-                return Err(CompilationError::AmbiguousOverloads {
-                    name: name.clone(),
-                    arg_types: arg_types.to_owned(),
+                let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
+                let mut resolution = BindingResolution::new(
+                    overload.generic_params.as_ref().map(|g| g.gen_id),
+                    overload
+                        .generic_params
+                        .as_ref()
+                        .map(|g| g.generic_params.len())
+                        .unwrap_or_default(),
+                );
+                let mut additional_params = Vec::with_capacity(overload.args.len() - arg_types.len());
+                for (i, (param, arg_ty)) in overload
+                    .args
+                    .iter()
+                    .zip(arg_types.iter().map(Some).chain(repeat(None)))
+                    .enumerate()
+                {
+                    if let Some(arg_ty) = arg_ty {
+                        if resolution.assign(&param.ty, arg_ty).is_err() {
+                            if is_one_option {
+                                // if there's only one overload, we can raise a better error here
+                                return Err(CompilationError::ArgumentTypeMismatch {
+                                    func_name: name.clone(),
+                                    param_n: i,
+                                    param_name: None,
+                                    expected_ty: param.ty.clone(),
+                                    actual_ty: arg_ty.clone(),
+                                });
+                            }
+                            continue 'outer;
+                        }
+                    } else if let Some(default) = &param.default {
+                        match default {
+                            OverloadArgDefault::Value(cell_idx) => {
+                                additional_params.push(AdditionalParam::Value(*cell_idx));
+                            }
+                            OverloadArgDefault::OverloadResolve(OverloadResolve { name: ov_name }) => {
+                                let resolved_ty = param.ty.resolve(None, &resolution.bound_generics, gen_id);
+                                let Ty::Fn(expected_signature) = resolved_ty.as_ref() else {
+                                    unreachable!()
+                                };
+                                println!(
+                                    "resolving overload: {} with args {:?}",
+                                    ov_name, expected_signature.args
+                                );
+                                // todo avoid infinite recursion (note that it might be a double recursion)
+                                let candidate = match self.get_named_item(ov_name) {
+                                    Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
+                                        self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
+                                    }
+                                    Some(_) => {
+                                        todo!()
+                                    }
+                                    None => {
+                                        todo!()
+                                    }
+                                };
+                                println!("\tresolved with {:?}", candidate);
+                                let candidate = match candidate {
+                                    Ok(candidate) => candidate,
+                                    Err(_) => {
+                                        if is_one_option {
+                                            // if there's only one overload, we can raise a better error here
+                                            // todo work the error into the error type
+                                            return Err(CompilationError::FailedDefaultResolution {
+                                                fn_name: name.clone(),
+                                                param_n: i,
+                                                overload_name: ov_name.clone(),
+                                            });
+                                        }
+                                        continue 'outer;
+                                    }
+                                };
+                                additional_params.push(AdditionalParam::OverloadResolve(candidate));
+                            }
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+                // todo assert that all generics are resolved (not unknown)
+                let output_type = overload.return_ty.resolve(None, &resolution.bound_generics, gen_id);
+                resolved_overloads.push(OverloadCandidate {
+                    loc: rel_overload.loc,
+                    output_ty: output_type,
+                    additional_params,
+                    priority: resolution.priority(),
                 });
             }
+            if resolved_overloads.is_empty() {
+                continue;
+            } else if resolved_overloads.len() > 1 {
+                // we now sort our resolved overloads by their resolution priority
+                resolved_overloads.sort_by_key(|cand| cand.priority);
+                let first_priority = resolved_overloads[0].priority;
+                if resolved_overloads[1].priority == first_priority {
+                    return Err(CompilationError::AmbiguousOverloads {
+                        name: name.clone(),
+                        arg_types: arg_types.to_owned(),
+                    });
+                }
+                // if the first priority is better than the second, we can just return the first
+            }
+            return Ok(resolved_overloads.into_iter().next().unwrap());
         }
-        Ok(resolved_overloads.into_iter().next().unwrap())
+        return Err(CompilationError::NoOverloads {
+            name: name.clone(),
+            arg_types: arg_types.to_owned(),
+        });
     }
 
     fn feed_additional_param<'c: 's>(

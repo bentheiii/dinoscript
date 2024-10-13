@@ -2,17 +2,24 @@ use std::sync::Arc;
 
 use crate::compilation_scope::ty::{Fn, Generic, GenericSetId, Specialized, Ty};
 
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum OverloadPriority {
-    NonGeneric = 0,
+    Specific = 0,
     Generic = 1,
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ResolutionPriority {
+    Exact = 0,
+    Upcast = 1,
 }
 
 pub struct BindingResolution<'s> {
     gen_id: Option<GenericSetId>,
     pub bound_generics: Vec<Arc<Ty<'s>>>,
+    priority: ResolutionPriority,
 }
 
 impl<'s> BindingResolution<'s> {
@@ -20,6 +27,7 @@ impl<'s> BindingResolution<'s> {
         BindingResolution {
             gen_id,
             bound_generics: vec![Ty::unknown(); n_generics],
+            priority: ResolutionPriority::Exact,
         }
     }
 
@@ -27,7 +35,12 @@ impl<'s> BindingResolution<'s> {
         BindingResolution {
             gen_id: None,
             bound_generics: Vec::new(),
+            priority: ResolutionPriority::Exact,
         }
+    }
+
+    pub fn priority(&self) -> ResolutionPriority {
+        self.priority
     }
 
     pub fn assign(&mut self, assign_type: &Arc<Ty<'s>>, input_type: &Arc<Ty<'s>>) -> Result<(), ()> {
@@ -50,7 +63,10 @@ impl<'s> BindingResolution<'s> {
                         .zip(inp_args.iter())
                         .try_for_each(|(a, i)| self.assign(a, i))
                 }
-                Ty::Unknown => Ok(()),
+                Ty::Unknown => {
+                    self.priority = ResolutionPriority::Upcast;
+                    Ok(())
+                }
                 _ => Err(()),
             },
             Ty::Tuple(assign_tup) => {
@@ -84,7 +100,7 @@ impl<'s> BindingResolution<'s> {
                 self.bound_generics[*idx] = combine_types(bound_type, input_type)?;
                 Ok(())
             }
-            Ty::Generic(expected_gen)=> match input_type.as_ref() {
+            Ty::Generic(expected_gen) => match input_type.as_ref() {
                 Ty::Generic(actual_gen) => {
                     if expected_gen.idx == actual_gen.idx && expected_gen.gen_id == actual_gen.gen_id {
                         Ok(())
@@ -92,19 +108,23 @@ impl<'s> BindingResolution<'s> {
                         Err(())
                     }
                 }
-                Ty::Unknown => Ok(()),
+                Ty::Unknown => {
+                    self.priority = ResolutionPriority::Upcast;
+                    Ok(())
+                }
                 _ => Err(()),
             },
             Ty::Unknown => {
                 // since this indicates functions that should never actually be called, we only accept arguments that could never actually form
-                if let Ty::Unknown = input_type.as_ref() {   
-                    //self.priority = OverloadPriority::Unknown;
+                println!("Unknown type in assign");
+                if let Ty::Unknown = input_type.as_ref() {
+                    println!("\tassign_type: {} OK", assign_type);
                     Ok(())
-                }
-                else {
+                } else {
+                    println!("\tassign_type: {} FAIL", assign_type);
                     Err(())
                 }
-            },
+            }
             Ty::Tail => unreachable!(),
         }
     }

@@ -1,7 +1,7 @@
 use std::fs;
 
 use dinoscript_core::bytecode::Command;
-use dinoscript_core::compilation_scope::{NamedItem, Location};
+use dinoscript_core::compilation_scope::{Location, NamedItem};
 use dinoscript_core::dinobj::{DinObject, StackItem};
 use dinoscript_core::dinopack::DinoPack;
 use dinoscript_core::runtime::{Runtime, RuntimeFrame};

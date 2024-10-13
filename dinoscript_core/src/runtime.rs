@@ -7,7 +7,8 @@ use std::{
 use crate::{
     bytecode::{Command, SourceId},
     dinobj::{
-        Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending, PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject
+        Allocatable, AllocatedRef, BindBack, DinObject, DinoResult, DinoStack, DinoValue, ExtendedObject, Pending,
+        PendingFunctor, SourceFnResult, StackItem, TailCall, TailCallAvailability, UserFn, VariantObject,
     },
     errors::{AllocatedErrRef, RuntimeError, RuntimeViolation},
     sequence::Sequence,
@@ -42,9 +43,9 @@ impl<'s> SharedRuntime<'s> {
             println!("cloning ref ({} bytes) to {:?}", AllocatedRef::SIZE, obj);
             println!("total allocated space: {} bytes", self.allocated_space);
         }
-        Ok(match obj{
+        Ok(match obj {
             Ok(obj) => Ok(unsafe { obj.clone() }),
-            Err(e) => Err(unsafe {e.clone()}),
+            Err(e) => Err(unsafe { e.clone() }),
         })
     }
 
@@ -288,7 +289,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     let Some(StackItem::Pending(Pending { functor, mut arguments })) = self.stack.pop() else {
                         unreachable!()
                     };
-                    match functor{
+                    match functor {
                         PendingFunctor::Function(func) => {
                             let func_ref = if let DinObject::BindBack(bind_back) = func.as_ref() {
                                 arguments.extend(
@@ -350,7 +351,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                 Ok(arg) => match arg.as_ref() {
                                     DinObject::Variant(variant) => {
                                         if variant.tag() == expected_tag {
-                                            self.stack.push(StackItem::Value(Ok(self.runtime.clone_ok_ref(variant.obj())?)));
+                                            self.stack.push(StackItem::Value(Ok(self
+                                                .runtime
+                                                .clone_ok_ref(variant.obj())?)));
                                         } else {
                                             todo!("expected tag {}, got {}", expected_tag, variant.tag())
                                         }
@@ -517,7 +520,10 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 };
                 let Ok(func) = func else { todo!() };
                 let arguments = self.stack.drain(self.stack.len() - n_args..).collect();
-                self.stack.push(StackItem::Pending(Pending { functor: PendingFunctor::Function(func), arguments }));
+                self.stack.push(StackItem::Pending(Pending {
+                    functor: PendingFunctor::Function(func),
+                    arguments,
+                }));
                 Ok(ControlFlow::Break(()))
             }
             Command::Attr(i) => {
@@ -782,7 +788,9 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                 Ok(arg) => match arg.as_ref() {
                                     DinObject::Variant(variant) => {
                                         if variant.tag() == expected_tag {
-                                            self.stack.push(StackItem::Value(Ok(self.runtime().clone_ok_ref(variant.obj())?)));
+                                            self.stack.push(StackItem::Value(Ok(self
+                                                .runtime()
+                                                .clone_ok_ref(variant.obj())?)));
                                         } else {
                                             todo!("expected tag {}, got {}", expected_tag, variant.tag())
                                         }
