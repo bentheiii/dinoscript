@@ -556,6 +556,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(ControlFlow::Break(()))
             }
             Command::Attr(i) => {
+                // todo make this pending too?
                 self.eval_top(TailCallAvailability::Disallowed)?;
                 let StackItem::Value(val) = self.stack.pop().unwrap() else {
                     unreachable!()
@@ -563,7 +564,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 match val {
                     Ok(item) => match item.as_ref() {
                         DinObject::Struct(fields) => {
-                            let attr = &fields[*i];
+                            let Some(attr) = &fields.get(*i) else {
+                                panic!("struct has no attribute at index {}, has fields: {:?}", i, fields)
+                            };
                             self.stack.push(StackItem::Value(Ok(self.runtime.clone_ok_ref(attr)?)));
                             Ok(ControlFlow::Break(()))
                         }

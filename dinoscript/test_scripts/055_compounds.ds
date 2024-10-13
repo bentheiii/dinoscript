@@ -1,0 +1,27 @@
+union unn(
+    a: int,
+    b: float
+)
+struct strct(
+    a: int,
+    b: float
+)
+
+fn foo(x: unn, y: strct)->float {
+    fn handle_a(v: int)->float {
+        ((v*y::a)/1) + y::b
+    }
+    fn handle_b(v: float)->float {
+        v*(y::a/1) + y::b
+    }
+
+    (
+        x?:a.map(handle_a) 
+        || x?:b.map(handle_b)
+    )!:Some
+}
+
+fn main()->bool {
+    assert(foo(unn::b(3/4), strct(3, 4.0)) == 25/4)
+    && assert(foo(unn::a(5), strct(3, 4.0)) == 19/1)
+}

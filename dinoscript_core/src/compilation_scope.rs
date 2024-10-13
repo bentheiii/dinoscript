@@ -301,7 +301,7 @@ pub mod ty {
     impl<'s> Specialized<'s> {
         pub fn get_field(&self, name: &Cow<'s, str>, tail: &Arc<Ty<'s>>) -> Option<Field<'s>> {
             let raw = match self.template.as_ref() {
-                TyTemplate::Compound(template) => template.fields.get(name).cloned(),
+                TyTemplate::Compound(template) => template.fields.get(name),
                 _ => None,
             };
             raw.map(|field| Field {
@@ -1299,6 +1299,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         let Some(field) = specialized.get_field(name, &obj_type) else {
                             todo!()
                         }; // raise an error
+                        println!("!!! name={name}, field.idx={}", field.idx);
                         sink.push(Command::Attr(field.idx));
                         let resolved_type =
                             field
@@ -1570,13 +1571,14 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let fields = compound
                     .fields
                     .iter()
-                    .map(|field| -> Result<_, _> {
+                    .enumerate()
+                    .map(|(i, field)| -> Result<_, _> {
                         Ok((
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
                                 raw_ty: self.parse_type(&field.ty, &ov)?,
-                                idx: self.get_cell_idx(),
+                                idx: i,
                             },
                         ))
                     })

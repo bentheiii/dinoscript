@@ -818,6 +818,19 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // region:float
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| Signature::new("add", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, float)),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_unwrap_value!(frame.eval_pop()?);
+
+                let a = rt_as_prim!(a, Float);
+                let b = rt_as_prim!(b, Float);
+
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Float(a + b))))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = rt_unwrap_value!(frame.eval_pop()?);
