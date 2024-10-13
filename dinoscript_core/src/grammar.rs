@@ -62,6 +62,22 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
     }
 }
 
+fn parse_compound_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
+    assert!(matches!(input.as_rule(), Rule::compound_type));
+    let mut inner = input.into_inner();
+    let first = inner.next().unwrap();
+    match first.as_rule(){
+        Rule::complete_type => parse_type(first),
+        Rule::forward_type => {
+            let mut inner =  first.into_inner();
+            let name = inner.next().unwrap();
+            let gen_args = inner;
+            todo!()
+        }
+        _ => unreachable!()
+    }
+}
+
 fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::expression3));
     let inner = input.into_inner().next().unwrap();
@@ -457,7 +473,7 @@ fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
                     let mut inner = field.into_inner();
                     let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
                     let name = name.as_str();
-                    let ty = parse_type(ty)?;
+                    let ty = parse_compound_type(ty)?;
                     Ok(Field::new(name, ty))
                 })
                 .collect::<Result<_, _>>()?;

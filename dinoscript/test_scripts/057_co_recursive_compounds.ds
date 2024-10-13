@@ -1,0 +1,26 @@
+union Chain(
+    last: (),
+    node: ~ChainNode
+)
+
+struct ChainNode(
+    value: int,
+    next: Chain
+)
+
+fn int_to_chain(x: int)->Chain {
+    if(x == 0, 
+        Chain::last(()),
+        Chain::node(ChainNode(x%10, int_to_chain(floor(x/10))))
+    )
+}
+
+fn chain_to_int(x: Chain)->int {
+    if(x?:last.is_some(), 0, x!:node.value + 10*chain_to_int(x!:node.next))
+}
+
+
+fn main()->bool {
+    let z = 205;
+    assert(chain_to_int(int_to_chain(z)) == z)
+}
