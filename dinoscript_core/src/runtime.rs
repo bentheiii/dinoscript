@@ -344,7 +344,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::Variant(expected_tag) => {
+                        PendingFunctor::VariantAccess(expected_tag) => {
                             debug_assert!(arguments.len() == 1);
                             self.stack.extend(arguments);
                             self.eval_top(TailCallAvailability::Disallowed)?;
@@ -369,7 +369,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::VariantSafe(expected_tag) => {
+                        PendingFunctor::VariantAccessSafe(expected_tag) => {
                             debug_assert!(arguments.len() == 1);
                             self.stack.extend(arguments);
                             self.eval_top(TailCallAvailability::Disallowed)?;
@@ -608,7 +608,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             Command::VariantAccess(expected_tag) => {
                 let arg = self.stack.pop().unwrap();
                 self.stack.push(StackItem::Pending(Pending {
-                    functor: PendingFunctor::Variant(VariantTag::new(*expected_tag)),
+                    functor: PendingFunctor::VariantAccess(VariantTag::new(*expected_tag)),
                     arguments: vec![arg],
                 }));
                 Ok(ControlFlow::Break(()))
@@ -616,7 +616,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
             Command::VariantAccessOpt(expected_tag) => {
                 let arg = self.stack.pop().unwrap();
                 self.stack.push(StackItem::Pending(Pending {
-                    functor: PendingFunctor::VariantSafe(VariantTag::new(*expected_tag)),
+                    functor: PendingFunctor::VariantAccessSafe(VariantTag::new(*expected_tag)),
                     arguments: vec![arg],
                 }));
                 Ok(ControlFlow::Break(()))
@@ -817,7 +817,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::Variant(expected_tag) => {
+                        PendingFunctor::VariantAccess(expected_tag) => {
                             debug_assert!(arguments.len() == 1);
                             self.stack.extend(arguments);
                             let arg = self.eval_pop()?;
@@ -839,7 +839,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                 }
                             }
                         }
-                        PendingFunctor::VariantSafe(expected_tag) => {
+                        PendingFunctor::VariantAccessSafe(expected_tag) => {
                             debug_assert!(arguments.len() == 1);
                             self.stack.extend(arguments);
                             let arg = self.eval_pop()?;

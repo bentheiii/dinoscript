@@ -14,7 +14,7 @@ pub mod pairable {
 
 pub mod ty {
 
-    use std::borrow::Cow;
+    use std::{borrow::Cow, fmt::Display};
 
     use super::pairable::{Pairable, WithPair};
     #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ pub mod ty {
                 }
                 Ty::Specialized(specialized_ty) => {
                     if specialized_ty.args.is_empty() {
-                        return specialized_ty.name.to_string();
+                        return specialized_ty.base.to_string();
                     }
                     let args = specialized_ty
                         .args
@@ -53,7 +53,7 @@ pub mod ty {
                         .map(|t| t.inner.to_in_code())
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("{}<{}>", specialized_ty.name, args)
+                    format!("{}<{}>", specialized_ty.base, args)
                 }
             }
         }
@@ -80,8 +80,28 @@ pub mod ty {
 
     #[derive(Debug, Clone)]
     pub struct SpecializedTy<'s> {
-        pub name: Cow<'s, str>,
+        pub base: SpecializedBaseTy<'s>,
         pub args: Vec<TyWithPair<'s>>,
+    }
+
+    impl<'s> SpecializedTy<'s> {
+        pub fn new(base: SpecializedBaseTy<'s>, args: Vec<TyWithPair<'s>>) -> Self {
+            SpecializedTy { base, args }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum SpecializedBaseTy<'s> {
+        // todo this enum will only have one variant, remove it
+        Name(Cow<'s, str>),
+    }
+
+    impl<'s> Display for SpecializedBaseTy<'s> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                SpecializedBaseTy::Name(name) => write!(f, "{}", name),
+            }
+        }
     }
 }
 

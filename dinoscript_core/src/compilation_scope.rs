@@ -16,7 +16,7 @@ use crate::{
         self,
         expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant},
         pairable::Pairable,
-        statement::{self, FnArgDefault, Let, Stmt, StmtWithPair},
+        statement::{self, FnArgDefault, Let, Stmt, StmtWithPair}, ty::SpecializedBaseTy,
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
@@ -54,10 +54,14 @@ pub mod ty {
     pub enum TyTemplate<'s> {
         Builtin(BuiltinTemplate),
         Compound(CompoundTemplate<'s>),
+        // only applicable inside compound templates
+        ForwardCompound(Cow<'s, str>),
     }
     impl<'s> TyTemplate<'s> {
         pub fn instantiate(self: &Arc<Self>, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
-            assert_eq!(args.len(), self.n_generics(),);
+            if !matches!(self.as_ref(), TyTemplate::ForwardCompound(_)) {
+                assert_eq!(args.len(), self.n_generics(),);
+            }
             Arc::new(Ty::Specialized(Specialized {
                 template: self.clone(),
                 args,
@@ -68,6 +72,7 @@ pub mod ty {
             match self {
                 Self::Builtin(template) => template.generics.as_ref(),
                 Self::Compound(template) => template.generics.as_ref(),
+                Self::ForwardCompound(_) => unreachable!(),
             }
             .map_or(0, |specs| specs.n_generics.get())
         }
@@ -76,14 +81,16 @@ pub mod ty {
             match self {
                 TyTemplate::Builtin(template) => template.generics.as_ref(),
                 TyTemplate::Compound(template) => template.generics.as_ref(),
+                TyTemplate::ForwardCompound(_) => unreachable!()
             }
             .map(|specs| specs.id)
         }
 
-        pub fn name(&self) -> &Cow<'s, str> {
+        pub fn name(&self) -> Cow<'s, str> {
             match self {
-                TyTemplate::Builtin(template) => &template.name,
-                TyTemplate::Compound(template) => &template.name,
+                TyTemplate::Builtin(template) => template.name.clone(),
+                TyTemplate::Compound(template) => template.name.clone(),
+                TyTemplate::ForwardCompound(name) => Cow::Owned(format!("~{}", name)),
             }
         }
     }
@@ -338,7 +345,8 @@ impl<'s> Variable<'s> {
 #[derive(Debug, Clone)]
 pub enum NamedType<'s> {
     Template(Arc<TyTemplate<'s>>),
-    Concrete(Arc<Ty<'s>>), // will always be a generic parameter
+    /// Will always be a generic parameter
+    Concrete(Arc<Ty<'s>>),
 }
 
 impl Display for NamedType<'_> {
@@ -715,42 +723,46 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let return_ty = self.parse_type(ret, gen_params, tail_name)?;
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
-            ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
-                let Some(item) = self.get_named_item(name) else {
-                    if let Some(gen) = gen_params.as_ref() {
-                        // todo make this a hash search?
-                        if let Some(idx) = gen.generic_params.iter().position(|param| param == name) {
-                            return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
+            ast::ty::Ty::Specialized(ast::ty::SpecializedTy { base, args }) => {
+                match base{
+                    SpecializedBaseTy::Name(name) => {
+                        let Some(item) = self.get_named_item(name) else {
+                            if let Some(gen) = gen_params.as_ref() {
+                                // todo make this a hash search?
+                                if let Some(idx) = gen.generic_params.iter().position(|param| param == name) {
+                                    return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
+                                }
+                            }
+                            if let Some(tail_name_cow) = tail_name {
+                                if name == tail_name_cow {
+                                    let args = args
+                                        .iter()
+                                        .map(|arg| self.parse_type(arg, gen_params, tail_name))
+                                        .collect::<Result<Vec<_>, _>>()?;
+                                    return Ok(Arc::new(Ty::Tail(args)));
+                                }
+                            }
+                            return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
+                        };
+                        match item {
+                            RelativeNamedItem::Type(NamedType::Template(template)) => {
+                                let args = args
+                                    .iter()
+                                    .map(|arg| self.parse_type(arg, gen_params, tail_name))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                // todo check that the number of args match
+                                Ok(template.instantiate(args))
+                            }
+                            RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
+                                if args.is_empty() {
+                                    Ok(ty.clone())
+                                } else {
+                                    todo!("error: {} is not a template type", name) // raise an error
+                                }
+                            }
+                            _ => todo!("handle item: {:#?}", item), // raise an error
                         }
                     }
-                    if let Some(tail_name_cow) = tail_name {
-                        if name == tail_name_cow {
-                            let args = args
-                                .iter()
-                                .map(|arg| self.parse_type(arg, gen_params, tail_name))
-                                .collect::<Result<Vec<_>, _>>()?;
-                            return Ok(Arc::new(Ty::Tail(args)));
-                        }
-                    }
-                    return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
-                };
-                match item {
-                    RelativeNamedItem::Type(NamedType::Template(template)) => {
-                        let args = args
-                            .iter()
-                            .map(|arg| self.parse_type(arg, gen_params, tail_name))
-                            .collect::<Result<Vec<_>, _>>()?;
-                        // todo check that the number of args match
-                        Ok(template.instantiate(args))
-                    }
-                    RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
-                        if args.is_empty() {
-                            Ok(ty.clone())
-                        } else {
-                            todo!("error: {} is not a template type", name) // raise an error
-                        }
-                    }
-                    _ => todo!("handle item: {:#?}", item), // raise an error
                 }
             }
         }
@@ -1358,7 +1370,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
                         let Some(field) = specialized.get_field(name) else {
-                            todo!()
+                            todo!("variant not found: {}", name)
                         }; // raise an error
                         sink.push(Command::VariantAccessOpt(field.idx));
                         Ok(self.optional(field.raw_ty))

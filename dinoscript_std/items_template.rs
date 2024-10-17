@@ -522,10 +522,10 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = frame.eval_pop()?;
+                println!("{:?}", a);
                 to_return_value(Ok(a))
             })),
         ))),
-        // endregion
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {

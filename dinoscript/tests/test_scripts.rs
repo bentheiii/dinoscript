@@ -11,7 +11,7 @@ use glob::glob;
 use itertools::Itertools;
 use stdext::function_name;
 
-const SHOW_COMMANDS: bool = false;
+const SHOW_COMMANDS: bool = true;
 
 fn test_script(script_number: usize) {
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");
@@ -63,9 +63,11 @@ fn test_script(script_number: usize) {
         let runtime = Runtime::new();
         let mut runtime_frame = RuntimeFrame::root(scope.n_cells, &runtime);
         core_pack.setup_runtime(&mut runtime_frame);
+        println!("----executing script {}----", script_number);
         for com in commands.iter() {
             runtime_frame.execute(com).unwrap();
         }
+        println!("----running main {}----", script_number);
         // we artificially run the main cell
         runtime_frame.execute(&push_command).unwrap();
         runtime_frame.execute(&Command::MakePending(0)).unwrap();

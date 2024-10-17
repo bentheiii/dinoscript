@@ -1,22 +1,27 @@
-union Chain(
-    last: (),
-    node: ~ChainNode
+struct ChainNode<N>(
+    value: int,
+    next: N
 )
 
-struct ChainNode(
-    value: int,
-    next: Chain
+union Chain(
+    Last: (),
+    Node: ChainNode<Chain>
 )
+
 
 fn int_to_chain(x: int)->Chain {
     if(x == 0, 
-        Chain::last(()),
-        Chain::node(ChainNode(x%10, int_to_chain(floor(x/10))))
+        Chain::Last(()),
+        Chain::Node(ChainNode(x%10, int_to_chain(floor(x/10))))
     )
 }
 
 fn chain_to_int(x: Chain)->int {
-    if(x?:last.is_some(), 0, x!:node.value + 10*chain_to_int(x!:node.next))
+    if(
+        x?:Last.is_some(),
+        0,
+        x!:Node::value + 10*chain_to_int(x!:Node::next)
+    )
 }
 
 

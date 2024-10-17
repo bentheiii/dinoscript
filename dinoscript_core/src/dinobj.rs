@@ -163,8 +163,8 @@ pub struct Pending<'s> {
 #[derive(Debug)]
 pub enum PendingFunctor<'s> {
     Function(AllocatedRef<'s>),
-    Variant(VariantTag),
-    VariantSafe(VariantTag),
+    VariantAccess(VariantTag),
+    VariantAccessSafe(VariantTag),
     Attr(usize),
 }
 

@@ -104,17 +104,15 @@ function = { "fn " ~ CNAME ~ generic_signature_opt ~ "(" ~ function_parameters_o
 compound_def = { compound_kind ~ CNAME ~ generic_signature_opt ~ "(" ~ compound_parameters ~ ")"}
  compound_kind = {"struct" | "union"}
  compound_parameters = {(compound_parameter ~ ",")* ~ (compound_parameter ~ (",")?)?}
- compound_parameter = {CNAME ~ ":" ~ compound_type}
- compound_type = {forward_type | complete_type}
-  forward_type = {"~" ~ CNAME ~ generic_arguments?}
-
-type_def = {"type" ~ CNAME ~ "=" ~ complete_type ~ ";"}
-
-complete_type = {
-  CNAME ~ generic_arguments?
-  | signature
-  | tup_type
- }
+ compound_parameter = {CNAME ~ ":" ~ complete_type}
+ 
+ type_def = {"type" ~ CNAME ~ "=" ~ complete_type ~ ";"}
+ 
+ complete_type = {
+   CNAME ~ generic_arguments?
+   | signature
+   | tup_type
+  }
  generic_arguments = {"<" ~ (complete_type ~ ",")* ~ complete_type ~ ">"}
  signature = {"(" ~ param_specs_opt ~ ")" ~ "->" ~ "(" ~ complete_type ~ ")"}
  param_specs_opt = { param_specs? }

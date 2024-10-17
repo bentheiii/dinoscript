@@ -12,3 +12,6 @@
 * lazy parameters in ud?
 * intern unknown type
 * intern tail type
+* handle 1-tuple types
+* have an option for global runtimes, reduce size of allocated objects
+* alternatively, have an interned list of runtimes, and store the id in the object

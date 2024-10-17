@@ -11,7 +11,7 @@ use crate::ast::{
     expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant},
     pairable::Pairable,
     statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair},
-    ty::{FnTy, SpecializedTy, Ty, TyWithPair},
+    ty::{FnTy, SpecializedBaseTy, SpecializedTy, Ty, TyWithPair},
 };
 
 #[derive(Parser)]
@@ -38,11 +38,8 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
             return Ok(Ty::Fn(fn_ty).with_pair(input_marker));
         }
         Rule::tup_type => {
-            let mut parts = Vec::new();
-            for part in first.into_inner() {
-                let ty = parse_type(part)?;
-                parts.push(ty);
-            }
+            let opt = first.into_inner().next().unwrap();
+            let parts = opt.into_inner().next().map_or_else(|| Ok(Vec::new()), |p| p.into_inner().map(|p| parse_type(p)).collect())?;
             return Ok(Ty::Tuple(parts).with_pair(input_marker));
         }
         _ => {
@@ -54,27 +51,11 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
                 .transpose()?
                 .unwrap_or_default();
             return Ok(Ty::Specialized(SpecializedTy {
-                name: name.into(),
+                base: SpecializedBaseTy::Name(name.into()),
                 args: generic_args,
             })
             .with_pair(input_marker));
         }
-    }
-}
-
-fn parse_compound_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
-    assert!(matches!(input.as_rule(), Rule::compound_type));
-    let mut inner = input.into_inner();
-    let first = inner.next().unwrap();
-    match first.as_rule(){
-        Rule::complete_type => parse_type(first),
-        Rule::forward_type => {
-            let mut inner =  first.into_inner();
-            let name = inner.next().unwrap();
-            let gen_args = inner;
-            todo!()
-        }
-        _ => unreachable!()
     }
 }
 
@@ -473,7 +454,7 @@ fn parse_statement(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
                     let mut inner = field.into_inner();
                     let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
                     let name = name.as_str();
-                    let ty = parse_compound_type(ty)?;
+                    let ty = parse_type(ty)?;
                     Ok(Field::new(name, ty))
                 })
                 .collect::<Result<_, _>>()?;
