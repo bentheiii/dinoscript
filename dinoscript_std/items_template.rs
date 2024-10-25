@@ -11,7 +11,7 @@ use dinoscript_core::{
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject},
     dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
     errors::RuntimeError,
-    lib_objects::{optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::Stack},
+    lib_objects::{optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}},
     runtime::Runtime,
 };
 use std::{ops::ControlFlow, sync::Arc};
@@ -333,12 +333,44 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             TemplateGenericSpecs::new(GenericSetId::unique(), 1),
         )),
     );
+    let stacknode_gen_id = GenericSetId::unique();
+    let stacknode = register_type(
+        scope,
+        "__std_StackNode",
+        TyTemplate::Compound(CompoundTemplate::new(
+            "__std_StackNode",
+            CompoundKind::Struct,
+            Some(TemplateGenericSpecs::new(stacknode_gen_id, 2)),
+            vec![
+                ("value".into(), Field::new(Arc::new(Ty::Generic(Generic::new(0, stacknode_gen_id))), 0)),
+                ("next".into(), Field::new(Arc::new(Ty::Generic(Generic::new(1, stacknode_gen_id))), 1)),
+                ("len".into(), Field::new(int.clone(), 2)),
+            ]
+            .into_iter()
+            .collect(),
+        )),
+    );
+    let stack_gen_id = GenericSetId::unique();
+
     let stack = register_type(
         scope,
         "Stack",
-        TyTemplate::Builtin(BuiltinTemplate::new(
+        TyTemplate::Compound(CompoundTemplate::new(
             "Stack",
-            TemplateGenericSpecs::new(GenericSetId::unique(), 1),
+            CompoundKind::Union,
+            Some(TemplateGenericSpecs::new(stack_gen_id, 1)),
+            vec![
+                (
+                    "Empty".into(),
+                    Field::new(Arc::new(Ty::Tuple(vec![])), stack::tag::EMPTY.into()),
+                ),
+                (
+                    "Node".into(),
+                    Field::new(stacknode.instantiate(vec![Arc::new(Ty::Generic(Generic::new(0, stack_gen_id))), Arc::new(Ty::Tail(vec![Arc::new(Ty::Generic(Generic::new(0, stack_gen_id)))]))]), stack::tag::NODE.into()),
+                ),
+            ]
+            .into_iter()
+            .collect(),
         )),
     );
     let optional_gen_id = GenericSetId::unique();
@@ -352,9 +384,9 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             vec![
                 (
                     "Some".into(),
-                    Field::new(Arc::new(Ty::Generic(Generic::new(0, optional_gen_id))), 0),
+                    Field::new(Arc::new(Ty::Generic(Generic::new(0, optional_gen_id))), optional::tag::SOME.into()),
                 ),
-                ("None".into(), Field::new(Arc::new(Ty::Tuple(vec![])), 1)),
+                ("None".into(), Field::new(Arc::new(Ty::Tuple(vec![])), optional::tag::NONE.into())),
             ]
             .into_iter()
             .collect(),
@@ -1108,38 +1140,6 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 // todo is this ok? should we make an unknown explicit?
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic(
-                    "push",
-                    vec![arg_gen!(bi, gen, stack: Stack<T>), arg_gen!(bi, gen, item: T)],
-                    ty_gen!(bi, gen, Stack<T>),
-                    gen,
-                )
-            },
-            SetupFunctionBody::System(Box::new(|frame| {
-                let stack_ref = rt_unwrap_value!(frame.eval_pop()?);
-                let item_ref = rt_unwrap_value!(frame.eval_pop()?);
-
-                let ret = Stack::populated(item_ref, stack_ref);
-                to_return_value(frame.runtime().allocate_ext(ret))
-            })),
-        ))),
-        // pragma:unwrap
-        builder.add_item(SetupItem::Function(SetupFunction::new(
-            |bi: &Builtins<'_>| {
-                // todo is this ok? should we make an unknown explicit?
-                let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic("stack", vec![], ty_gen!(bi, gen, Stack<T>), gen)
-            },
-            SetupFunctionBody::System(Box::new(|frame| {
-                let ret = Stack::empty();
-                to_return_value(frame.runtime().allocate_ext(ret))
-            })),
-        ))),
-        // pragma:unwrap
-        builder.add_item(SetupItem::Function(SetupFunction::new(
-            |bi: &Builtins<'_>| {
-                // todo is this ok? should we make an unknown explicit?
-                let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic(
                     "to_array",
                     vec![arg_gen!(bi, gen, stack: Stack<T>)],
                     ty_gen!(bi, gen, Sequence<T>),
@@ -1148,18 +1148,34 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let stack = rt_unwrap_value!(frame.eval_pop()?);
-
-                let stack = rt_as_ext!(stack, Stack);
-
-                let mut arr = Vec::with_capacity(stack.len());
-                for item_ref in stack.iter() {
-                    let item_ref = frame.runtime().clone_ok_ref(item_ref)?;
-                    arr.push(item_ref);
-                }
-                arr.reverse();
-
+                let stack = rt_as_prim!(stack, Variant);
+                let arr = {
+                    if stack.tag() == stack::tag::EMPTY {
+                        Vec::new()
+                    } else {
+                        let node = stack.obj();
+                        let mut node = rt_as_prim!(node, Struct);
+                        let Some(len) = node.get(2) else { todo!() };
+                        let len = rt_as_prim!(len, Int);
+                        let mut arr = Vec::with_capacity(*len as usize);
+                        loop {
+                            let Some(item) = node.get(0) else { todo!() };
+                            arr.push(frame.runtime().clone_ok_ref(item)?);
+                            let Some(next) = node.get(1) else { todo!() };
+                            let next = rt_as_prim!(next, Variant);
+                            if next.tag() == stack::tag::EMPTY {
+                                break;
+                            }
+                            let next_node = next.obj();
+                            node = rt_as_prim!(next_node, Struct);
+                        }
+                        arr.reverse();
+                        arr
+                    }
+                };
                 let ret = Sequence::new_array(arr);
                 to_return_value(frame.runtime().allocate_ext(ret))
+
             })),
         ))),
         // endregion stack
@@ -1234,7 +1250,28 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             }"#,
         ), // pragma:replace-end
-           // endregion:optional-1
+        // endregion:optional-1
+        // region:stack-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "len",
+            r#"fn len<T>(stack: Stack<T>)->int{
+                let as_node = stack?:Node;
+                if(as_node.is_some(),
+                    as_node!:Some::len,
+                    0
+                )
+            }"#,
+        ), // pragma:replace-end
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "push",
+            r#"fn push<T>(stack: Stack<T>, item: T)->Stack<T>{
+                Stack::Node(__std_StackNode(item, stack, len(stack)+1))
+            }"#,
+        ), // pragma:replace-end
     ]
     // pragma:skip 2
     ;

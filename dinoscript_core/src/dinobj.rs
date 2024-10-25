@@ -118,6 +118,18 @@ impl VariantTag {
     }
 }
 
+impl From<usize> for VariantTag {
+    fn from(tag: usize) -> Self {
+        Self::new(tag)
+    }
+}
+
+impl From<VariantTag> for usize {
+    fn from(tag: VariantTag) -> usize {
+        tag.0
+    }
+}
+
 #[derive(Debug)]
 pub struct VariantObject<'s> {
     tag: VariantTag,

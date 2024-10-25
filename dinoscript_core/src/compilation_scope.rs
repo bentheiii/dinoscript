@@ -1325,7 +1325,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
                         let Some(field) = specialized.get_field(name) else {
-                            todo!()
+                            todo!("field not found: {}", name)
                         }; // raise an error
                         sink.push(Command::Attr(field.idx));
                         Ok(field.raw_ty)

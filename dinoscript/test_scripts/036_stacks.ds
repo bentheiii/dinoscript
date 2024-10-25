@@ -5,7 +5,7 @@ fn my_range(start: int, stop: int, step:int)->Sequence<int> {
             range_helper(ret.push(i), i + step)
         )
     }
-    range_helper(stack(), start).to_array()
+    range_helper(Stack::Empty(()), start).to_array()
 }
 
 

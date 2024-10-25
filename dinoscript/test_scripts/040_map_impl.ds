@@ -5,7 +5,7 @@ fn my_map<T, V>(xs: Sequence<T>, f: (T) -> (V)) -> Sequence<V> {
             helper(input_idx+1, output.push(f(xs[input_idx])))
         )
     }
-    let output_stk = stack();
+    let output_stk = Stack::Empty(());
     helper(0, output_stk).to_array()
 }
 
