@@ -397,8 +397,50 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                             };
                             self.stack.push(StackItem::Value(val));
                         }
-                        PendingFunctor::Attr(..) => {
-                            todo!()
+                        PendingFunctor::Attr(i) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            self.eval_top(TailCallAvailability::Disallowed)?;
+                            let StackItem::Value(arg) = self.stack.pop().unwrap() else {
+                                unreachable!()
+                            };
+                            match arg {
+                                Ok(item) => match item.as_ref() {
+                                    DinObject::Struct(fields) => {
+                                        let Some(attr) = &fields.get(i) else {
+                                            panic!("struct has no attribute at index {}, has fields: {:?}", i, fields)
+                                        };
+                                        self.stack.push(StackItem::Value(Ok(self.runtime.clone_ok_ref(attr)?)));
+                                    }
+                                    _ => todo!(),
+                                },
+                                _ => todo!(),
+                            }
+                        }
+                        PendingFunctor::Struct => {
+                            let mut fields = Vec::with_capacity(arguments.len());
+                            for arg in arguments.into_iter().rev() {
+                                self.stack.push(arg);
+                                self.eval_top(TailCallAvailability::Disallowed)?;
+                                let StackItem::Value(val) = self.stack.pop().unwrap() else {
+                                    unreachable!()
+                                };
+                                let Ok(val) = val else { todo!() };
+                                fields.push(val);
+                            }
+                            let struct_ = self.runtime.allocate(Ok(DinObject::Struct(fields)))?;
+                            self.stack.push(StackItem::Value(struct_));
+                        }
+                        PendingFunctor::Variant(tag) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            self.eval_top(TailCallAvailability::Disallowed)?;
+                            let StackItem::Value(arg) = self.stack.pop().unwrap() else {
+                                unreachable!()
+                            };
+                            let Ok(arg) = arg else { todo!() };
+                            let obj = self.runtime.allocate(Ok(DinObject::Variant(VariantObject::new(tag, arg))))?;
+                            self.stack.push(StackItem::Value(obj));
                         }
                     }
                 }
@@ -556,53 +598,27 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(ControlFlow::Break(()))
             }
             Command::Attr(i) => {
-                // todo make this pending too?
-                self.eval_top(TailCallAvailability::Disallowed)?;
-                let StackItem::Value(val) = self.stack.pop().unwrap() else {
-                    unreachable!()
-                };
-                match val {
-                    Ok(item) => match item.as_ref() {
-                        DinObject::Struct(fields) => {
-                            let Some(attr) = &fields.get(*i) else {
-                                panic!("struct has no attribute at index {}, has fields: {:?}", i, fields)
-                            };
-                            self.stack.push(StackItem::Value(Ok(self.runtime.clone_ok_ref(attr)?)));
-                            Ok(ControlFlow::Break(()))
-                        }
-                        _ => todo!(),
-                    },
-                    _ => todo!(),
-                }
+                let arg = self.stack.pop().unwrap();
+                self.stack.push(StackItem::Pending(Pending {
+                    functor: PendingFunctor::Attr(*i),
+                    arguments: vec![arg],
+                }));
+                Ok(ControlFlow::Break(()))
             }
             Command::Struct(i) => {
-                let mut fields = Vec::with_capacity(*i);
-                for _ in 0..*i {
-                    self.eval_top(TailCallAvailability::Disallowed)?;
-                    let StackItem::Value(val) = self.stack.pop().unwrap() else {
-                        unreachable!()
-                    };
-                    fields.push(val);
-                }
-                match fields.into_iter().collect() {
-                    Err(_) => todo!(),
-                    Ok(fields) => {
-                        let struct_ = self.runtime.allocate(Ok(DinObject::Struct(fields)))?;
-                        self.stack.push(StackItem::Value(struct_));
-                        Ok(ControlFlow::Break(()))
-                    }
-                }
+                let pending_fields = self.stack.drain(self.stack.len() - *i..).collect();
+                self.stack.push(StackItem::Pending(Pending {
+                    functor: PendingFunctor::Struct,
+                    arguments: pending_fields,
+                }));
+                Ok(ControlFlow::Break(()))
             }
             Command::Variant(tag) => {
-                self.eval_top(TailCallAvailability::Disallowed)?;
-                let StackItem::Value(val) = self.stack.pop().unwrap() else {
-                    unreachable!()
-                };
-                let Ok(val) = val else { todo!() };
-                let variant = self
-                    .runtime
-                    .allocate(Ok(DinObject::Variant(VariantObject::new(VariantTag::new(*tag), val))))?;
-                self.stack.push(StackItem::Value(variant));
+                let arg = self.stack.pop().unwrap();
+                self.stack.push(StackItem::Pending(Pending {
+                    functor: PendingFunctor::Variant(VariantTag::new(*tag)),
+                    arguments: vec![arg],
+                }));
                 Ok(ControlFlow::Break(()))
             }
             Command::VariantAccess(expected_tag) => {
@@ -622,6 +638,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(ControlFlow::Break(()))
             }
             Command::Array(i) => {
+                // todo this should be pending too
                 let mut items = Vec::with_capacity(*i);
                 for _ in 0..*i {
                     self.eval_top(TailCallAvailability::Disallowed)?;
@@ -856,7 +873,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                             self.runtime().none()?
                                         }
                                     }
-                                    _ => todo!(),
+                                    _ => todo!("expected variant, got {:?}", arg),
                                 },
                                 Err(e) => {
                                     todo!("handle error: {}", e)
@@ -864,8 +881,47 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                             };
                             self.stack.push(StackItem::Value(val));
                         }
-                        PendingFunctor::Attr(..) => {
-                            todo!()
+                        PendingFunctor::Attr(i) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            let arg = self.eval_pop()?;
+                            match arg {
+                                Ok(item) => match item.as_ref() {
+                                    DinObject::Struct(fields) => {
+                                        let Some(attr) = &fields.get(i) else {
+                                            panic!("struct has no attribute at index {}, has fields: {:?}", i, fields)
+                                        };
+                                        self.stack.push(StackItem::Value(Ok(self.runtime().clone_ok_ref(attr)?)));
+                                    }
+                                    _ => todo!(),
+                                },
+                                _ => todo!(),
+                            }
+                        }
+                        PendingFunctor::Struct => {
+                            let mut fields = Vec::with_capacity(arguments.len());
+                            for arg in arguments.into_iter().rev() {
+                                self.stack.push(arg);
+                                let val = self.eval_pop()?;
+                                match val {
+                                    Ok(val) => fields.push(val),
+                                    Err(e) => {
+                                        todo!("handle error: {}", e)
+                                    }
+                                }
+                            }
+                            let obj = self.runtime().allocate(Ok(DinObject::Struct(fields)))?;
+                            self.stack.push(StackItem::Value(obj));
+                        }
+                        PendingFunctor::Variant(tag) => {
+                            debug_assert!(arguments.len() == 1);
+                            self.stack.extend(arguments);
+                            let Ok(arg) = self.eval_pop()? else {todo!()};
+                            let obj = self.runtime().allocate(Ok(DinObject::Variant(VariantObject::new(
+                                tag,
+                                arg,
+                            ))))?;
+                            self.stack.push(StackItem::Value(obj));
                         }
                     }
                 }

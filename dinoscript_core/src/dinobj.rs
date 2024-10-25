@@ -166,6 +166,8 @@ pub enum PendingFunctor<'s> {
     VariantAccess(VariantTag),
     VariantAccessSafe(VariantTag),
     Attr(usize),
+    Struct,
+    Variant(VariantTag),
 }
 
 #[derive(Debug)]

@@ -27,5 +27,6 @@ fn chain_to_int(x: Chain)->int {
 
 fn main()->bool {
     let z = 205;
+    let x = int_to_chain(z);
     assert(chain_to_int(int_to_chain(z)) == z)
 }
