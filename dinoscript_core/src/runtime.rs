@@ -445,7 +445,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     }
                 }
                 None => {
-                    panic!("the stack is empty!") // very error
+                    todo!("the stack is empty!") // very error
                 }
             }
         }

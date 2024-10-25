@@ -1,0 +1,19 @@
+struct Choice<T> (
+    a: T,
+    b: Sequence<T>
+)
+
+fn choose<T>(c: Choice<T>, i: int) -> T {
+    if(i==-1, c::a, c::b[i])
+}
+
+let c = Choice(1, [0,1,4,9,16]);
+
+fn main()->bool{
+    assert(choose(c, -1) == 1)
+    && assert(choose(c, 0) == 0)
+    && assert(choose(c, 1) == 1)
+    && assert(choose(c, 2) == 4)
+    && assert(choose(c, 3) == 9)
+    && assert(choose(c, 4) == 16)
+}

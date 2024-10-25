@@ -1,0 +1,14 @@
+fn a() -> int {
+    fn b(i: int) -> int {
+        fn c() -> int {
+            b(0)
+        }
+        if(i == 0, i*i, c())
+    }
+    
+    b(1)
+}
+
+fn main()->bool {
+    assert(a() == 0)
+}

@@ -1,0 +1,15 @@
+fn a(x: int) -> int {
+    fn b(y: int) -> int {
+        if (y < -10,
+            error('aaa'),
+            a(y-1))
+    }
+    if (x <= 0,
+        x,
+        b(x))
+}
+
+fn main()->bool{
+    assert(a(10) == 0)
+    && assert(a(11) == 0)
+}
