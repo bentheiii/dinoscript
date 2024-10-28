@@ -1,0 +1,12 @@
+fn inc(i: int)-> (int)->(int) {
+    (x: int)->{x + i}
+}
+
+fn quote(x: str, q: str) -> str {
+    q + x + q
+}
+
+fn main()->bool {
+    let f = inc(5);
+    assert([1,2,3].map((x:int) -> {quote(f(x).to_str(), '"')}) == ['"6"', '"7"', '"8"'])
+}
