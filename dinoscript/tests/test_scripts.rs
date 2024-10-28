@@ -11,7 +11,7 @@ use glob::glob;
 use itertools::Itertools;
 use stdext::function_name;
 
-const SHOW_COMMANDS: bool = false;
+const SHOW_COMMANDS: bool = true;
 
 fn test_script(script_number: usize) {
     let file_pattern = format!("test_scripts/{script_number:0>3}_*.ds");

@@ -277,7 +277,7 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
                 static LZ: std::sync::LazyLock<Vec<Command>> = std::sync::LazyLock::new(|| {{
                     {commands}
                 }});
-                SetupFunctionBody::User(dinoscript_core::dinobj::UserFn::without_capture({n_cells}, &LZ))
+                SetupFunctionBody::User(dinoscript_core::dinobj::UserFn::without_capture({fn_name:?}, {n_cells}, &LZ))
             }}
         )),\n"
         );

@@ -1,10 +1,7 @@
 use derive_more::Debug;
 
 use std::{
-    borrow::Cow,
-    mem::size_of,
-    ops::{BitAnd, ControlFlow, Deref},
-    sync::Arc,
+    borrow::Cow, fmt::Display, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc
 };
 
 use crate::{
@@ -28,6 +25,24 @@ pub enum DinObject<'s> {
     Extended(*const (dyn ExtendedObject + 's)),
     /// This is a special object, indicating that the frame's used function should be used as a value
     Tail,
+}
+
+impl<'s> Display for DinObject<'s>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            DinObject::Int(i)=>write!(f,"{}",i),
+            DinObject::Float(fl)=>write!(f,"{}",fl),
+            DinObject::Bool(b)=>write!(f,"{}",b),
+            DinObject::Str(s)=>write!(f,"\"{}\"",s),
+            DinObject::Struct(s)=>write!(f,"({})",s.iter().map(|a|format!("{}",a)).collect::<Vec<String>>().join(",")),
+            DinObject::Variant(v)=>write!(f,"Variant({},{})",v.tag().0,v.obj()),
+            DinObject::UserFn(u)=>write!(f,"UserFn({})",u.name),
+            DinObject::SourceFn(_)=>write!(f,"<system_function>"),
+            DinObject::BindBack(b)=>write!(f,"BindBack({},{})",b.func,b.defaults.iter().map(|d|format!("{}",d)).collect::<Vec<String>>().join(",")),
+            DinObject::Extended(e)=>write!(f,"Extended({})",unsafe{(**e).type_name()}),
+            DinObject::Tail=>write!(f,"Tail"),
+        }
+    }
 }
 
 unsafe impl Send for DinObject<'_> {}
@@ -82,14 +97,27 @@ pub type SourceFnFunc = Box<dyn for<'s, 'r> Fn(&mut SystemRuntimeFrame<'_, 's, '
 
 #[derive(Debug)]
 pub struct UserFn<'s> {
+    #[cfg(debug_assertions)]
+    pub name: String,
     pub captures: Vec<AllocatedRef<'s>>,
     pub n_cells: usize,
     pub commands: &'s Vec<Command<'s>>,
 }
 
 impl<'s> UserFn<'s> {
-    pub fn without_capture(n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
+    pub fn new(name: impl Into<String>, captures: Vec<AllocatedRef<'s>>, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
         Self {
+            #[cfg(debug_assertions)]
+            name: name.into(),
+            captures,
+            n_cells,
+            commands,
+        }
+    }
+    pub fn without_capture(name: &'static str, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
+        Self {
+            #[cfg(debug_assertions)]
+            name: name.to_string(),
             captures: vec![],
             n_cells,
             commands,
@@ -190,6 +218,12 @@ pub struct AllocatedObject<'s> {
     runtime: Runtime<'s>,
 }
 
+impl Display for AllocatedObject<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 unsafe impl Send for AllocatedObject<'_> {}
 unsafe impl Sync for AllocatedObject<'_> {}
 
@@ -211,6 +245,12 @@ impl<'s> Drop for AllocatedObject<'s> {
 
 #[derive(Debug)]
 pub struct AllocatedRef<'s>(pub Arc<AllocatedObject<'s>>);
+
+impl Display for AllocatedRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl<'s> AllocatedRef<'s> {
     pub const SIZE: usize = size_of::<AllocatedRef>();

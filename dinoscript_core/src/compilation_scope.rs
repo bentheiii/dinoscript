@@ -1566,17 +1566,15 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             sink.push(Command::PushFromCell(*cell_idx));
                         }
                     } else {
+                        let cap_idx = self.pending_captures.len();
                         self.pending_captures.push(PendingCapture {
                             ancestor_height: *ancestor_height - 1,
                             cell_idx: *cell_idx,
                         });
+                        sink.push(Command::PushFromCapture(cap_idx));
                     }
                 }
-                sink.push(Command::MakeFunction(MakeFunction {
-                    n_captures,
-                    n_cells,
-                    commands: subscope_sink,
-                }));
+                sink.push(Command::MakeFunction(MakeFunction::new(name.as_ref(), n_captures, n_cells, subscope_sink)));
 
                 sink.push(Command::PopToCell(fn_cell_idx));
                 Ok(())

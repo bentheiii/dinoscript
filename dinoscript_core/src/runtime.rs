@@ -542,7 +542,14 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 Ok(ControlFlow::Break(()))
             }
             Command::PushFromCapture(i) => {
-                let val = self.get_capture(*i)?;
+                let mut val = self.get_capture(*i)?;
+                if matches!(val.as_ref(), DinObject::Tail) {
+                    // instead use the current frame's user_fn
+                    let Some(user_fn) = self.user_fn.as_ref() else {
+                        todo!("tail call with no user function")
+                    };
+                    val = self.runtime.clone_ok_ref(user_fn)?;
+                }
                 self.stack.push(StackItem::Value(DinoValue::Ok(val)));
                 Ok(ControlFlow::Break(()))
             }
@@ -558,6 +565,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                 }
             }
             Command::PushTail => {
+                // todo tail can be a static/outsize of the arc-logic
                 self.stack
                     .push(StackItem::Value(self.runtime.allocate(Ok(DinObject::Tail))?));
                 Ok(ControlFlow::Break(()))
@@ -575,11 +583,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     captures.reverse();
                     captures
                 };
-                let user_fn = UserFn {
-                    captures,
-                    n_cells: mfn.n_cells,
-                    commands: &mfn.commands,
-                };
+                let user_fn = UserFn::new(mfn.name.clone(), captures, mfn.n_cells, &mfn.commands);
                 let value = self.runtime.allocate(Ok(DinObject::UserFn(user_fn)))?;
                 self.stack.push(StackItem::Value(value));
                 Ok(ControlFlow::Break(()))

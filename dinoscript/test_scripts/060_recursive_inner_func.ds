@@ -3,7 +3,7 @@ fn a() -> int {
         fn c() -> int {
             b(0)
         }
-        if(i == 0, i*i, c())
+        if(i == 0, i, c())
     }
     
     b(1)

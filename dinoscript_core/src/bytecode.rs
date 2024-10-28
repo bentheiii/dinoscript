@@ -83,14 +83,18 @@ impl PushFromSource {
 
 #[derive(Debug)]
 pub struct MakeFunction<'s> {
+    #[cfg(debug_assertions)]
+    pub name: String,
     pub n_captures: usize,
     pub n_cells: usize,
     pub commands: Vec<Command<'s>>,
 }
 
 impl<'s> MakeFunction<'s> {
-    pub fn new(n_captures: usize, n_cells: usize, commands: Vec<Command<'s>>) -> Self {
+    pub fn new(name: &str, n_captures: usize, n_cells: usize, commands: Vec<Command<'s>>) -> Self {
         Self {
+            #[cfg(debug_assertions)]
+            name: name.to_string(),
             n_captures,
             n_cells,
             commands,
