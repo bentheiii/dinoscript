@@ -1,0 +1,4 @@
+fn main()->bool{
+    let f = (x: int) -> {x*x+1};
+    assert(f(2) == 5)
+}

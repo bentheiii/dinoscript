@@ -1,0 +1,24 @@
+union Nested<T> (
+    x: T,
+    y: Sequence<Nested<T>>
+)
+
+fn flatten<T>(nested: Nested<T>) -> Sequence<T> {
+    fn helper(n: Nested<T>, ret: Stack<T>) -> Stack<T> {
+        fn arr_helper(y: Sequence<Nested<T>>, idx: int, ret0: Stack<T>) -> Stack<T> {
+            if (idx == y.len(),
+                ret0,
+                arr_helper(y, idx + 1, helper(y[idx], ret0)))
+        }
+        if(n?:x.is_some(),
+            ret.push(n!:x),
+            arr_helper(n!:y, 0, ret))
+    }
+
+    helper(nested, Stack::Empty(())).to_array()
+}
+
+fn main()->bool {
+    let n: Nested<int> = Nested::y([Nested::x(1), Nested::y([Nested::x(2), Nested::x(10)]), Nested::x(11), Nested::y([Nested::x(3), Nested::x(4)])]);
+    assert(flatten(n) == [1, 2, 10, 11, 3, 4])
+}

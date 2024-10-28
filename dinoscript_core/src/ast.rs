@@ -107,14 +107,13 @@ pub mod ty {
 
 pub mod expression {
     use super::{
-        pairable::{Pairable, WithPair},
-        ty::TyWithPair,
+        pairable::{Pairable, WithPair}, statement::{FnArg, StmtWithPair}, ty::TyWithPair
     };
     use std::borrow::Cow;
 
     pub type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone)]  // todo why is clone needed here?
     pub enum Expr<'s> {
         LitInt(i128),
         LitBool(bool),
@@ -131,6 +130,7 @@ pub mod expression {
         Formatted(Vec<FormattedPart<'s>>),
         Lookup(Lookup<'s>),
         Array(Vec<ExprWithPair<'s>>),
+        Lambda(Lambda<'s>),
     }
 
     impl<'s> Pairable<'s> for Expr<'s> {}
@@ -251,6 +251,13 @@ pub mod expression {
         pub name: Cow<'s, str>,
         pub args: Vec<ExprWithPair<'s>>,
     }
+
+    #[derive(Debug, Clone)]
+    pub struct Lambda<'s> {
+        pub args: Vec<FnArg<'s>>,
+        pub body: Vec<StmtWithPair<'s>>,
+        pub ret: Box<ExprWithPair<'s>>,
+    }
 }
 
 pub mod statement {
@@ -261,7 +268,7 @@ pub mod statement {
 
     pub type StmtWithPair<'s> = WithPair<'s, Stmt<'s>>;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub enum Stmt<'s> {
         Let(Let<'s>),
         Fn(Fn<'s>),
@@ -271,14 +278,14 @@ pub mod statement {
 
     impl<'s> Pairable<'s> for Stmt<'s> {}
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Type<'s> {
         name: Cow<'s, str>,
         generic_params: Vec<Cow<'s, str>>,
         value: TyWithPair<'s>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Compound<'s> {
         pub name: Cow<'s, str>,
         pub kind: CompoundKind,
@@ -308,7 +315,7 @@ pub mod statement {
         Union,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Field<'s> {
         pub name: Cow<'s, str>,
         pub ty: TyWithPair<'s>,
@@ -320,14 +327,14 @@ pub mod statement {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Let<'s> {
         pub var: Cow<'s, str>,
         pub ty: Option<TyWithPair<'s>>,
         pub expr: ExprWithPair<'s>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Fn<'s> {
         pub name: Cow<'s, str>,
         pub generic_params: Vec<Cow<'s, str>>,
@@ -337,7 +344,7 @@ pub mod statement {
         pub ret: ExprWithPair<'s>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct FnArg<'s> {
         pub name: Cow<'s, str>,
         pub ty: TyWithPair<'s>,
@@ -360,4 +367,5 @@ pub mod statement {
             ResolveOverload { name: name.into() }
         }
     }
+    
 }

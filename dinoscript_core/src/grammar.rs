@@ -8,7 +8,7 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Operator, Variant},
+    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Operator, Variant},
     pairable::Pairable,
     statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair},
     ty::{FnTy, SpecializedBaseTy, SpecializedTy, Ty, TyWithPair},
@@ -169,8 +169,33 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 .unwrap_or_default();
             return Ok(Expr::Array(ret).with_pair(inner));
         }
+        Rule::lambda_func => {
+            let pair_mark = inner.clone();
+            let mut inner = inner.into_inner();
+            let [params, body] = [inner.next().unwrap(), inner.next().unwrap()];
+            let params = params
+            .into_inner()
+            .next()
+            .map(|params| {
+                params
+                .into_inner()
+                .map(|p| parse_parameter(p))
+                .collect()
+            })
+            .transpose()?
+            .unwrap_or_default();
+            let mut body_inner = body.into_inner();
+            let [body_exec, ret] = [body_inner.next().unwrap(), body_inner.next().unwrap()];
+            let body = parse_execution(body_exec)?;
+            let ret = parse_expr(ret)?;
+            return Ok(Expr::Lambda(Lambda {
+                args: params,
+                body,
+                ret: Box::new(ret),
+            }).with_pair(pair_mark));
+        }
         _ => {
-            unreachable!()
+            unreachable!("{:?}", inner);
         }
     }
 }
@@ -331,6 +356,36 @@ fn parse_expr(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
         .parse(input.into_inner())
 }
 
+fn parse_parameter(input: Pair<'_, Rule>) -> Result<FnArg<'_>, ()> {
+    debug_assert!(matches!(input.as_rule(), Rule::parameter));
+    let mut inner = input.into_inner();
+    let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
+    let name = name.as_str();
+    let ty = parse_type(ty)?;
+    let default = if let Some(default) = inner.next() {
+        match default.as_rule() {
+            Rule::expr_default => {
+                let expr_pair = default.into_inner().next().unwrap();
+                Some(FnArgDefault::Value(parse_expr(expr_pair)?))
+            }
+            Rule::resolve_default => {
+                let name = default.into_inner().next().unwrap().as_str();
+                Some(FnArgDefault::ResolveOverload(ResolveOverload::new(name)))
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    } else {
+        None
+    };
+    Ok(FnArg {
+        name: name.into(),
+        ty,
+        default,
+    })
+}
+
 fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
     debug_assert!(matches!(input.as_rule(), Rule::function));
     let pair = input.clone();
@@ -354,34 +409,7 @@ fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
         .map(|params| {
             params
                 .into_inner()
-                .map(|p| {
-                    let mut inner = p.into_inner();
-                    let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
-                    let name = name.as_str();
-                    let ty = parse_type(ty)?;
-                    let default = if let Some(default) = inner.next() {
-                        match default.as_rule() {
-                            Rule::expr_default => {
-                                let expr_pair = default.into_inner().next().unwrap();
-                                Some(FnArgDefault::Value(parse_expr(expr_pair)?))
-                            }
-                            Rule::resolve_default => {
-                                let name = default.into_inner().next().unwrap().as_str();
-                                Some(FnArgDefault::ResolveOverload(ResolveOverload::new(name)))
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                    Ok(FnArg {
-                        name: name.into(),
-                        ty,
-                        default,
-                    })
-                })
+                .map(|p| parse_parameter(p))
                 .collect()
         })
         .transpose()?

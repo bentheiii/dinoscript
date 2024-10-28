@@ -37,7 +37,7 @@ expression3 = {
     | NUMBER_ANY
     | container
     | "(" ~ expression ~ ")"
-    //| lambda_func
+    | lambda_func
     | tuple
     | disambiguation
     //| dyn_bind_cname
@@ -51,7 +51,7 @@ expression3 = {
  bool = @{"true"|"false"}
  disambiguation = {CNAME ~ "{" ~ param_specs_opt ~ "}"}
  //dyn_bind_cname = {CNAME ~ "<" ~ complete_type ~ (","~complete_type)* ~ ">"}
-// lambda_func = { "(" ~ function_parameters_opt ~ ")" ~ "->" ~ function_body }
+ lambda_func = { "(" ~ function_parameters_opt ~ ","? ~ ")" ~ "->" ~ function_body }
 
 UNARY_OP = _{UNARY_PLUS | UNARY_MINUS | UNARY_NOT | UNARY_INV}
  UNARY_PLUS = {"+"}
