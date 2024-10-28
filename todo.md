@@ -16,3 +16,4 @@
 * have an option for global runtimes, reduce size of allocated objects
 * alternatively, have an interned list of runtimes, and store the id in the object
 * shortcut variant constructors with a nill value
+* mapping().set(...) results in an unknown eq call
