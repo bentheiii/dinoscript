@@ -153,8 +153,7 @@ macro_rules! arg_gen {
     };
 }
 
-// todo rename to rt_catch
-macro_rules! rt_unwrap_value {
+macro_rules! rt_catch {
     ($evaled:expr) => {
         match $evaled {
             Ok(v) => v,
@@ -463,7 +462,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
 
@@ -481,7 +480,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 Signature::new_generic("is_some", vec![arg_gen!(bi, gen, a: Optional<T>)], ty!(bi, bool), gen)
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
                 let tag = a.tag();
@@ -504,12 +503,12 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
 
                 if a.tag() == optional::tag::SOME {
-                    let f = rt_unwrap_value!(frame.eval_pop()?);
+                    let f = rt_catch!(frame.eval_pop()?);
                     let obj = frame.runtime().clone_ref(Ok(a.obj()))?;
                     to_return_value(frame.call(&f, &[obj]))
                 } else {
@@ -530,7 +529,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
 
@@ -554,7 +553,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Variant);
 
@@ -595,7 +594,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("error", vec![arg!(bi, a: str)], Ty::unknown()),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Str);
                 to_return_value(frame.runtime().allocate(Err(RuntimeError::Owned(a.to_string()))))
@@ -615,8 +614,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("add", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -627,8 +626,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("div", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, float)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -645,8 +644,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -657,8 +656,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("gt", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -669,8 +668,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("gte", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -681,8 +680,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("lt", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -693,8 +692,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("lte", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -705,8 +704,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("mod", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -721,8 +720,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("mul", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -733,7 +732,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("neg", vec![arg!(bi, a: int)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 to_return_value(frame.runtime().allocate(Ok(DinObject::Int(-a))))
@@ -743,8 +742,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("sub", vec![arg!(bi, a: int), arg!(bi, b: int)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 let b = rt_as_prim!(b, Int);
@@ -755,7 +754,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("to_str", vec![arg!(bi, a: int)], ty!(bi, str)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Int);
                 to_return_value(frame.runtime().allocate(Ok(DinObject::Str(format!("{}", a).into()))))
@@ -767,7 +766,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("and", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Bool);
                 if !a {
@@ -782,7 +781,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             |bi: &Builtins<'_>| Signature::new("assert", vec![arg!(bi, a: bool)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
                 // todo: if the value is a pending, maybe we can add it to the error message?
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Bool);
                 to_return_value(if *a {
@@ -804,7 +803,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let b = rt_as_prim!(b, Bool);
 
@@ -818,8 +817,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Bool);
                 let b = rt_as_prim!(b, Bool);
@@ -831,7 +830,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("not", vec![arg!(bi, a: bool)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Bool);
                 to_return_value(frame.runtime().allocate(Ok(DinObject::Bool(!a))))
@@ -841,7 +840,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("or", vec![arg!(bi, a: bool), arg!(bi, b: bool)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Bool);
                 if *a {
@@ -863,14 +862,14 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let b = rt_as_prim!(b, Bool);
 
                 if !b {
                     to_return_value(frame.runtime().none())
                 } else {
-                    let inner = rt_unwrap_value!(frame.eval_pop()?);
+                    let inner = rt_catch!(frame.eval_pop()?);
                     let v = DinObject::Variant(VariantObject::new(optional::tag::SOME, inner));
                     to_return_value(frame.runtime().allocate(Ok(v)))
                 }
@@ -882,8 +881,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: str), arg!(bi, b: str)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Str);
                 let b = rt_as_prim!(b, Str);
@@ -895,8 +894,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("add", vec![arg!(bi, a: str), arg!(bi, b: str)], ty!(bi, str)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a_ref, Str);
                 if a.is_empty() {
@@ -917,8 +916,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("add", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, float)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Float);
                 let b = rt_as_prim!(b, Float);
@@ -930,8 +929,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("eq", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, bool)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Float);
                 let b = rt_as_prim!(b, Float);
@@ -943,7 +942,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("floor", vec![arg!(bi, a: float)], ty!(bi, int)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Float);
                 to_return_value(frame.runtime().allocate(Ok(DinObject::Int(a.floor() as i64))))
@@ -953,8 +952,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| Signature::new("mul", vec![arg!(bi, a: float), arg!(bi, b: float)], ty!(bi, float)),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_prim!(a, Float);
                 let b = rt_as_prim!(b, Float);
@@ -977,8 +976,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             //signature_fn!(fn eq<T0, T1> (a: Sequence<T0>, b: Sequence<T1>, fn_eq: (T0,T1)->(bool)~=eq) -> bool),
             SetupFunctionBody::System(Box::new(|frame| {
-                let a_ref = rt_unwrap_value!(frame.eval_pop()?);
-                let b_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let a_ref = rt_catch!(frame.eval_pop()?);
+                let b_ref = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_ext!(a_ref, Sequence);
                 let b = rt_as_ext!(b_ref, Sequence);
@@ -1010,9 +1009,9 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
-                let b = rt_unwrap_value!(frame.eval_pop()?);
-                let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
+                let b = rt_catch!(frame.eval_pop()?);
+                let fn_eq = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_ext!(a, Sequence);
                 let b = rt_as_ext!(b, Sequence);
@@ -1023,7 +1022,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                     let a_it = a_it?;
                     let b_it = b_it?;
                     let res = frame.call(&fn_eq, &[a_it, b_it])?;
-                    let res = rt_unwrap_value!(res);
+                    let res = rt_catch!(res);
                     let res = rt_as_prim!(res, Bool);
                     if !*res {
                         return to_return_value(frame.runtime().bool(false));
@@ -1039,7 +1038,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 Signature::new_generic("len", vec![arg_gen!(bi, gen, a: Sequence<T>)], ty!(bi, int), gen)
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let a = rt_unwrap_value!(frame.eval_pop()?);
+                let a = rt_catch!(frame.eval_pop()?);
 
                 let a = rt_as_ext!(a, Sequence);
                 let l = a.len() as i64;
@@ -1058,8 +1057,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let seq = rt_unwrap_value!(frame.eval_pop()?);
-                let idx = rt_unwrap_value!(frame.eval_pop()?);
+                let seq = rt_catch!(frame.eval_pop()?);
+                let idx = rt_catch!(frame.eval_pop()?);
 
                 let seq = rt_as_ext!(seq, Sequence);
                 let idx = rt_as_prim!(idx, Int);
@@ -1082,8 +1081,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
-                let func = rt_unwrap_value!(frame.eval_pop()?);
+                let seq_ref = rt_catch!(frame.eval_pop()?);
+                let func = rt_catch!(frame.eval_pop()?);
 
                 let seq = rt_as_ext!(seq_ref, Sequence);
                 if seq.is_empty() {
@@ -1109,9 +1108,9 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
-                let start_idx = rt_unwrap_value!(frame.eval_pop()?);
-                let end_idx = rt_unwrap_value!(frame.eval_pop()?);
+                let seq_ref = rt_catch!(frame.eval_pop()?);
+                let start_idx = rt_catch!(frame.eval_pop()?);
+                let end_idx = rt_catch!(frame.eval_pop()?);
 
                 let seq = rt_as_ext!(seq_ref, Sequence);
 
@@ -1149,7 +1148,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let seq_ref = rt_unwrap_value!(frame.eval_pop()?);
+                let seq_ref = rt_catch!(frame.eval_pop()?);
 
                 let seq = rt_as_ext!(seq_ref, Sequence);
 
@@ -1191,12 +1190,12 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let mapping = rt_unwrap_value!(frame.eval_pop()?);
-                let key = rt_unwrap_value!(frame.eval_pop()?);
+                let mapping = rt_catch!(frame.eval_pop()?);
+                let key = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
                 
-                let ret = rt_unwrap_value!(mapping.lookup(key, frame)?);
+                let ret = rt_catch!(mapping.lookup(key, frame)?);
                 match ret {
                     Some(v) => {
                         let variant = VariantObject::new(optional::tag::SOME, v);
@@ -1220,7 +1219,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let mapping = rt_unwrap_value!(frame.eval_pop()?);
+                let mapping = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
                 
@@ -1244,8 +1243,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
-                let fn_hash = rt_unwrap_value!(frame.eval_pop()?);
+                let fn_eq = rt_catch!(frame.eval_pop()?);
+                let fn_hash = rt_catch!(frame.eval_pop()?);
 
                 let mapping = Mapping::empty(fn_eq, fn_hash);
                 to_return_value(frame.runtime().allocate_ext(mapping))
@@ -1267,13 +1266,13 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let mapping = rt_unwrap_value!(frame.eval_pop()?);
-                let key = rt_unwrap_value!(frame.eval_pop()?);
-                let value = rt_unwrap_value!(frame.eval_pop()?);
+                let mapping = rt_catch!(frame.eval_pop()?);
+                let key = rt_catch!(frame.eval_pop()?);
+                let value = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
 
-                let ret = rt_unwrap_value!(mapping.with_update(iter::once(Ok(Ok((key, value)))), frame)?);
+                let ret = rt_catch!(mapping.with_update(iter::once(Ok(Ok((key, value)))), frame)?);
                 to_return_value(frame.runtime().allocate_ext(ret))
             })),
         ))),
@@ -1292,13 +1291,13 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let mapping = rt_unwrap_value!(frame.eval_pop()?);
-                let pairs = rt_unwrap_value!(frame.eval_pop()?);
+                let mapping = rt_catch!(frame.eval_pop()?);
+                let pairs = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
                 let pairs = rt_as_ext!(pairs, Sequence);
                 
-                let ret = rt_unwrap_value!(mapping.with_update(pairs.iter(frame).map(
+                let ret = rt_catch!(mapping.with_update(pairs.iter(frame).map(
                     |pair_ref| {
                         let pair_ref = catch!(pair_ref?);
                         let Some(pair) = as_prim!(pair_ref, Struct) else { todo!() };
@@ -1325,7 +1324,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 )
             },
             SetupFunctionBody::System(Box::new(|frame| {
-                let stack = rt_unwrap_value!(frame.eval_pop()?);
+                let stack = rt_catch!(frame.eval_pop()?);
                 let stack = rt_as_prim!(stack, Variant);
                 let arr = {
                     if stack.tag() == stack::tag::EMPTY {
