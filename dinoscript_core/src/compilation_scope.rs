@@ -598,6 +598,11 @@ pub struct CompilationScope<'p, 's, B> {
     pending_captures: Vec<PendingCapture>,
 }
 
+enum SubFunctionOutput<'s> {
+    WithDestinationCell(usize),
+    Anonymous(Fn<'s>),
+}
+
 impl<'p, 's, B> CompilationScope<'p, 's, B> {
     fn is_root(&self) -> bool {
         self.parent.is_none()
@@ -1418,7 +1423,19 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 )
             }
             Expr::Lambda(Lambda { args, body, ret }) => {
-                todo!()
+                let SubFunctionOutput::Anonymous(fn_ty) = self.create_sub_function(
+                    None,
+                    None,
+                    args,
+                    None,
+                    body,
+                    ret,
+                    sink,
+                    &expr.pair,
+                )? else {
+                    unreachable!()
+                };
+                Ok(Arc::new(Ty::Fn(fn_ty)))
             }
 
             _ => todo!("handle expression {:?}", expr.inner),
@@ -1435,17 +1452,16 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         Ok(ret)
     }
 
-    pub fn create_sub_function<'c:'s>(&mut self, 
+    fn create_sub_function<'c:'s>(&mut self, 
         name: Option<Cow<'s, str>>,
         generic_params: Option<&[Cow<'c, str>]>, 
         args: &[FnArg<'c>],
-        expected_return_ty: Option<Arc<Ty<'s>>>, 
+        expected_return_ty: Option<&ast::ty::TyWithPair<'c>>, 
         body: &[StmtWithPair<'c>],
         ret: &ExprWithPair<'c>,
         sink: &mut Vec<Command<'c>>,
         pair: &Pair<'c, crate::grammar::Rule>
-    )
-        ->Result<(),CompilationErrorWithPair<'c,'s>>{
+    )->Result<SubFunctionOutput<'s>,CompilationErrorWithPair<'c,'s>>{
         let gen_params = if generic_params.map_or(true, |v| v.is_empty()) {
             None
         } else {
@@ -1504,6 +1520,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
         // todo check that we don't shadow a variable
         let gen_id = gen_params.as_ref().map(|g| g.gen_id);
+        let expected_return_ty = expected_return_ty.map(|ert| self.parse_type(&ert, &gen_params, None)).transpose()?;
 
         let fn_cell_idx ;
         if let Some(name) = name {
@@ -1554,7 +1571,14 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }
         }
         sink.push(Command::MakeFunction(MakeFunction::new(None, n_captures, n_cells, subscope_sink)));
-        todo!()
+        if let Some(fn_cell_idx) = fn_cell_idx {
+            Ok(SubFunctionOutput::WithDestinationCell(fn_cell_idx))
+        } else {
+            Ok(SubFunctionOutput::Anonymous(Fn::new(
+                raw_args.into_iter().map(|(_, ty, _)| ty).collect(),
+                actual_return_ty,
+            )))
+        }
     }
 
     pub fn feed_statement<'c: 's>(
@@ -1600,109 +1624,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 return_ty,
                 body,
                 ret,
-            }) => {
-                let fn_cell_idx = self.get_cell_idx();
-                let gen_params = if generic_params.is_empty() {
-                    None
-                } else {
-                    Some(OverloadGenericParams::new(
-                        GenericSetId::unique(),
-                        generic_params.to_vec(),
-                    ))
+            }) =>{
+                let SubFunctionOutput::WithDestinationCell(fn_cell) = self.create_sub_function(Some(name.clone()), Some(generic_params), args, Some(return_ty), body, ret, sink, &stmt.pair)? else {
+                    unreachable!()
                 };
-
-                let raw_args = args
-                    .into_iter()
-                    .map(|fn_arg| -> Result<_, _> {
-                        Ok((
-                            fn_arg.name.clone(),
-                            self.parse_type(&fn_arg.ty, &gen_params,None)?,
-                            fn_arg.default.as_ref(),
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let expected_return_ty = self.parse_type(&return_ty, &gen_params, None)?;
-
-                let mut args = Vec::with_capacity(raw_args.len());
-                let mut first_default = None;
-                for (name, ty, default) in raw_args.iter() {
-                    let default = if let Some(default) = default {
-                        if first_default.is_none() {
-                            first_default = Some(name);
-                        }
-
-                        Some(match default {
-                            FnArgDefault::Value(expr) => {
-                                let default_cell_idx = self.get_cell_idx();
-                                let default_ty = self.feed_expression(expr, sink)?;
-                                // todo check that default_ty is a subtype of ty
-                                sink.push(Command::PopToCell(default_cell_idx));
-                                OverloadArgDefault::Value(default_cell_idx)
-                            }
-                            FnArgDefault::ResolveOverload(res) => {
-                                // todo check that the  type is a function
-                                OverloadArgDefault::OverloadResolve(OverloadResolve { name: res.name.clone() })
-                            }
-                        })
-                    } else {
-                        if first_default.is_some() {
-                            return Err(CompilationError::ParameterWithoutDefaultAfterDefault {
-                                param_name: name.clone(),
-                                default_param_name: first_default.cloned().unwrap(),
-                            }
-                            .with_pair(stmt.pair.clone()));
-                        }
-                        None
-                    };
-                    args.push(OverloadArg {
-                        ty: ty.clone(),
-                        default,
-                    });
-                }
-
-                // todo check that we don't shadow a variable
-                let gen_id = gen_params.as_ref().map(|g| g.gen_id);
-                let new_overload = Overload::new(gen_params, args, expected_return_ty, Location::Cell(fn_cell_idx));
-                self.add_overload(name.clone(), new_overload);
-
-                let mut subscope = self.child(gen_id);
-                assert!(!subscope.is_root());
-                let mut subscope_sink = Vec::new();
-                subscope.set_generics(generic_params.iter().cloned());
-                subscope.feed_params(
-                    raw_args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
-                    &mut subscope_sink,
-                );
-                for body_stmt in body {
-                    subscope.feed_statement(body_stmt, &mut subscope_sink)?;
-                }
-                let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
-                // todo check that return_tys match
-                let n_captures = subscope.pending_captures.len();
-                let n_cells = subscope.n_cells;
-                for PendingCapture {
-                    ancestor_height,
-                    cell_idx,
-                } in subscope.pending_captures.iter()
-                {
-                    if *ancestor_height == 1 {
-                        if cell_idx == &fn_cell_idx {
-                            sink.push(Command::PushTail);
-                        } else {
-                            sink.push(Command::PushFromCell(*cell_idx));
-                        }
-                    } else {
-                        let cap_idx = self.pending_captures.len();
-                        self.pending_captures.push(PendingCapture {
-                            ancestor_height: *ancestor_height - 1,
-                            cell_idx: *cell_idx,
-                        });
-                        sink.push(Command::PushFromCapture(cap_idx));
-                    }
-                }
-                sink.push(Command::MakeFunction(MakeFunction::new(None, n_captures, n_cells, subscope_sink)));
-
-                sink.push(Command::PopToCell(fn_cell_idx));
+                sink.push(Command::PopToCell(fn_cell));
                 Ok(())
             }
             Stmt::Compound(compound) => {
