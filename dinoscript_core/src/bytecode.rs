@@ -83,18 +83,17 @@ impl PushFromSource {
 
 #[derive(Debug)]
 pub struct MakeFunction<'s> {
-    #[cfg(debug_assertions)]
-    pub name: String,
+    // NOTE: this will be none in prod, it's a bit of a space waste at runtime though, can we remove it?
+    pub name: Option<String>,
     pub n_captures: usize,
     pub n_cells: usize,
     pub commands: Vec<Command<'s>>,
 }
 
 impl<'s> MakeFunction<'s> {
-    pub fn new(name: &str, n_captures: usize, n_cells: usize, commands: Vec<Command<'s>>) -> Self {
+    pub fn new(name: Option<String>, n_captures: usize, n_cells: usize, commands: Vec<Command<'s>>) -> Self {
         Self {
-            #[cfg(debug_assertions)]
-            name: name.to_string(),
+            name,
             n_captures,
             n_cells,
             commands,

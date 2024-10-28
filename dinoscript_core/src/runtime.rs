@@ -583,7 +583,7 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     captures.reverse();
                     captures
                 };
-                let user_fn = UserFn::new(mfn.name.clone(), captures, mfn.n_cells, &mfn.commands);
+                let user_fn = UserFn::new(mfn.name.as_deref(), captures, mfn.n_cells, &mfn.commands);
                 let value = self.runtime.allocate(Ok(DinObject::UserFn(user_fn)))?;
                 self.stack.push(StackItem::Value(value));
                 Ok(ControlFlow::Break(()))

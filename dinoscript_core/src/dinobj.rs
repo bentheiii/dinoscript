@@ -36,7 +36,7 @@ impl<'s> Display for DinObject<'s>{
             DinObject::Str(s)=>write!(f,"\"{}\"",s),
             DinObject::Struct(s)=>write!(f,"({})",s.iter().map(|a|format!("{}",a)).collect::<Vec<String>>().join(",")),
             DinObject::Variant(v)=>write!(f,"Variant({},{})",v.tag().0,v.obj()),
-            DinObject::UserFn(u)=>write!(f,"UserFn({})",u.name),
+            DinObject::UserFn(u)=>write!(f,"UserFn({})",u.name.unwrap_or("...")),
             DinObject::SourceFn(_)=>write!(f,"<system_function>"),
             DinObject::BindBack(b)=>write!(f,"BindBack({},{})",b.func,b.defaults.iter().map(|d|format!("{}",d)).collect::<Vec<String>>().join(",")),
             DinObject::Extended(e)=>write!(f,"Extended({})",unsafe{(**e).type_name()}),
@@ -97,18 +97,16 @@ pub type SourceFnFunc = Box<dyn for<'s, 'r> Fn(&mut SystemRuntimeFrame<'_, 's, '
 
 #[derive(Debug)]
 pub struct UserFn<'s> {
-    #[cfg(debug_assertions)]
-    pub name: String,
+    pub name: Option<&'s str>,
     pub captures: Vec<AllocatedRef<'s>>,
     pub n_cells: usize,
     pub commands: &'s Vec<Command<'s>>,
 }
 
 impl<'s> UserFn<'s> {
-    pub fn new(name: impl Into<String>, captures: Vec<AllocatedRef<'s>>, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
+    pub fn new(name: Option<&'s str>, captures: Vec<AllocatedRef<'s>>, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
         Self {
-            #[cfg(debug_assertions)]
-            name: name.into(),
+            name,
             captures,
             n_cells,
             commands,
@@ -116,8 +114,7 @@ impl<'s> UserFn<'s> {
     }
     pub fn without_capture(name: &'static str, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
         Self {
-            #[cfg(debug_assertions)]
-            name: name.to_string(),
+            name: Some(name),
             captures: vec![],
             n_cells,
             commands,

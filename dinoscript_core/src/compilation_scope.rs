@@ -1574,7 +1574,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         sink.push(Command::PushFromCapture(cap_idx));
                     }
                 }
-                sink.push(Command::MakeFunction(MakeFunction::new(name.as_ref(), n_captures, n_cells, subscope_sink)));
+                sink.push(Command::MakeFunction(MakeFunction::new(None, n_captures, n_cells, subscope_sink)));
 
                 sink.push(Command::PopToCell(fn_cell_idx));
                 Ok(())
