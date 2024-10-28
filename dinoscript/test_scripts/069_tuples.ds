@@ -1,0 +1,19 @@
+fn foo(t: (Sequence<int>, int)) -> Optional<int>{
+    fn helper(i: int) -> Optional<int> {
+        if(i < t::item0.len(),
+            if(t::item0[i] == t::item1,
+                some(i),
+                helper(i + 1)
+            ),
+            none
+        )
+    }
+
+    helper(0)
+}
+
+fn main() -> bool {
+    assert(foo(([1, 2, 3], 2)) == some(1))
+    && assert(foo(([1, 2, 3], 4)) == none)
+    && assert(foo(([1, 2, 3], 3)) == some(2))
+}
