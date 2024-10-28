@@ -1,0 +1,9 @@
+union Tree(
+    leaf: int,
+    branch: (Tree, Tree),
+)
+
+fn main() -> bool{
+    let t = Tree::branch((Tree::leaf(1),Tree::leaf(10)));
+    assert(t!:branch::item0!:leaf == 1)
+}

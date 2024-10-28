@@ -1,0 +1,4 @@
+fn main() -> bool {
+    assert('hi' == "hi")
+    && assert(#"me"ep"# == 'me"ep')
+}
