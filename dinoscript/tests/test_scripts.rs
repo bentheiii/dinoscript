@@ -430,3 +430,8 @@ fn test_script_066() {
 fn test_script_067() {
     test_script_from_name(function_name!());
 }
+
+#[test]
+fn test_script_068() {
+    test_script_from_name(function_name!());
+}

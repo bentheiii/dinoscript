@@ -1350,11 +1350,13 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 }
             }
             Expr::Tuple(items) => {
-                let tys = items
+                // note that we want to consume the items in reverse order, but the type should be in the original order
+                let mut tys = items
                     .iter()
                     .rev()
                     .map(|item| self.feed_expression(item, sink))
                     .collect::<Result<Vec<_>, _>>()?;
+                tys.reverse();
                 sink.push(Command::Struct(tys.len()));
                 Ok(Arc::new(Ty::Tuple(tys)))
             }

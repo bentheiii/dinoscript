@@ -126,7 +126,7 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
         Rule::tuple => {
             let pair_mark = inner.clone();
             let mut parts = Vec::new();
-            for part in inner.into_inner() {
+            for part in inner.into_inner().next().map(|p| p.into_inner()).into_iter().flatten() {
                 let expr = parse_expr(part)?;
                 parts.push(expr);
             }
@@ -322,7 +322,7 @@ static BIN_PRATT: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
 });
 
 fn parse_expr(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
-    debug_assert!(matches!(input.as_rule(), Rule::expression));
+    debug_assert!(matches!(input.as_rule(), Rule::expression), "{:?}", input);
     (*BIN_PRATT)
         .map_primary(parse_expr1)
         .map_infix(|lhs, op_pair, rhs| {

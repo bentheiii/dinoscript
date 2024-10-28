@@ -1,0 +1,6 @@
+fn main() -> bool {
+    let t = ([1,2,3], 3);
+    assert(t::item0 == [1,2,3])
+    && assert(t::item1 == 3)
+    && assert(t::item0.len() == t::item1)
+}
