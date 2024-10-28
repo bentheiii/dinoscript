@@ -305,12 +305,12 @@ impl<'s> SequenceInner<'s> {
 
     pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
         if cfg!(debug_assertions) {
-            let func: &Sequence<'s> = match as_ext!(inner, Sequence) {
+            let seq: &Sequence<'s> = match as_ext!(inner, Sequence) {
                 Some(seq) => seq,
                 None => return Self::empty(),
             };
-            let func = &func.0;
-            debug_assert!(!func.is_empty(), "map should not have an empty function");
+            let seq = &seq.0;
+            debug_assert!(!seq.is_empty(), "map should not have an empty function");
         }
         Self::Map(SequenceMap { inner, func })
     }
@@ -469,6 +469,7 @@ impl<'s> ExtendedObject for Sequence<'s> {
         Self::EXPECTED_TYPE_NAME
     }
     fn allocated_size(&self) -> usize {
+        // todo is this correct?
         size_of::<Self>()
     }
 }

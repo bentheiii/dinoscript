@@ -4,7 +4,9 @@ use std::{error::Error, fmt::Display, sync::Arc};
 use crate::{dinobj::Allocatable, runtime::Runtime};
 
 #[derive(Debug)]
-pub struct RuntimeViolation(());
+pub enum RuntimeViolation{
+    MalformedBytecode,
+}
 
 #[derive(Debug)]
 pub enum RuntimeError {

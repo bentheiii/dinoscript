@@ -1,0 +1,13 @@
+fn main()->bool{
+    let m = mapping(eq{int, int}, (x: int) -> {x % 10});
+    let m1 = m.set(5, 'hii').set(15, 'ho').set(5, 'hi');
+    let m2 = m1.update([(1,'one'), (2, 'two')]);
+
+    assert(m2.get(5) == some('hi'))
+    && assert(m2.get(15) == some('ho'))
+    && assert(m2.get(2) == some('two'))
+    && assert(m2.get(3) == none)
+    && assert(m2.len() == 4)
+    && assert(m1.len() == 2)
+    && assert(m.len() == 0)
+}

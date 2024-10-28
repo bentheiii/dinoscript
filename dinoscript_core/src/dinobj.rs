@@ -180,8 +180,8 @@ pub trait ExtendedObject: Debug {
     fn allocated_size(&self) -> usize;
 }
 
-pub type DinoValue<'s> = Result<AllocatedRef<'s>, AllocatedErrRef<'s>>;
-pub type DinoResult<'s> = Result<DinoValue<'s>, RuntimeViolation>;
+pub type DinoValue<'s, T=AllocatedRef<'s>> = Result<T, AllocatedErrRef<'s>>;
+pub type DinoResult<'s, T=AllocatedRef<'s>> = Result<DinoValue<'s, T>, RuntimeViolation>;
 
 #[derive(Debug)]
 pub enum StackItem<'s> {

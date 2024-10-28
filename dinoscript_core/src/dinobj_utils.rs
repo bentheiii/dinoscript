@@ -26,6 +26,16 @@ macro_rules! as_ext {
             None
         }
     }};
+} // todo this should return a malformedbytecode in all usages
+
+#[macro_export]
+macro_rules! catch{
+    ($e:expr) => {
+        match $e{
+            Ok(v) => v,
+            Err(e) => return Ok(Err(e))
+        }
+    };
 }
 
 pub use as_ext;

@@ -172,9 +172,8 @@ impl<'s> Runtime<'s> {
         self.allocate(Ok(DinObject::Struct(vec![])))
     }
 
-    #[deprecated]
     pub fn clone_ok_ref(&self, obj: &AllocatedRef<'s>) -> Result<AllocatedRef<'s>, RuntimeViolation> {
-        // todo deprecate this
+        // todo deprecate this?
         let mut rt = self.0.lock().unwrap();
         Ok(rt.clone_ref(Ok(obj))?.unwrap())
     }

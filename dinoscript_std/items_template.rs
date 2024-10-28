@@ -1,20 +1,14 @@
 use dinoscript_core::{
-    bytecode::{Command, SourceId},
-    compilation_scope::{
+    as_prim, bytecode::{Command, SourceId}, catch, compilation_scope::{
         self,
         ty::{
             BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    },
-    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject},
-    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
-    errors::RuntimeError,
-    lib_objects::{optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}},
-    runtime::Runtime,
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, lib_objects::{mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}}, runtime::Runtime
 };
-use std::{ops::ControlFlow, sync::Arc};
+use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt},
@@ -24,14 +18,21 @@ use dinoscript_core::{
 use std::collections::HashMap;
 
 pub struct Builtins<'s> {
+    // todo I'm pretty sure these can all be private
+
     pub int: Arc<Ty<'s>>,
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
     pub str: Arc<Ty<'s>>,
 
+    // extended
     pub sequence: Arc<TyTemplate<'s>>,
+    mapping: Arc<TyTemplate<'s>>,
+
+    // compound
     pub stack: Arc<TyTemplate<'s>>,
     pub optional: Arc<TyTemplate<'s>>,
+
 }
 
 impl<'s> Builtins<'s> {
@@ -53,6 +54,10 @@ impl<'s> Builtins<'s> {
 
     fn sequence(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.sequence.instantiate(vec![ty])
+    }
+
+    fn mapping(&self, key: Arc<Ty<'s>>, value: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.mapping.instantiate(vec![key, value])
     }
 
     fn stack(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
@@ -112,8 +117,14 @@ macro_rules! ty_gen {
     ($b:ident, $g:expr, Optional<$ty:tt>) => {
         $b.optional(ty_gen!($b, $g, $ty))
     };
+    ($b:ident, $g:expr, Mapping<$key:tt, $value:tt>) => {
+        $b.mapping(ty_gen!($b, $g, $key), ty_gen!($b, $g, $value))
+    };
     ($b:ident, $g:expr, $id:ident) => {
         $g.get_gen(stringify!($id))
+    };
+    ($b:ident, $g:expr, ($($args:tt),*)) => {
+        Arc::new(Ty::Tuple(vec![$(ty_gen!($b, $g, $args)),*]))
     };
     ($b:ident, $g:expr, ($($args:tt),*)->($ret:tt)) => {
         Arc::new(Ty::Fn(Fn::new(vec![$(ty_gen!($b, $g, $args)),*], ty_gen!($b, $g, $ret))))
@@ -142,6 +153,7 @@ macro_rules! arg_gen {
     };
 }
 
+// todo rename to rt_catch
 macro_rules! rt_unwrap_value {
     ($evaled:expr) => {
         match $evaled {
@@ -333,6 +345,15 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             TemplateGenericSpecs::new(GenericSetId::unique(), 1),
         )),
     );
+    let mapping = register_type(
+        scope,
+        "Mapping",
+        TyTemplate::Builtin(BuiltinTemplate::new(
+            "Mapping",
+            TemplateGenericSpecs::new(GenericSetId::unique(), 2),
+        )),
+    );
+
     let stacknode_gen_id = GenericSetId::unique();
     let stacknode = register_type(
         scope,
@@ -399,6 +420,7 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
         bool,
         str,
         sequence,
+        mapping,
         stack,
         optional,
     }
@@ -1153,6 +1175,142 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             })),
         ))),
         // endregion sequence
+        // region:mapping
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "get",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                        arg_gen!(bi, gen, key: K),
+                    ],
+                    ty_gen!(bi, gen, Optional<V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_unwrap_value!(frame.eval_pop()?);
+                let key = rt_unwrap_value!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping, Mapping);
+                
+                let ret = rt_unwrap_value!(mapping.lookup(key, frame)?);
+                match ret {
+                    Some(v) => {
+                        let variant = VariantObject::new(optional::tag::SOME, v);
+                        to_return_value(frame.runtime().allocate(Ok(DinObject::Variant(variant))))
+                    },
+                    None => to_return_value(frame.runtime().none()),
+                }
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "len",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                    ],
+                    ty!(bi, int),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_unwrap_value!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping, Mapping);
+                
+                let ret = mapping.len();
+
+                to_return_value(frame.runtime().allocate(Ok(DinObject::Int(ret as i64))))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "mapping",
+                    vec![
+                        arg_gen!(bi, gen, fn_eq~=eq: (K,K)->(bool)),
+                        arg_gen!(bi, gen, fn_hash~=hash: (K)->(int)),
+                    ],
+                    ty_gen!(bi, gen, Mapping<K, V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let fn_eq = rt_unwrap_value!(frame.eval_pop()?);
+                let fn_hash = rt_unwrap_value!(frame.eval_pop()?);
+
+                let mapping = Mapping::empty(fn_eq, fn_hash);
+                to_return_value(frame.runtime().allocate_ext(mapping))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "set",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                        arg_gen!(bi, gen, key: K),
+                        arg_gen!(bi, gen, value: V),
+                    ],
+                    ty_gen!(bi, gen, Mapping<K, V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_unwrap_value!(frame.eval_pop()?);
+                let key = rt_unwrap_value!(frame.eval_pop()?);
+                let value = rt_unwrap_value!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping, Mapping);
+
+                let ret = rt_unwrap_value!(mapping.with_update(iter::once(Ok(Ok((key, value)))), frame)?);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "update",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                        arg_gen!(bi, gen, pairs: Sequence<(K, V)>),
+                    ],
+                    ty_gen!(bi, gen, Mapping<K, V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_unwrap_value!(frame.eval_pop()?);
+                let pairs = rt_unwrap_value!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping, Mapping);
+                let pairs = rt_as_ext!(pairs, Sequence);
+                
+                let ret = rt_unwrap_value!(mapping.with_update(pairs.iter(frame).map(
+                    |pair_ref| {
+                        let pair_ref = catch!(pair_ref?);
+                        let Some(pair) = as_prim!(pair_ref, Struct) else { todo!() };
+                        let Some(key) = pair.get(0) else { todo!() };
+                        let Some(value) = pair.get(1) else { todo!() };
+                        Ok(Ok((frame.runtime().clone_ok_ref(key)?, frame.runtime().clone_ok_ref(value)?)))
+                    }
+                ), frame)?);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // endregion mapping
         // region:stack
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
