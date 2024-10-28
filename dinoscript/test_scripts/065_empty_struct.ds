@@ -1,0 +1,10 @@
+struct Term ()
+
+fn foo(x: Term) -> str {
+    'hi there'
+}
+
+fn main()->bool {
+    let x = Term();
+    assert(foo(x) == 'hi there')
+}
