@@ -9,14 +9,15 @@ use std::{
 
 use indexmap::IndexMap;
 use itertools::Itertools;
+use pest::iterators::Pair;
 use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate};
 
 use crate::{
     ast::{
         self,
-        expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lookup, MethodCall, Variant},
+        expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Variant},
         pairable::Pairable,
-        statement::{self, FnArgDefault, Let, Stmt, StmtWithPair}, ty::SpecializedBaseTy,
+        statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair}, ty::SpecializedBaseTy,
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
@@ -1416,6 +1417,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     sink,
                 )
             }
+            Expr::Lambda(Lambda { args, body, ret }) => {
+                todo!()
+            }
 
             _ => todo!("handle expression {:?}", expr.inner),
         }
@@ -1429,6 +1433,128 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         let ret = self.feed_expression(expr, sink)?;
         sink.push(Command::EvalTop);
         Ok(ret)
+    }
+
+    pub fn create_sub_function<'c:'s>(&mut self, 
+        name: Option<Cow<'s, str>>,
+        generic_params: Option<&[Cow<'c, str>]>, 
+        args: &[FnArg<'c>],
+        expected_return_ty: Option<Arc<Ty<'s>>>, 
+        body: &[StmtWithPair<'c>],
+        ret: &ExprWithPair<'c>,
+        sink: &mut Vec<Command<'c>>,
+        pair: &Pair<'c, crate::grammar::Rule>
+    )
+        ->Result<(),CompilationErrorWithPair<'c,'s>>{
+        let gen_params = if generic_params.map_or(true, |v| v.is_empty()) {
+            None
+        } else {
+            Some(OverloadGenericParams::new(
+                GenericSetId::unique(),
+                generic_params.unwrap().to_vec(),
+            ))
+        };
+
+        let raw_args = args
+            .into_iter()
+            .map(|fn_arg| -> Result<_, _> {
+                Ok((
+                    fn_arg.name.clone(),
+                    self.parse_type(&fn_arg.ty, &gen_params,None)?,
+                    fn_arg.default.as_ref(),
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut args = Vec::with_capacity(raw_args.len());
+        let mut first_default = None;
+
+        for (name, ty, default) in raw_args.iter() {
+            let default = if let Some(default) = default {
+                if first_default.is_none() {
+                    first_default = Some(name);
+                }
+
+                Some(match default {
+                    FnArgDefault::Value(expr) => {
+                        let default_cell_idx = self.get_cell_idx();
+                        let default_ty = self.feed_expression(expr, sink)?;
+                        // todo check that default_ty is a subtype of ty
+                        sink.push(Command::PopToCell(default_cell_idx));
+                        OverloadArgDefault::Value(default_cell_idx)
+                    }
+                    FnArgDefault::ResolveOverload(res) => {
+                        // todo check that the  type is a function
+                        OverloadArgDefault::OverloadResolve(OverloadResolve { name: res.name.clone() })
+                    }
+                })
+            } else {
+                if first_default.is_some() {
+                    return Err(CompilationError::ParameterWithoutDefaultAfterDefault {
+                        param_name: name.clone(),
+                        default_param_name: first_default.cloned().unwrap(),
+                    }
+                    .with_pair(pair.clone()));
+                }
+                None
+            };
+            args.push(OverloadArg {
+                ty: ty.clone(),
+                default,
+            });
+        }
+        // todo check that we don't shadow a variable
+        let gen_id = gen_params.as_ref().map(|g| g.gen_id);
+
+        let fn_cell_idx ;
+        if let Some(name) = name {
+            let cell_idx = self.get_cell_idx();
+            fn_cell_idx = Some(cell_idx);
+            // todo join the name and expected ty?
+            let new_overload = Overload::new(gen_params, args, expected_return_ty.unwrap(), Location::Cell(cell_idx));
+            self.add_overload(name.clone(), new_overload);
+        } else {
+            fn_cell_idx = None;
+        }
+
+        let mut subscope = self.child(gen_id);
+        assert!(!subscope.is_root());
+        let mut subscope_sink = Vec::new();
+        if let Some(generic_params) = generic_params {
+            subscope.set_generics(generic_params.iter().cloned());
+        }
+        subscope.feed_params(
+            raw_args.iter().map(|(name, ty, _)| (name.clone(), ty.clone())),
+            &mut subscope_sink,
+        );
+        for body_stmt in body {
+            subscope.feed_statement(body_stmt, &mut subscope_sink)?;
+        }
+        let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
+        // todo check that return_tys match
+        let n_captures = subscope.pending_captures.len();
+        let n_cells = subscope.n_cells;
+        for PendingCapture {
+            ancestor_height,
+            cell_idx,
+        } in subscope.pending_captures.iter()
+        {
+            if *ancestor_height == 1 {
+                if fn_cell_idx.is_some_and(|idx| idx == *cell_idx) {
+                    sink.push(Command::PushTail);
+                } else {
+                    sink.push(Command::PushFromCell(*cell_idx));
+                }
+            } else {
+                let cap_idx = self.pending_captures.len();
+                self.pending_captures.push(PendingCapture {
+                    ancestor_height: *ancestor_height - 1,
+                    cell_idx: *cell_idx,
+                });
+                sink.push(Command::PushFromCapture(cap_idx));
+            }
+        }
+        sink.push(Command::MakeFunction(MakeFunction::new(None, n_captures, n_cells, subscope_sink)));
+        todo!()
     }
 
     pub fn feed_statement<'c: 's>(
@@ -1486,16 +1612,16 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 };
 
                 let raw_args = args
-                    .iter()
+                    .into_iter()
                     .map(|fn_arg| -> Result<_, _> {
                         Ok((
                             fn_arg.name.clone(),
                             self.parse_type(&fn_arg.ty, &gen_params,None)?,
-                            fn_arg.default.clone(),
+                            fn_arg.default.as_ref(),
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let expected_return_ty = self.parse_type(return_ty, &gen_params, None)?;
+                let expected_return_ty = self.parse_type(&return_ty, &gen_params, None)?;
 
                 let mut args = Vec::with_capacity(raw_args.len());
                 let mut first_default = None;
@@ -1550,7 +1676,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 for body_stmt in body {
                     subscope.feed_statement(body_stmt, &mut subscope_sink)?;
                 }
-                let actual_return_ty = subscope.feed_return(ret, &mut subscope_sink)?;
+                let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
                 // todo check that return_tys match
                 let n_captures = subscope.pending_captures.len();
                 let n_cells = subscope.n_cells;

@@ -357,12 +357,14 @@ fn parse_expr(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
 }
 
 fn parse_parameter(input: Pair<'_, Rule>) -> Result<FnArg<'_>, ()> {
-    debug_assert!(matches!(input.as_rule(), Rule::parameter));
+    let input_rule = input.as_rule();
+    debug_assert!(matches!(input_rule, Rule::parameter | Rule::lambda_parameter));
     let mut inner = input.into_inner();
     let [name, ty] = [inner.next().unwrap(), inner.next().unwrap()];
     let name = name.as_str();
     let ty = parse_type(ty)?;
-    let default = if let Some(default) = inner.next() {
+    let default: Option<FnArgDefault<'_>> = if let Some(default) = inner.next() {
+        debug_assert!(matches!(input_rule, Rule::parameter));
         match default.as_rule() {
             Rule::expr_default => {
                 let expr_pair = default.into_inner().next().unwrap();
