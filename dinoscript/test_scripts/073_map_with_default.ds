@@ -1,0 +1,8 @@
+fn foo(a: int, b: int ?= 3)->int{
+    a*10 + b
+}
+
+fn main() -> bool{
+    let t = [1, 2, 3];
+    assert(t.map(foo{int}) == [13, 23, 33])
+}

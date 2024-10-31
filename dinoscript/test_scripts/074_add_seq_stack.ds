@@ -1,0 +1,7 @@
+fn main() -> bool {
+    let a = [1,2,3];
+    let b = Stack::Empty(()).push(5).push(4);
+
+    assert(a + b.to_array() == [1,2,3,5,4])
+    && assert(a + b.to_array_rev() == [1,2,3,4,5])
+}

@@ -1355,6 +1355,49 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
             })),
         ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                // todo is this ok? should we make an unknown explicit?
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "to_array_rev",
+                    vec![arg_gen!(bi, gen, stack: Stack<T>)],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let stack = rt_catch!(frame.eval_pop()?);
+                let stack = rt_as_prim!(stack, Variant);
+                let arr = {
+                    if stack.tag() == stack::tag::EMPTY {
+                        Vec::new()
+                    } else {
+                        let node = stack.obj();
+                        let mut node = rt_as_prim!(node, Struct);
+                        let Some(len) = node.get(2) else { todo!() };
+                        let len = rt_as_prim!(len, Int);
+                        let mut arr = Vec::with_capacity(*len as usize);
+                        loop {
+                            let Some(item) = node.get(0) else { todo!() };
+                            arr.push(frame.runtime().clone_ok_ref(item)?);
+                            let Some(next) = node.get(1) else { todo!() };
+                            let next = rt_as_prim!(next, Variant);
+                            if next.tag() == stack::tag::EMPTY {
+                                break;
+                            }
+                            let next_node = next.obj();
+                            node = rt_as_prim!(next_node, Struct);
+                        }
+                        arr
+                    }
+                };
+                let ret = Sequence::new_array(arr);
+                to_return_value(frame.runtime().allocate_ext(ret))
+
+            })),
+        ))),
         // endregion stack
         // region:int-1
         // pragma:replace-start
