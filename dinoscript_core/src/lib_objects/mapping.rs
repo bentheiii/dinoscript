@@ -1,13 +1,13 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::{as_ext, as_prim, catch, dinobj::{AllocatedRef, DinoResult, ExtendedObject}, errors::RuntimeViolation, runtime::{Runtime, SystemRuntimeFrame}};
+use crate::{as_prim, catch, dinobj::{AllocatedRef, DinObject, DinoResult, ExtendedObject}, errors::RuntimeViolation, runtime::{Runtime, SystemRuntimeFrame}};
 
 #[derive(Debug)]
 pub struct Mapping<'s>{
     eq_fn: AllocatedRef<'s>,
     hash_fn: AllocatedRef<'s>,
     // if an entry here exists, it is guaranteed to be non-empty
-    buckets: Buckets<'s>,
+    buckets: MappingBuckets<'s>,
     length: usize
 }
 
@@ -27,7 +27,7 @@ impl<'s> Mapping<'s> {
         Self {
             eq_fn,
             hash_fn,
-            buckets: Buckets::empty(),
+            buckets: MappingBuckets::empty(),
             length: 0
         }
     }
@@ -142,18 +142,29 @@ impl<'s> Mapping<'s> {
             None => Ok(Ok(None))
         }
     }
+
+    pub(crate) fn iter<'f>(&'f self, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, impl Iterator<Item=DinoResult<'s>> + 'f> {
+        Ok(Ok(self.buckets.0.iter().flat_map(|(_, bucket)| {
+            bucket.iter().map(|(k, v)| {
+                let k = frame.runtime().clone_ok_ref(k)?;
+                let v = frame.runtime().clone_ok_ref(v)?;
+                let tup = DinObject::Struct(vec![k,v]);
+                frame.runtime().allocate(Ok(tup))
+            })
+        })))
+    }
 }
 
 
 
 type BucketKey = u64;
-type Bucket<'s> = Vec<(AllocatedRef<'s>, AllocatedRef<'s>)>;
+type Bucket<'s, V> = Vec<(AllocatedRef<'s>, V)>;
 
 // todo allow a faster hasher?
 #[derive(Debug)]
-struct Buckets<'s>(HashMap<BucketKey, Bucket<'s>>);
+struct MappingBuckets<'s>(HashMap<BucketKey, Bucket<'s, AllocatedRef<'s>>>);
 
-impl<'s> Buckets<'s> {
+impl<'s> MappingBuckets<'s> {
     fn empty() -> Self {
         Self(HashMap::new())
     }
@@ -190,11 +201,11 @@ impl<'s> Buckets<'s> {
         Ok(Self(new_buckets))
     }
 
-    fn entry(&mut self, bucket_key: BucketKey) -> Entry<BucketKey, Bucket<'s>> {
+    fn entry(&mut self, bucket_key: BucketKey) -> Entry<BucketKey, Bucket<'s, AllocatedRef<'s>>> {
         self.0.entry(bucket_key)
     }
 
-    fn get(&self, bucket_key: BucketKey)-> Option<&Bucket<'s>> {
+    fn get(&self, bucket_key: BucketKey)-> Option<&Bucket<'s, AllocatedRef<'s>>> {
         self.0.get(&bucket_key)
     }
 }

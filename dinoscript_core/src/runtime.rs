@@ -731,6 +731,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                     .chain(
                         arguments
                             .iter()
+                            .rev()
                             .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?))),
                     )
                     .collect::<Result<Vec<_>, _>>()?,
@@ -740,6 +741,7 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                 func,
                 arguments
                     .iter()
+                    .rev()
                     .map(|a| Ok(StackItem::Value(self.runtime().clone_value(a)?)))
                     .collect::<Result<Vec<_>, _>>()?,
             )

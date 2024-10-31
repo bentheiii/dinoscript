@@ -2,11 +2,10 @@ use dinoscript_core::{
     as_prim, bytecode::{Command, SourceId}, catch, compilation_scope::{
         self,
         ty::{
-            BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs,
-            Ty, TyTemplate,
+            self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::RuntimeError, lib_objects::{mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}}, runtime::Runtime
+    }, dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime, SystemRuntimeFrame}
 };
 use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -28,10 +27,11 @@ pub struct Builtins<'s> {
     // extended
     pub sequence: Arc<TyTemplate<'s>>,
     mapping: Arc<TyTemplate<'s>>,
+    iterator: Arc<TyTemplate<'s>>,
 
     // compound
-    pub stack: Arc<TyTemplate<'s>>,
-    pub optional: Arc<TyTemplate<'s>>,
+    stack: Arc<TyTemplate<'s>>,
+    optional: Arc<TyTemplate<'s>>,
 
 }
 
@@ -58,6 +58,10 @@ impl<'s> Builtins<'s> {
 
     fn mapping(&self, key: Arc<Ty<'s>>, value: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
         self.mapping.instantiate(vec![key, value])
+    }
+
+    fn iterator(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
+        self.iterator.instantiate(vec![ty])
     }
 
     fn stack(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
@@ -120,6 +124,9 @@ macro_rules! ty_gen {
     ($b:ident, $g:expr, Mapping<$key:tt, $value:tt>) => {
         $b.mapping(ty_gen!($b, $g, $key), ty_gen!($b, $g, $value))
     };
+    ($b:ident, $g:expr, Iterator<$ty:tt>) => {
+        $b.iterator(vec![ty_gen!($b, $g, $ty)])
+    };
     ($b:ident, $g:expr, $id:ident) => {
         $g.get_gen(stringify!($id))
     };
@@ -127,7 +134,7 @@ macro_rules! ty_gen {
         Arc::new(Ty::Tuple(vec![$(ty_gen!($b, $g, $args)),*]))
     };
     ($b:ident, $g:expr, ($($args:tt),*)->($ret:tt)) => {
-        Arc::new(Ty::Fn(Fn::new(vec![$(ty_gen!($b, $g, $args)),*], ty_gen!($b, $g, $ret))))
+        Arc::new(Ty::Fn(ty::Fn::new(vec![$(ty_gen!($b, $g, $args)),*], ty_gen!($b, $g, $ret))))
     };
 }
 
@@ -352,6 +359,14 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             TemplateGenericSpecs::new(GenericSetId::unique(), 2),
         )),
     );
+    let iterator = register_type(
+        scope,
+        "Iterator",
+        TyTemplate::Builtin(BuiltinTemplate::new(
+            "Iterator",
+            TemplateGenericSpecs::new(GenericSetId::unique(), 1),
+        )),
+    );
 
     let stacknode_gen_id = GenericSetId::unique();
     let stacknode = register_type(
@@ -420,6 +435,7 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
         str,
         sequence,
         mapping,
+        iterator,
         stack,
         optional,
     }
@@ -1145,6 +1161,55 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                     return to_return_value(Ok(Ok(seq_ref)));
                 }
                 let ret = Sequence::new_slice(frame.runtime(), seq_ref, start_idx, end_idx)?;
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "sort",
+                    vec![
+                        arg_gen!(bi, gen, seq: Sequence<T>),
+                        arg_gen!(bi, gen, cmp: (T, T)->(int)),
+                    ],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq_ref = rt_catch!(frame.eval_pop()?);
+                let cmp_func = rt_catch!(frame.eval_pop()?);
+
+                let seq = rt_as_ext!(seq_ref, Sequence);
+
+                let seq_len = seq.len();
+                let mut ret = {
+                    let mut v = Vec::with_capacity(seq_len);
+                    for item_ref in seq.iter(frame) {
+                        let item_ref = match item_ref? {
+                            Ok(v) => v,
+                            other => return to_return_value(Ok(other)),
+                        };
+                        v.push(item_ref);
+                    }
+                    v
+                };
+
+                rt_catch!(try_sort::try_sort(&mut ret, |a, b| {
+                    let a = frame.runtime().clone_ref(Ok(a))?;
+                    let b = frame.runtime().clone_ref(Ok(b))?;
+                    let res = frame.call(&cmp_func, &[a, b])?;
+                    let res = catch!(res);
+                    let Some(res) = as_prim!(res, Int) else {
+                        return Err(RuntimeViolation::MalformedBytecode)
+                    };
+                    Ok(Ok(*res < 0))
+                })?);
+
+                let ret = Sequence::new_array(ret);
+
                 to_return_value(frame.runtime().allocate_ext(ret))
             })),
         ))),

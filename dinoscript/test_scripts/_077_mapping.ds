@@ -7,5 +7,5 @@ fn main() -> bool {
     && assert(m.discard(3).get(3) == none)
     && assert(m.discard(4).get(3) == some(4))
     && assert(m.discard(10).get(3) == some(4))
-    && assert(m.to_generator().to_array().sort((x:(int,int), y:(int,int)) -> {x::item0 - y::item0}) == [(1,2),(3,4),(4,5)])
+    && assert(m.iter().to_array().sort((x:(int,int), y:(int,int)) -> {x::item0 - y::item0}) == [(1,2),(3,4),(4,5)])
 }

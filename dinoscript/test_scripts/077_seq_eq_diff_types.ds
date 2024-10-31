@@ -1,0 +1,15 @@
+struct A(x: int, y: int)
+struct B(z: int)
+
+fn eq(a: A, b: B, i: int ?= 2) -> bool {
+    a::x*10+a::y == b::z
+}
+
+fn main() -> bool {
+    let a = A(1, 2);
+    let b = B(12);
+    let a_arr = [A(1, 2), A(3, 4), A(4, 5)];
+    let b_arr = [B(12), B(34), B(45)];
+    assert(eq(a, b))
+    && assert(a_arr == b_arr)
+}
