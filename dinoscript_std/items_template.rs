@@ -571,6 +571,14 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic("cast", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
+            },
+            SetupFunctionBody::System(Box::new(|frame| frame.eval_pop_tca(TailCallAvailability::Allowed))),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic("debug", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
             },
             SetupFunctionBody::System(Box::new(|frame| {
@@ -604,9 +612,13 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
-                Signature::new_generic("cast", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
+                Signature::new_generic("is_error", vec![arg_gen!(bi, gen, a: T)], ty!(bi, bool), gen)
             },
-            SetupFunctionBody::System(Box::new(|frame| frame.eval_pop_tca(TailCallAvailability::Allowed))),
+            SetupFunctionBody::System(Box::new(|frame| {
+                let a = frame.eval_pop()?;
+                
+                to_return_value(frame.runtime().bool(a.is_err()))
+            })),
         ))),
         // endregion
         // region:int
@@ -1180,6 +1192,35 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["K", "V"]);
                 Signature::new_generic(
+                    "discard",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                        arg_gen!(bi, gen, key: K),
+                    ],
+                    ty_gen!(bi, gen, Mapping<K, V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping_ref = rt_catch!(frame.eval_pop()?);
+                let key = rt_catch!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping_ref, Mapping);
+                
+                let ret = rt_catch!(mapping.without_key(key, frame)?);
+                match ret {
+                    Some(v) => {
+                        to_return_value(frame.runtime().allocate_ext(v))
+                    },
+                    None => to_return_value(Ok(Ok(mapping_ref))),
+                }
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
                     "get",
                     vec![
                         arg_gen!(bi, gen, mapping: Mapping<K, V>),
@@ -1248,6 +1289,35 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let mapping = Mapping::empty(fn_eq, fn_hash);
                 to_return_value(frame.runtime().allocate_ext(mapping))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
+                    "pop",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                        arg_gen!(bi, gen, key: K),
+                    ],
+                    ty_gen!(bi, gen, Mapping<K, V>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_catch!(frame.eval_pop()?);
+                let key = rt_catch!(frame.eval_pop()?);
+
+                let mapping = rt_as_ext!(mapping, Mapping);
+                
+                let ret = rt_catch!(mapping.without_key(key, frame)?);
+                match ret {
+                    Some(v) => {
+                        to_return_value(frame.runtime().allocate_ext(v))
+                    },
+                    None => to_return_value(frame.runtime().allocate(Err("Key not found".into()))),
+                }
             })),
         ))),
         // pragma:unwrap

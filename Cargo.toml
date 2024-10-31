@@ -4,6 +4,5 @@ members = [
     "dinoscript",
     "dinoscript_core",
     "dinoscript_derive",
-    "dinoscript_playground",
     "dinoscript_std",
 ]

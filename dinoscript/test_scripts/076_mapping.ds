@@ -1,0 +1,11 @@
+fn main() -> bool {
+    let m = mapping(eq{int, int}, (a: int)->{a%10}).update([(1,2),(3,4),(4,5)]);
+
+    assert(m.pop(3).get(3) == none)
+    && assert(m.pop(4).get(3) == some(4))
+    && assert(is_error(m.pop(10)))
+    && assert(m.discard(3).get(3) == none)
+    && assert(m.discard(4).get(3) == some(4))
+    && assert(m.discard(10).get(3) == some(4))
+    && assert(m.to_generator().to_array().sort((x:(int,int), y:(int,int)) -> {x::item0 - y::item0}) == [(1,2),(3,4),(4,5)])
+}

@@ -99,14 +99,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dinoscript_playground"
-version = "0.1.0"
-dependencies = [
- "dinoscript_core",
- "dinoscript_std",
-]
-
-[[package]]
 name = "dinoscript_std"
 version = "0.1.0"
 dependencies = [

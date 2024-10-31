@@ -80,6 +80,45 @@ impl<'s> Mapping<'s> {
         }))
     }
 
+    pub fn without_key(&self, key: AllocatedRef<'s>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<Self>> {
+        let key_for_hash = frame.runtime().clone_ok_ref(&key)?;
+        let hash = catch!(get_hash(&self.hash_fn, key_for_hash, frame)?);
+        let bucket = self.buckets.get(hash);
+        if bucket.is_none() {
+            return Ok(Ok(None));
+        }
+        let bucket = bucket.unwrap();
+        let mut found_at = None;
+        for (idx, (k, _)) in bucket.iter().enumerate() {
+            let key_for_eq = frame.runtime().clone_ok_ref(&key)?;
+            let existing_key_for_eq = frame.runtime().clone_ok_ref(k)?;
+            let eq_ret = catch!(frame.call(&self.eq_fn, &[Ok(key_for_eq), Ok(existing_key_for_eq)])?);
+            let Some(&eq) = as_prim!(eq_ret, Bool) else {
+                return Err(RuntimeViolation::MalformedBytecode);
+            };
+            if eq {
+                found_at = Some((hash, idx));
+                break;
+            }
+        }
+
+        if found_at.is_none() {
+            return Ok(Ok(None));
+        }
+
+        let new_buckets = self.buckets.clone_except_for(frame.runtime(), found_at.unwrap())?;
+        let new_eq = frame.runtime().clone_ok_ref(&self.eq_fn)?;
+        let new_hash = frame.runtime().clone_ok_ref(&self.hash_fn)?;
+        let new_length = self.length - 1;
+        
+        Ok(Ok(Some(Self {
+            eq_fn: new_eq,
+            hash_fn: new_hash,
+            buckets: new_buckets,
+            length: new_length
+        })))
+    }
+
     pub fn lookup(&self, key: AllocatedRef<'s>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<AllocatedRef<'s>>> {
         let key_for_hash = frame.runtime().clone_ok_ref(&key)?;
         let hash = catch!(get_hash(&self.hash_fn, key_for_hash, frame)?);
@@ -124,6 +163,26 @@ impl<'s> Buckets<'s> {
         for (key, bucket) in &self.0 {
             let mut new_bucket = Vec::with_capacity(bucket.len());
             for (k, v) in bucket {
+                new_bucket.push((runtime.clone_ok_ref(k)?, runtime.clone_ok_ref(v)?));
+            }
+            new_buckets.insert(*key, new_bucket);
+        }
+        Ok(Self(new_buckets))
+    }
+
+    fn clone_except_for(&self, runtime: &Runtime<'s>, except: (BucketKey, usize)) -> Result<Self, RuntimeViolation> {
+        let mut new_buckets = HashMap::new();
+        for (key, bucket) in &self.0 {
+            let cap = if *key == except.0 {
+                bucket.len() - 1
+            } else {
+                bucket.len()
+            };
+            let mut new_bucket = Vec::with_capacity(cap);
+            for (i, (k, v)) in bucket.iter().enumerate() {
+                if *key == except.0 && i == except.1 {
+                    continue;
+                }
                 new_bucket.push((runtime.clone_ok_ref(k)?, runtime.clone_ok_ref(v)?));
             }
             new_buckets.insert(*key, new_bucket);
