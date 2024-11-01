@@ -721,10 +721,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn parse_type<'c: 's>(
         &self,
         ty: &ast::ty::TyWithPair<'c>,
-        gen_params: &Option<OverloadGenericParams>,
+        gen_params: Option<&OverloadGenericParams>,
         tail_name: Option<&Cow<'s, str>>,
     ) -> Result<Arc<Ty<'s>>, CompilationErrorWithPair<'c, 's>> {
-        // todo gen-aprams should be option<&...>, not &option<...>
         match &ty.inner {
             ast::ty::Ty::Tuple(inners) => {
                 let inners = inners
@@ -1324,7 +1323,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             Expr::Disambiguation(Disambiguation { name, arg_tys }) => {
                 let arg_tys = arg_tys
                     .iter()
-                    .map(|ty| self.parse_type(ty, &None, None))
+                    .map(|ty| self.parse_type(ty, None, None))
                     .collect::<Result<Vec<_>, _>>()?;
                 match self.get_named_item(name) {
                     Some(RelativeNamedItem::Overloads(overloads)) => {
@@ -1487,7 +1486,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             .map(|fn_arg| -> Result<_, _> {
                 Ok((
                     fn_arg.name.clone(),
-                    self.parse_type(&fn_arg.ty, &gen_params, None)?,
+                    self.parse_type(&fn_arg.ty, gen_params.as_ref(), None)?,
                     fn_arg.default.as_ref(),
                 ))
             })
@@ -1532,7 +1531,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         // todo check that we don't shadow a variable
         let gen_id = gen_params.as_ref().map(|g| g.gen_id);
         let expected_return_ty = expected_return_ty
-            .map(|ert| self.parse_type(ert, &gen_params, None))
+            .map(|ert| self.parse_type(ert, gen_params.as_ref(), None))
             .transpose()?;
 
         let fn_cell_idx;
@@ -1612,7 +1611,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let declared_ty = if let Some(explicit_ty) = ty {
                     // we should check that actual_ty is a subtype of ty
                     let mut assignment = BindingResolution::primitive();
-                    let ty = self.parse_type(explicit_ty, &None, None)?;
+                    let ty = self.parse_type(explicit_ty, None, None)?;
                     if assignment.assign(&ty, &actual_ty).is_err() {
                         return Err(CompilationError::LetTypeMismatch {
                             var: var.clone(),
@@ -1680,7 +1679,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             // todo check for duplicates
                             field.name.clone(),
                             Field {
-                                raw_ty: self.parse_type(&field.ty, &ov, Some(&compound.name))?,
+                                raw_ty: self.parse_type(&field.ty, ov.as_ref(), Some(&compound.name))?,
                                 idx: i,
                             },
                         ))
