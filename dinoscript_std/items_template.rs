@@ -1,11 +1,27 @@
 use dinoscript_core::{
-    as_prim, bytecode::{Command, SourceId}, catch, compilation_scope::{
+    as_prim,
+    bytecode::{Command, SourceId},
+    catch,
+    compilation_scope::{
         self,
         ty::{
-            self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate
+            self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs,
+            Ty, TyTemplate,
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{iterator::{Iterable, LengthHint}, mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime}
+    },
+    dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject},
+    dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
+    errors::{RuntimeError, RuntimeViolation},
+    lib_objects::{
+        iterator::{Iterable, LengthHint},
+        mapping::Mapping,
+        optional::{self},
+        sequence::{NormalizedIdx, Sequence},
+        stack::{self},
+        try_sort,
+    },
+    runtime::Runtime,
 };
 use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -18,7 +34,6 @@ use std::collections::HashMap;
 
 pub struct Builtins<'s> {
     // todo I'm pretty sure these can all be private
-
     pub int: Arc<Ty<'s>>,
     pub float: Arc<Ty<'s>>,
     pub bool: Arc<Ty<'s>>,
@@ -32,7 +47,6 @@ pub struct Builtins<'s> {
     // compound
     stack: Arc<TyTemplate<'s>>,
     optional: Arc<TyTemplate<'s>>,
-
 }
 
 impl<'s> Builtins<'s> {
@@ -377,8 +391,14 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             CompoundKind::Struct,
             Some(TemplateGenericSpecs::new(stacknode_gen_id, 2)),
             vec![
-                ("value".into(), Field::new(Arc::new(Ty::Generic(Generic::new(0, stacknode_gen_id))), 0)),
-                ("next".into(), Field::new(Arc::new(Ty::Generic(Generic::new(1, stacknode_gen_id))), 1)),
+                (
+                    "value".into(),
+                    Field::new(Arc::new(Ty::Generic(Generic::new(0, stacknode_gen_id))), 0),
+                ),
+                (
+                    "next".into(),
+                    Field::new(Arc::new(Ty::Generic(Generic::new(1, stacknode_gen_id))), 1),
+                ),
                 ("len".into(), Field::new(int.clone(), 2)),
             ]
             .into_iter()
@@ -401,7 +421,13 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
                 ),
                 (
                     "Node".into(),
-                    Field::new(stacknode.instantiate(vec![Arc::new(Ty::Generic(Generic::new(0, stack_gen_id))), Arc::new(Ty::Tail(vec![Arc::new(Ty::Generic(Generic::new(0, stack_gen_id)))]))]), stack::tag::NODE.into()),
+                    Field::new(
+                        stacknode.instantiate(vec![
+                            Arc::new(Ty::Generic(Generic::new(0, stack_gen_id))),
+                            Arc::new(Ty::Tail(vec![Arc::new(Ty::Generic(Generic::new(0, stack_gen_id)))])),
+                        ]),
+                        stack::tag::NODE.into(),
+                    ),
                 ),
             ]
             .into_iter()
@@ -419,9 +445,15 @@ pub(crate) fn pre_items_setup<'s>(scope: &mut CompilationScope<'_, 's, Builtins<
             vec![
                 (
                     "Some".into(),
-                    Field::new(Arc::new(Ty::Generic(Generic::new(0, optional_gen_id))), optional::tag::SOME.into()),
+                    Field::new(
+                        Arc::new(Ty::Generic(Generic::new(0, optional_gen_id))),
+                        optional::tag::SOME.into(),
+                    ),
                 ),
-                ("None".into(), Field::new(Arc::new(Ty::Tuple(vec![])), optional::tag::NONE.into())),
+                (
+                    "None".into(),
+                    Field::new(Arc::new(Ty::Tuple(vec![])), optional::tag::NONE.into()),
+                ),
             ]
             .into_iter()
             .collect(),

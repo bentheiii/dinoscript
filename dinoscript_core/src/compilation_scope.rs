@@ -17,7 +17,8 @@ use crate::{
         self,
         expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Variant},
         pairable::Pairable,
-        statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair}, ty::SpecializedBaseTy,
+        statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair},
+        ty::SpecializedBaseTy,
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
@@ -82,7 +83,7 @@ pub mod ty {
             match self {
                 TyTemplate::Builtin(template) => template.generics.as_ref(),
                 TyTemplate::Compound(template) => template.generics.as_ref(),
-                TyTemplate::ForwardCompound(_) => unreachable!()
+                TyTemplate::ForwardCompound(_) => unreachable!(),
             }
             .map(|specs| specs.id)
         }
@@ -215,7 +216,7 @@ pub mod ty {
                     let tail_template = tail.unwrap();
                     let args = tys.iter().map(|ty| ty.resolve(tail, generic_args, gen_id)).collect();
                     tail_template.instantiate(args)
-                },
+                }
             }
         }
 
@@ -269,7 +270,11 @@ pub mod ty {
                     write!(f, "T_{}", gen.idx)
                 }
                 Ty::Tail(args) => {
-                    write!(f, "Self<{}>", args.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", "))
+                    write!(
+                        f,
+                        "Self<{}>",
+                        args.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(", ")
+                    )
                 }
                 Ty::Unknown => {
                     write!(f, "?")
@@ -317,7 +322,9 @@ pub mod ty {
                 _ => None,
             };
             raw.map(|field| Field {
-                raw_ty: field.raw_ty.resolve(Some(&self.template), &self.args, self.template.generic_id()),
+                raw_ty: field
+                    .raw_ty
+                    .resolve(Some(&self.template), &self.args, self.template.generic_id()),
                 idx: field.idx,
             })
         }
@@ -730,7 +737,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
             ast::ty::Ty::Specialized(ast::ty::SpecializedTy { base, args }) => {
-                match base{
+                match base {
                     SpecializedBaseTy::Name(name) => {
                         let Some(item) = self.get_named_item(name) else {
                             if let Some(gen) = gen_params.as_ref() {
@@ -748,7 +755,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     return Ok(Arc::new(Ty::Tail(args)));
                                 }
                             }
-                            return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
+                            return Err(
+                                CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone())
+                            );
                         };
                         match item {
                             RelativeNamedItem::Type(NamedType::Template(template)) => {
@@ -763,7 +772,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 if args.is_empty() {
                                     Ok(ty.clone())
                                 } else {
-                                    todo!("error: {} is not a template type", name) // raise an error
+                                    todo!("error: {} is not a template type", name)
+                                    // raise an error
                                 }
                             }
                             _ => todo!("handle item: {:#?}", item), // raise an error
@@ -1170,7 +1180,13 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default(),
                                 );
                                 let raw_ty = variant.raw_ty.clone();
-                                let expected_ty = raw_ty.resolve(Some(named_template), &(0..n_generics).map(|i| Arc::new(Ty::Generic(Generic::new(i, generic_id.unwrap())))).collect(), generic_id);
+                                let expected_ty = raw_ty.resolve(
+                                    Some(named_template),
+                                    &(0..n_generics)
+                                        .map(|i| Arc::new(Ty::Generic(Generic::new(i, generic_id.unwrap()))))
+                                        .collect(),
+                                    generic_id,
+                                );
                                 let arg_ty = arg_types.first().unwrap();
                                 if resolution.assign(&expected_ty, arg_ty).is_err() {
                                     return Err(CompilationError::VariantTypeMismtach {
@@ -1425,16 +1441,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 )
             }
             Expr::Lambda(Lambda { args, body, ret }) => {
-                let SubFunctionOutput::Anonymous(fn_ty) = self.create_sub_function(
-                    None,
-                    None,
-                    args,
-                    None,
-                    body,
-                    ret,
-                    sink,
-                    &expr.pair,
-                )? else {
+                let SubFunctionOutput::Anonymous(fn_ty) =
+                    self.create_sub_function(None, None, args, None, body, ret, sink, &expr.pair)?
+                else {
                     unreachable!()
                 };
                 Ok(Arc::new(Ty::Fn(fn_ty)))
@@ -1454,16 +1463,17 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         Ok(ret)
     }
 
-    fn create_sub_function<'c:'s>(&mut self, 
+    fn create_sub_function<'c: 's>(
+        &mut self,
         name: Option<Cow<'s, str>>,
-        generic_params: Option<&[Cow<'c, str>]>, 
+        generic_params: Option<&[Cow<'c, str>]>,
         args: &[FnArg<'c>],
-        expected_return_ty: Option<&ast::ty::TyWithPair<'c>>, 
+        expected_return_ty: Option<&ast::ty::TyWithPair<'c>>,
         body: &[StmtWithPair<'c>],
         ret: &ExprWithPair<'c>,
         sink: &mut Vec<Command<'c>>,
-        pair: &Pair<'c, crate::grammar::Rule>
-    )->Result<SubFunctionOutput<'s>,CompilationErrorWithPair<'c,'s>>{
+        pair: &Pair<'c, crate::grammar::Rule>,
+    ) -> Result<SubFunctionOutput<'s>, CompilationErrorWithPair<'c, 's>> {
         let gen_params = if generic_params.map_or(true, |v| v.is_empty()) {
             None
         } else {
@@ -1478,7 +1488,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             .map(|fn_arg| -> Result<_, _> {
                 Ok((
                     fn_arg.name.clone(),
-                    self.parse_type(&fn_arg.ty, &gen_params,None)?,
+                    self.parse_type(&fn_arg.ty, &gen_params, None)?,
                     fn_arg.default.as_ref(),
                 ))
             })
@@ -1522,9 +1532,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
         // todo check that we don't shadow a variable
         let gen_id = gen_params.as_ref().map(|g| g.gen_id);
-        let expected_return_ty = expected_return_ty.map(|ert| self.parse_type(&ert, &gen_params, None)).transpose()?;
+        let expected_return_ty = expected_return_ty
+            .map(|ert| self.parse_type(&ert, &gen_params, None))
+            .transpose()?;
 
-        let fn_cell_idx ;
+        let fn_cell_idx;
         if let Some(name) = name {
             let cell_idx = self.get_cell_idx();
             fn_cell_idx = Some(cell_idx);
@@ -1572,7 +1584,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 sink.push(Command::PushFromCapture(cap_idx));
             }
         }
-        sink.push(Command::MakeFunction(MakeFunction::new(None, n_captures, n_cells, subscope_sink)));
+        sink.push(Command::MakeFunction(MakeFunction::new(
+            None,
+            n_captures,
+            n_cells,
+            subscope_sink,
+        )));
         if let Some(fn_cell_idx) = fn_cell_idx {
             Ok(SubFunctionOutput::WithDestinationCell(fn_cell_idx))
         } else {
@@ -1626,8 +1643,18 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 return_ty,
                 body,
                 ret,
-            }) =>{
-                let SubFunctionOutput::WithDestinationCell(fn_cell) = self.create_sub_function(Some(name.clone()), Some(generic_params), args, Some(return_ty), body, ret, sink, &stmt.pair)? else {
+            }) => {
+                let SubFunctionOutput::WithDestinationCell(fn_cell) = self.create_sub_function(
+                    Some(name.clone()),
+                    Some(generic_params),
+                    args,
+                    Some(return_ty),
+                    body,
+                    ret,
+                    sink,
+                    &stmt.pair,
+                )?
+                else {
                     unreachable!()
                 };
                 sink.push(Command::PopToCell(fn_cell));

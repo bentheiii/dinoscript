@@ -1,7 +1,11 @@
 use derive_more::Debug;
 
 use std::{
-    borrow::Cow, fmt::Display, mem::size_of, ops::{BitAnd, ControlFlow, Deref}, sync::Arc
+    borrow::Cow,
+    fmt::Display,
+    mem::size_of,
+    ops::{BitAnd, ControlFlow, Deref},
+    sync::Arc,
 };
 
 use crate::{
@@ -27,20 +31,33 @@ pub enum DinObject<'s> {
     Tail,
 }
 
-impl<'s> Display for DinObject<'s>{
+impl<'s> Display for DinObject<'s> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            DinObject::Int(i)=>write!(f,"{}",i),
-            DinObject::Float(fl)=>write!(f,"{}",fl),
-            DinObject::Bool(b)=>write!(f,"{}",b),
-            DinObject::Str(s)=>write!(f,"\"{}\"",s),
-            DinObject::Struct(s)=>write!(f,"({})",s.iter().map(|a|format!("{}",a)).collect::<Vec<String>>().join(",")),
-            DinObject::Variant(v)=>write!(f,"Variant({},{})",v.tag().0,v.obj()),
-            DinObject::UserFn(u)=>write!(f,"UserFn({})",u.name.unwrap_or("...")),
-            DinObject::SourceFn(_)=>write!(f,"<system_function>"),
-            DinObject::BindBack(b)=>write!(f,"BindBack({},{})",b.func,b.defaults.iter().map(|d|format!("{}",d)).collect::<Vec<String>>().join(",")),
-            DinObject::Extended(e)=>write!(f,"Extended({})",unsafe{(**e).type_name()}),
-            DinObject::Tail=>write!(f,"Tail"),
+        match self {
+            DinObject::Int(i) => write!(f, "{}", i),
+            DinObject::Float(fl) => write!(f, "{}", fl),
+            DinObject::Bool(b) => write!(f, "{}", b),
+            DinObject::Str(s) => write!(f, "\"{}\"", s),
+            DinObject::Struct(s) => write!(
+                f,
+                "({})",
+                s.iter().map(|a| format!("{}", a)).collect::<Vec<String>>().join(",")
+            ),
+            DinObject::Variant(v) => write!(f, "Variant({},{})", v.tag().0, v.obj()),
+            DinObject::UserFn(u) => write!(f, "UserFn({})", u.name.unwrap_or("...")),
+            DinObject::SourceFn(_) => write!(f, "<system_function>"),
+            DinObject::BindBack(b) => write!(
+                f,
+                "BindBack({},{})",
+                b.func,
+                b.defaults
+                    .iter()
+                    .map(|d| format!("{}", d))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
+            DinObject::Extended(e) => write!(f, "Extended({})", unsafe { (**e).type_name() }),
+            DinObject::Tail => write!(f, "Tail"),
         }
     }
 }
@@ -104,7 +121,12 @@ pub struct UserFn<'s> {
 }
 
 impl<'s> UserFn<'s> {
-    pub fn new(name: Option<&'s str>, captures: Vec<AllocatedRef<'s>>, n_cells: usize, commands: &'s Vec<Command<'s>>) -> Self {
+    pub fn new(
+        name: Option<&'s str>,
+        captures: Vec<AllocatedRef<'s>>,
+        n_cells: usize,
+        commands: &'s Vec<Command<'s>>,
+    ) -> Self {
         Self {
             name,
             captures,
@@ -180,8 +202,8 @@ pub trait ExtendedObject: Debug {
     fn allocated_size(&self) -> usize;
 }
 
-pub type DinoValue<'s, T=AllocatedRef<'s>> = Result<T, AllocatedErrRef<'s>>;
-pub type DinoResult<'s, T=AllocatedRef<'s>> = Result<DinoValue<'s, T>, RuntimeViolation>;
+pub type DinoValue<'s, T = AllocatedRef<'s>> = Result<T, AllocatedErrRef<'s>>;
+pub type DinoResult<'s, T = AllocatedRef<'s>> = Result<DinoValue<'s, T>, RuntimeViolation>;
 
 #[derive(Debug)]
 pub enum StackItem<'s> {

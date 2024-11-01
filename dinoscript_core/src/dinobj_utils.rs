@@ -29,11 +29,11 @@ macro_rules! as_ext {
 } // todo this should return a malformedbytecode in all usages
 
 #[macro_export]
-macro_rules! catch{
+macro_rules! catch {
     ($e:expr) => {
-        match $e{
+        match $e {
             Ok(v) => v,
-            Err(e) => return Ok(Err(e))
+            Err(e) => return Ok(Err(e)),
         }
     };
 }

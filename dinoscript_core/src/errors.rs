@@ -4,7 +4,7 @@ use std::{error::Error, fmt::Display, sync::Arc};
 use crate::{dinobj::Allocatable, runtime::Runtime};
 
 #[derive(Debug)]
-pub enum RuntimeViolation{
+pub enum RuntimeViolation {
     MalformedBytecode,
 }
 

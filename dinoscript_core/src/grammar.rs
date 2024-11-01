@@ -8,7 +8,9 @@ use pest::{
 use pest_derive::Parser;
 
 use crate::ast::{
-    expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Operator, Variant},
+    expression::{
+        Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Operator, Variant,
+    },
     pairable::Pairable,
     statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair},
     ty::{FnTy, SpecializedBaseTy, SpecializedTy, Ty, TyWithPair},
@@ -39,7 +41,10 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
         }
         Rule::tup_type => {
             let opt = first.into_inner().next().unwrap();
-            let parts = opt.into_inner().next().map_or_else(|| Ok(Vec::new()), |p| p.into_inner().map(|p| parse_type(p)).collect())?;
+            let parts = opt
+                .into_inner()
+                .next()
+                .map_or_else(|| Ok(Vec::new()), |p| p.into_inner().map(|p| parse_type(p)).collect())?;
             return Ok(Ty::Tuple(parts).with_pair(input_marker));
         }
         _ => {
@@ -174,16 +179,11 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
             let mut inner = inner.into_inner();
             let [params, body] = [inner.next().unwrap(), inner.next().unwrap()];
             let params = params
-            .into_inner()
-            .next()
-            .map(|params| {
-                params
                 .into_inner()
-                .map(|p| parse_parameter(p))
-                .collect()
-            })
-            .transpose()?
-            .unwrap_or_default();
+                .next()
+                .map(|params| params.into_inner().map(|p| parse_parameter(p)).collect())
+                .transpose()?
+                .unwrap_or_default();
             let mut body_inner = body.into_inner();
             let [body_exec, ret] = [body_inner.next().unwrap(), body_inner.next().unwrap()];
             let body = parse_execution(body_exec)?;
@@ -192,7 +192,8 @@ fn parse_expr3(input: Pair<'_, Rule>) -> Result<ExprWithPair<'_>, ()> {
                 args: params,
                 body,
                 ret: Box::new(ret),
-            }).with_pair(pair_mark));
+            })
+            .with_pair(pair_mark));
         }
         _ => {
             unreachable!("{:?}", inner);
@@ -408,12 +409,7 @@ fn parse_function(input: Pair<'_, Rule>) -> Result<StmtWithPair<'_>, ()> {
     let params = params
         .into_inner()
         .next()
-        .map(|params| {
-            params
-                .into_inner()
-                .map(|p| parse_parameter(p))
-                .collect()
-        })
+        .map(|params| params.into_inner().map(|p| parse_parameter(p)).collect())
         .transpose()?
         .unwrap_or_default();
     let ret_ty = parse_type(ret_ty)?;

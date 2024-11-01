@@ -1,17 +1,26 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::{as_prim, catch, dinobj::{AllocatedRef, DinObject, DinoResult, ExtendedObject}, errors::RuntimeViolation, runtime::{Runtime, SystemRuntimeFrame}};
+use crate::{
+    as_prim, catch,
+    dinobj::{AllocatedRef, DinObject, DinoResult, ExtendedObject},
+    errors::RuntimeViolation,
+    runtime::{Runtime, SystemRuntimeFrame},
+};
 
 #[derive(Debug)]
-pub struct Mapping<'s>{
+pub struct Mapping<'s> {
     eq_fn: AllocatedRef<'s>,
     hash_fn: AllocatedRef<'s>,
     // if an entry here exists, it is guaranteed to be non-empty
     buckets: MappingBuckets<'s>,
-    length: usize
+    length: usize,
 }
 
-fn get_hash<'s>(hash_fn: &AllocatedRef<'s>, key: AllocatedRef<'s>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, BucketKey> {
+fn get_hash<'s>(
+    hash_fn: &AllocatedRef<'s>,
+    key: AllocatedRef<'s>,
+    frame: &SystemRuntimeFrame<'_, 's, '_>,
+) -> DinoResult<'s, BucketKey> {
     let hash_ret = catch!(frame.call(hash_fn, &[Ok(key)])?);
     let Some(&hash) = as_prim!(hash_ret, Int) else {
         return Err(RuntimeViolation::MalformedBytecode);
@@ -28,7 +37,7 @@ impl<'s> Mapping<'s> {
             eq_fn,
             hash_fn,
             buckets: MappingBuckets::empty(),
-            length: 0
+            length: 0,
         }
     }
 
@@ -36,7 +45,11 @@ impl<'s> Mapping<'s> {
         self.length
     }
 
-    pub fn with_update(&self, pairs: impl IntoIterator<Item=DinoResult<'s, (AllocatedRef<'s>, AllocatedRef<'s>)>>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Self> {
+    pub fn with_update(
+        &self,
+        pairs: impl IntoIterator<Item = DinoResult<'s, (AllocatedRef<'s>, AllocatedRef<'s>)>>,
+        frame: &SystemRuntimeFrame<'_, 's, '_>,
+    ) -> DinoResult<'s, Self> {
         let mut new_buckets = self.buckets.clone(frame.runtime())?;
         let new_eq = frame.runtime().clone_ok_ref(&self.eq_fn)?;
         let new_hash = frame.runtime().clone_ok_ref(&self.hash_fn)?;
@@ -71,16 +84,20 @@ impl<'s> Mapping<'s> {
                 }
             }
         }
-        
+
         Ok(Ok(Self {
             eq_fn: new_eq,
             hash_fn: new_hash,
             buckets: new_buckets,
-            length: new_length
+            length: new_length,
         }))
     }
 
-    pub fn without_key(&self, key: AllocatedRef<'s>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<Self>> {
+    pub fn without_key(
+        &self,
+        key: AllocatedRef<'s>,
+        frame: &SystemRuntimeFrame<'_, 's, '_>,
+    ) -> DinoResult<'s, Option<Self>> {
         let key_for_hash = frame.runtime().clone_ok_ref(&key)?;
         let hash = catch!(get_hash(&self.hash_fn, key_for_hash, frame)?);
         let bucket = self.buckets.get(hash);
@@ -110,16 +127,20 @@ impl<'s> Mapping<'s> {
         let new_eq = frame.runtime().clone_ok_ref(&self.eq_fn)?;
         let new_hash = frame.runtime().clone_ok_ref(&self.hash_fn)?;
         let new_length = self.length - 1;
-        
+
         Ok(Ok(Some(Self {
             eq_fn: new_eq,
             hash_fn: new_hash,
             buckets: new_buckets,
-            length: new_length
+            length: new_length,
         })))
     }
 
-    pub fn lookup(&self, key: AllocatedRef<'s>, frame: &SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<AllocatedRef<'s>>> {
+    pub fn lookup(
+        &self,
+        key: AllocatedRef<'s>,
+        frame: &SystemRuntimeFrame<'_, 's, '_>,
+    ) -> DinoResult<'s, Option<AllocatedRef<'s>>> {
         let key_for_hash = frame.runtime().clone_ok_ref(&key)?;
         let hash = catch!(get_hash(&self.hash_fn, key_for_hash, frame)?);
         let bucket = self.buckets.get(hash);
@@ -139,23 +160,24 @@ impl<'s> Mapping<'s> {
                 }
                 Ok(Ok(None))
             }
-            None => Ok(Ok(None))
+            None => Ok(Ok(None)),
         }
     }
 
-    pub(crate) fn iter<'f>(&'f self, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, impl Iterator<Item=DinoResult<'s>> + 'f> {
+    pub(crate) fn iter<'f>(
+        &'f self,
+        frame: &'f SystemRuntimeFrame<'_, 's, '_>,
+    ) -> DinoResult<'s, impl Iterator<Item = DinoResult<'s>> + 'f> {
         Ok(Ok(self.buckets.0.iter().flat_map(|(_, bucket)| {
             bucket.iter().map(|(k, v)| {
                 let k = frame.runtime().clone_ok_ref(k)?;
                 let v = frame.runtime().clone_ok_ref(v)?;
-                let tup = DinObject::Struct(vec![k,v]);
+                let tup = DinObject::Struct(vec![k, v]);
                 frame.runtime().allocate(Ok(tup))
             })
         })))
     }
 }
-
-
 
 type BucketKey = u64;
 type Bucket<'s, V> = Vec<(AllocatedRef<'s>, V)>;
@@ -205,7 +227,7 @@ impl<'s> MappingBuckets<'s> {
         self.0.entry(bucket_key)
     }
 
-    fn get(&self, bucket_key: BucketKey)-> Option<&Bucket<'s, AllocatedRef<'s>>> {
+    fn get(&self, bucket_key: BucketKey) -> Option<&Bucket<'s, AllocatedRef<'s>>> {
         self.0.get(&bucket_key)
     }
 }

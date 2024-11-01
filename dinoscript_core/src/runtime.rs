@@ -438,7 +438,9 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                                 unreachable!()
                             };
                             let Ok(arg) = arg else { todo!() };
-                            let obj = self.runtime.allocate(Ok(DinObject::Variant(VariantObject::new(tag, arg))))?;
+                            let obj = self
+                                .runtime
+                                .allocate(Ok(DinObject::Variant(VariantObject::new(tag, arg))))?;
                             self.stack.push(StackItem::Value(obj));
                         }
                     }
@@ -896,7 +898,8 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                                         let Some(attr) = &fields.get(i) else {
                                             panic!("struct has no attribute at index {}, has fields: {:?}", i, fields)
                                         };
-                                        self.stack.push(StackItem::Value(Ok(self.runtime().clone_ok_ref(attr)?)));
+                                        self.stack
+                                            .push(StackItem::Value(Ok(self.runtime().clone_ok_ref(attr)?)));
                                     }
                                     _ => todo!(),
                                 },
@@ -921,11 +924,10 @@ impl<'p, 's, 'r> SystemRuntimeFrame<'p, 's, 'r> {
                         PendingFunctor::Variant(tag) => {
                             debug_assert!(arguments.len() == 1);
                             self.stack.extend(arguments);
-                            let Ok(arg) = self.eval_pop()? else {todo!()};
-                            let obj = self.runtime().allocate(Ok(DinObject::Variant(VariantObject::new(
-                                tag,
-                                arg,
-                            ))))?;
+                            let Ok(arg) = self.eval_pop()? else { todo!() };
+                            let obj = self
+                                .runtime()
+                                .allocate(Ok(DinObject::Variant(VariantObject::new(tag, arg))))?;
                             self.stack.push(StackItem::Value(obj));
                         }
                     }

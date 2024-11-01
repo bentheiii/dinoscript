@@ -14,7 +14,6 @@ fn insert_head<T, F, E0, E1>(v: &mut [T], is_less: &mut F) -> Result<Result<(), 
 where
     F: FnMut(&T, &T) -> Result<Result<bool, E1>, E0>,
 {
-
     if v.len() >= 2 && catch!(is_less(&v[1], &v[0])?) {
         unsafe {
             // There are three ways to implement insertion here:
@@ -87,12 +86,7 @@ where
 ///
 /// The two slices must be non-empty and `mid` must be in bounds. Buffer `buf` must be long enough
 /// to hold a copy of the shorter slice. Also, `T` must not be a zero-sized type.
-unsafe fn merge<T, F, E0, E1>(
-    v: &mut [T],
-    mid: usize,
-    buf: *mut T,
-    is_less: &mut F,
-) -> Result<Result<(), E1>, E0>
+unsafe fn merge<T, F, E0, E1>(v: &mut [T], mid: usize, buf: *mut T, is_less: &mut F) -> Result<Result<(), E1>, E0>
 where
     F: FnMut(&T, &T) -> Result<Result<bool, E1>, E0>,
 {
@@ -267,22 +261,12 @@ where
             start -= 1;
             unsafe {
                 if catch!(is_less(v.get_unchecked(start + 1), v.get_unchecked(start))?) {
-                    while start > 0
-                        && catch!(is_less(
-                            v.get_unchecked(start),
-                            v.get_unchecked(start - 1)
-                        )?)
-                    {
+                    while start > 0 && catch!(is_less(v.get_unchecked(start), v.get_unchecked(start - 1))?) {
                         start -= 1;
                     }
                     v[start..end].reverse();
                 } else {
-                    while start > 0
-                        && catch!(is_less(
-                            v.get_unchecked(start),
-                            v.get_unchecked(start - 1)
-                        )?)
-                    {
+                    while start > 0 && catch!(is_less(v.get_unchecked(start), v.get_unchecked(start - 1))?) {
                         start -= 1;
                     }
                 }

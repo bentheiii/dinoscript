@@ -114,7 +114,9 @@ pub mod ty {
 
 pub mod expression {
     use super::{
-        pairable::{Pairable, WithPair}, statement::{FnArg, StmtWithPair}, ty::TyWithPair
+        pairable::{Pairable, WithPair},
+        statement::{FnArg, StmtWithPair},
+        ty::TyWithPair,
     };
     use std::borrow::Cow;
 
@@ -374,5 +376,4 @@ pub mod statement {
             ResolveOverload { name: name.into() }
         }
     }
-    
 }

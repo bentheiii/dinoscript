@@ -35,7 +35,7 @@ impl<'s> Sequence<'s> {
     pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
         Self(SequenceInner::new_map(inner, func))
     }
-    
+
     pub fn get(&self, frame: &SystemRuntimeFrame<'_, 's, '_>, index: usize) -> DinoResult<'s> {
         self.0.get(frame, index)
     }

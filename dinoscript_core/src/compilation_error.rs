@@ -61,9 +61,9 @@ pub enum CompilationError<'c, 's> {
         expected_ty: Arc<Ty<'s>>,
         actual_ty: Arc<Ty<'s>>,
     },
-    ForwardTypeNotAllowed{
+    ForwardTypeNotAllowed {
         name: Cow<'s, str>,
-    }
+    },
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -171,11 +171,7 @@ impl Display for CompilationError<'_, '_> {
                 "Type mismatch in union {}: expected type of variant {} to be {}, got {}",
                 union_name, variant_name, expected_ty, actual_ty
             ),
-            CompilationError::ForwardTypeNotAllowed { name } => write!(
-                f,
-                "Forward type ~{} is not allowed here",
-                name
-            ),
+            CompilationError::ForwardTypeNotAllowed { name } => write!(f, "Forward type ~{} is not allowed here", name),
         }
     }
 }
