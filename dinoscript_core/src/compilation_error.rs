@@ -2,10 +2,10 @@ use std::{borrow::Cow, error::Error, fmt::Display, sync::Arc};
 
 use crate::{
     ast::pairable::{Pairable, WithPair},
-    compilation_scope::{ty::Ty, NamedType},
+    compilation_scope::{ty::Ty, NamedItem, NamedType},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone)] // todo why is this clone?
 pub enum CompilationError<'c, 's> {
     LetTypeMismatch {
         var: Cow<'c, str>,
@@ -64,6 +64,38 @@ pub enum CompilationError<'c, 's> {
     ForwardTypeNotAllowed {
         name: Cow<'s, str>,
     },
+    IllegalShadowing {
+        name: Cow<'s, str>,
+        existing: ShadowingItemKind,
+        overrider: ShadowingItemKind,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum ShadowingItemKind {
+    Overload,
+    Variable,
+    Type
+}
+
+impl ShadowingItemKind{
+    pub(crate) fn of(item: &NamedItem) -> Self {
+        match item {
+            NamedItem::Overloads(_) => ShadowingItemKind::Overload,
+            NamedItem::Variable(_) => ShadowingItemKind::Variable,
+            NamedItem::Type(_) => ShadowingItemKind::Type
+        }
+    }
+}
+
+impl Display for ShadowingItemKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShadowingItemKind::Overload => write!(f, "function"),
+            ShadowingItemKind::Variable => write!(f, "variable"),
+            ShadowingItemKind::Type => write!(f, "type")
+        }
+    }
 }
 
 impl<'c, 's> Error for CompilationError<'c, 's> {}
@@ -172,6 +204,7 @@ impl Display for CompilationError<'_, '_> {
                 union_name, variant_name, expected_ty, actual_ty
             ),
             CompilationError::ForwardTypeNotAllowed { name } => write!(f, "Forward type ~{} is not allowed here", name),
+            CompilationError::IllegalShadowing { name, existing, overrider } => write!(f, "Cannot shadow {} {} with a {}", existing, name, overrider)
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::{
         statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair},
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
-    compilation_error::{CompilationError, CompilationErrorWithPair},
+    compilation_error::{CompilationError, CompilationErrorWithPair, ShadowingItemKind},
     maybe_owned::MaybeOwned,
     overloads::{combine_types, BindingResolution, OverloadPriority, ResolutionPriority},
 };
@@ -613,12 +613,19 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         self.parent.is_none()
     }
 
-    pub fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>) {
+    pub fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>)->Result<(), CompilationError> {
         let existing_name = self.names.entry(name);
         match existing_name {
             Entry::Occupied(mut entry) => match entry.get_mut() {
                 NamedItem::Overloads(overloads) => overloads.overloads.push(overload),
-                _ => todo!(),
+                other => {
+                    let shadowing_kind = ShadowingItemKind::of(other);
+                    return Err(CompilationError::IllegalShadowing {
+                        name: entry.key().clone(),
+                        existing: shadowing_kind,
+                        overrider: ShadowingItemKind::Overload,
+                    });
+                },
             },
             Entry::Vacant(entry) => {
                 entry.insert(NamedItem::Overloads(Overloads {
@@ -626,6 +633,7 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
                 }));
             }
         }
+        Ok(())
     }
 
     pub fn add_value(&mut self, name: Cow<'s, str>, ty: Arc<Ty<'s>>, loc: Location) {
