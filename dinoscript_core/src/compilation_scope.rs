@@ -20,7 +20,7 @@ use crate::{
         statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair},
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
-    compilation_error::{CompilationError, CompilationErrorWithPair, ShadowingItemKind},
+    compilation_error::{CompilationError, CompilationErrorWithPair, ExpectedArgCount, ItemKind, ParamIdentifier, TypeList},
     maybe_owned::MaybeOwned,
     overloads::{combine_types, BindingResolution, OverloadPriority, ResolutionPriority},
 };
@@ -479,7 +479,7 @@ struct PendingCapture {
 }
 
 #[derive(Debug, Clone)]
-enum RelativeNamedItem<'p, 's> {
+pub(crate) enum RelativeNamedItem<'p, 's> {
     Variable(RelativeNamedItemVariable<'s>),
     Type(&'p NamedType<'s>),
     Overloads(RelativeNamedItemOverloads<'p, 's>),
@@ -619,11 +619,11 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
             Entry::Occupied(mut entry) => match entry.get_mut() {
                 NamedItem::Overloads(overloads) => overloads.overloads.push(overload),
                 other => {
-                    let shadowing_kind = ShadowingItemKind::of(other);
+                    let shadowing_kind = ItemKind::of(other);
                     return Err(CompilationError::IllegalShadowing {
                         name: entry.key().clone(),
                         existing: shadowing_kind,
-                        overrider: ShadowingItemKind::Overload,
+                        overrider: ItemKind::Overload,
                     });
                 },
             },
@@ -640,11 +640,11 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         let existing_name = self.names.entry(name);
         match existing_name {
             Entry::Occupied(occ) => {
-                let shadowing_kind = ShadowingItemKind::of(occ.get());
+                let shadowing_kind = ItemKind::of(occ.get());
                 return Err(CompilationError::IllegalShadowing {
                     name: occ.key().clone(),
                     existing: shadowing_kind,
-                    overrider: ShadowingItemKind::Variable,
+                    overrider: ItemKind::Variable,
                 });
             },
             Entry::Vacant(entry) => {
@@ -781,7 +781,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             Err(CompilationError::NonTemplateTypeInstantiation { name: name.clone() }.with_pair(ty.pair.clone()))
                         }
                     }
-                    _ => todo!("handle item: {:#?}", item), // raise an error
+                    other => {
+                        let kind = ItemKind::of(&other);
+                        Err(CompilationError::NonTypeUsedAsType { name: name.clone(), kind}.with_pair(ty.pair.clone()))
+                    }
                 }
             }
         }
@@ -900,8 +903,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         // if there's only one overload, we can raise a better error here
                         return Err(CompilationError::ArgumentCountMismatch {
                             func_name: name.clone(),
-                            min_n: overload.min_args_n(),
-                            max_n: overload.args.len(),
+                            expected: ExpectedArgCount::from_range(overload.min_args_n(), overload.args.len()),
                             actual_n: arg_types.len(),
                         });
                     }
@@ -929,8 +931,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 // if there's only one overload, we can raise a better error here
                                 return Err(CompilationError::ArgumentTypeMismatch {
                                     func_name: name.clone(),
-                                    param_n: i,
-                                    param_name: None,
+                                    param_id: ParamIdentifier::positional(i),
                                     expected_ty: param.ty.clone(),
                                     actual_ty: arg_ty.clone(),
                                 });
@@ -999,7 +1000,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 if resolved_overloads[1].priority == first_priority {
                     return Err(CompilationError::AmbiguousOverloads {
                         name: name.clone(),
-                        arg_types: arg_types.to_owned(),
+                        arg_types: TypeList(arg_types.to_owned()),
                     });
                 }
                 // if the first priority is better than the second, we can just return the first
@@ -1008,7 +1009,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
         Err(CompilationError::NoOverloads {
             name: name.clone(),
-            arg_types: arg_types.to_owned(),
+            arg_types: TypeList(arg_types.to_owned()),
         })
     }
 
@@ -1122,8 +1123,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             if fields.len() != arg_types.len() {
                                 return Err(CompilationError::ArgumentCountMismatch {
                                     func_name: struct_name.clone(),
-                                    min_n: fields.len(),
-                                    max_n: fields.len(),
+                                    expected: ExpectedArgCount::Exact(fields.len()),
                                     actual_n: arg_types.len(),
                                 }
                                 .with_pair(expr.pair.clone()));
@@ -1136,8 +1136,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 if resolution.assign(&field.raw_ty, arg_ty).is_err() {
                                     return Err(CompilationError::ArgumentTypeMismatch {
                                         func_name: struct_name.clone(),
-                                        param_n: i,
-                                        param_name: Some(name.clone()),
+                                        param_id: ParamIdentifier::new(i, Some(name.clone())),
                                         expected_ty: field.raw_ty.clone(),
                                         actual_ty: arg_ty.clone(),
                                     }
