@@ -5,7 +5,7 @@ use dinoscript_core::{
             self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    }, dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime, SystemRuntimeFrame}
+    }, dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{iterator::{Iterable, LengthHint}, mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime, SystemRuntimeFrame}
 };
 use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -125,7 +125,7 @@ macro_rules! ty_gen {
         $b.mapping(ty_gen!($b, $g, $key), ty_gen!($b, $g, $value))
     };
     ($b:ident, $g:expr, Iterator<$ty:tt>) => {
-        $b.iterator(vec![ty_gen!($b, $g, $ty)])
+        $b.iterator(ty_gen!($b, $g, $ty))
     };
     ($b:ident, $g:expr, $id:ident) => {
         $g.get_gen(stringify!($id))
@@ -1332,6 +1332,25 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["K", "V"]);
                 Signature::new_generic(
+                    "iter",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Mapping<K, V>),
+                    ],
+                    ty_gen!(bi, gen, Iterator<(K,V)>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let mapping = rt_catch!(frame.eval_pop()?);
+                let iter = Iterable::new_mapping(mapping);
+                to_return_value(frame.runtime().allocate_ext(iter))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["K", "V"]);
+                Signature::new_generic(
                     "len",
                     vec![
                         arg_gen!(bi, gen, mapping: Mapping<K, V>),
@@ -1461,6 +1480,41 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             })),
         ))),
         // endregion mapping
+        // region:iterator
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "to_array",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Iterator<T>),
+                    ],
+                    ty_gen!(bi, gen, Sequence<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let iterator = rt_catch!(frame.eval_pop()?);
+
+                let iterator = rt_as_ext!(iterator, Iterable);
+
+                let len_h = rt_catch!(iterator.length_hint()?);
+                let mut arr = match len_h {
+                    LengthHint::UpTo(len) => Vec::with_capacity(len),
+                    LengthHint::Unknown => Vec::new(),
+                    LengthHint::Infinite => return to_return_value(frame.runtime().allocate(Err("Infinite iterator".into()))),
+                };
+                for item in rt_catch!(iterator.iter(frame)?) {
+                    let item = rt_catch!(item?);
+                    arr.push(item);
+                }
+                arr.shrink_to_fit();
+                let ret = Sequence::new_array(arr);
+                to_return_value(frame.runtime().allocate_ext(ret))
+            })),
+        ))),
+        // endregion iterator
         // region:stack
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
@@ -1641,6 +1695,16 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             "push",
             r#"fn push<T>(stack: Stack<T>, item: T)->Stack<T>{
                 Stack::Node(__std_StackNode(item, stack, len(stack)+1))
+            }"#,
+        ), // pragma:replace-end
+        // region: tuple-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "eq-tup-1",
+            r#"fn eq<T0, T1, U0, U1>(a: (T0,T1), b: (U0,U1), fn_eq0: (T0, U0)->(bool) ~= eq, fn_eq1: (T1, U1)->(bool) ~= eq)->bool{
+                fn_eq0(a::item0, b::item0)
+                && fn_eq1(a::item1, b::item1)
             }"#,
         ), // pragma:replace-end
     ]

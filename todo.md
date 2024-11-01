@@ -19,3 +19,4 @@
 * shortcut variant constructors with a nill value
 * mapping().set(...) results in an unknown eq call, an easy way to prevent this is to disallow "free" local generic variables at resolve time
 * automatic disambiguation? see script 73, can we delete the disambiguation?
+* better tuple equality?
