@@ -1063,6 +1063,25 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
+                Signature::new_generic(
+                    "iter",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Sequence<T>),
+                    ],
+                    ty_gen!(bi, gen, Iterator<T>),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let seq = rt_catch!(frame.eval_pop()?);
+                let iter = Iterable::new_sequence(seq);
+                to_return_value(frame.runtime().allocate_ext(iter))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic("len", vec![arg_gen!(bi, gen, a: Sequence<T>)], ty!(bi, int), gen)
             },
             SetupFunctionBody::System(Box::new(|frame| {
@@ -1484,6 +1503,38 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
+                let gen = SignatureGen::new(vec!["T", "U"]);
+                Signature::new_generic(
+                    "reduce",
+                    vec![
+                        arg_gen!(bi, gen, mapping: Iterator<T>),
+                        arg_gen!(bi, gen, init: U),
+                        arg_gen!(bi, gen, fn_reduce: (U, T)->(U)),
+                    ],
+                    ty_gen!(bi, gen, U),
+                    gen,
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let iterator = rt_catch!(frame.eval_pop()?);
+                let init = rt_catch!(frame.eval_pop()?);
+                let fn_reduce = rt_catch!(frame.eval_pop()?);
+
+                let iterator = rt_as_ext!(iterator, Iterable);
+                
+                let mut ret = init;
+
+                for item in rt_catch!(iterator.iter(frame)?) {
+                    let item = rt_catch!(item?);
+                    ret = rt_catch!(frame.call(&fn_reduce, &[Ok(ret), Ok(item)])?);
+                }
+
+                to_return_value(Ok(Ok(ret)))
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic(
                     "to_array",
@@ -1705,6 +1756,20 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             r#"fn eq<T0, T1, U0, U1>(a: (T0,T1), b: (U0,U1), fn_eq0: (T0, U0)->(bool) ~= eq, fn_eq1: (T1, U1)->(bool) ~= eq)->bool{
                 fn_eq0(a::item0, b::item0)
                 && fn_eq1(a::item1, b::item1)
+            }"#,
+        ), // pragma:replace-end
+        // endregion: tuple-1
+        // region: iterable-2
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "reduce",
+            // todo make a map-error here for a clearer error message
+            r#"fn reduce<T>(iter: Iterator<T>, func: (T, T)->(T))->T{
+                fn f(acc: Optional<T>, v: T)->Optional<T>{
+                    acc.map_or((a: T) -> {some(func(a, v))}, some(v))
+                }
+                iter.reduce(none, f)!:Some
             }"#,
         ), // pragma:replace-end
     ]

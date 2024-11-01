@@ -1,0 +1,6 @@
+fn main()->bool{
+    let a = [1,2,3,4,5];
+
+    assert(a.iter().reduce(mul{int, int}) == 120)
+    && assert(a.iter().reduce(0, (s: int, i: int) -> {s + if(i%2 == 0, 1, 0)}) == 2)
+}

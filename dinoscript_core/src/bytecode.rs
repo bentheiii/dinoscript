@@ -44,7 +44,7 @@ impl<'s> Command<'s> {
             Command::PushTail=>format!("{indent}dinoscript_core::bytecode::Command::PushTail"),
             Command::MakeFunction(function)=>{
                 let inner_commands=function.commands.iter().map(|c|c.to_in_code(&format!("{indent}    "))).collect::<Vec<String>>().join(&format!(",\n{indent}"));
-                format!("{indent}dinoscript_core::bytecode::Command::MakeFunction(dinoscript_core::bytecode::MakeFunction::new({},{},vec![\n{inner_commands}\n{indent}]))",function.n_captures,function.n_cells)
+                format!("{indent}dinoscript_core::bytecode::Command::MakeFunction(dinoscript_core::bytecode::MakeFunction::new(None,{},{},vec![\n{inner_commands}\n{indent}]))",function.n_captures,function.n_cells)
             },
             Command::MakePending(pending)=>format!("{indent}dinoscript_core::bytecode::Command::MakePending({})",pending),
             Command::Attr(attr)=>format!("{indent}dinoscript_core::bytecode::Command::Attr({})",attr),

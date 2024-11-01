@@ -1,5 +1,7 @@
 use crate::{as_ext, catch, dinobj::{AllocatedRef, DinoResult, ExtendedObject}, errors::RuntimeViolation, lib_objects::mapping::Mapping, runtime::SystemRuntimeFrame};
 
+use super::sequence::Sequence;
+
 #[derive(Debug)]
 pub struct Iterable<'s>(IterableInner<'s>);
 
@@ -8,6 +10,10 @@ impl<'s> Iterable<'s> {
 
     pub fn new_mapping(mapping: AllocatedRef<'s>) -> Self {
         Self(IterableInner::Mapping(mapping))
+    }
+
+    pub fn new_sequence(sequence: AllocatedRef<'s>) -> Self {
+        Self(IterableInner::Sequence(sequence))
     }
 
     pub fn iter<'f>(&self, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Box<dyn Iterator<Item=DinoResult<'s>> + 'f>> {
@@ -25,17 +31,28 @@ enum IterableInner<'s> {
         // should be a mapping   
         AllocatedRef<'s>
     ),
+    Sequence(
+        // should be a sequence
+        AllocatedRef<'s>
+    ),
 }
 
 impl<'s> IterableInner<'s> {
     fn iter<'f>(&self, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Box<dyn Iterator<Item=DinoResult<'s>> + 'f>> {
         match self {
-            IterableInner::Mapping(mapping) => {
-                let Some(mapping): Option<&Mapping<'s>>  = as_ext!(mapping, Mapping) else {
+            Self::Mapping(mapping) => {
+                let Some(mapping)  = as_ext!(mapping, Mapping) else {
                     return Err(RuntimeViolation::MalformedBytecode);
                 };
                 let iter = catch!(mapping.iter(frame)?);
                 Ok(Ok(Box::new(iter)))
+            },
+            Self::Sequence(sequence) => {
+                let Some(sequence)  = as_ext!(sequence, Sequence) else {
+                    return Err(RuntimeViolation::MalformedBytecode);
+                };
+                let iter = sequence.iter(frame);
+                Ok(Ok(iter))
             },
         }
     }
@@ -47,6 +64,12 @@ impl<'s> IterableInner<'s> {
                     return Err(RuntimeViolation::MalformedBytecode);
                 };
                 Ok(Ok(LengthHint::UpTo(mapping.len())))
+            },
+            IterableInner::Sequence(sequence) => {
+                let Some(sequence): Option<&Sequence<'s>>  = as_ext!(sequence, Sequence) else {
+                    return Err(RuntimeViolation::MalformedBytecode);
+                };
+                Ok(Ok(LengthHint::UpTo(sequence.len())))
             },
         }
     }
