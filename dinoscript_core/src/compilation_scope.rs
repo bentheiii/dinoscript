@@ -694,15 +694,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn gen_prim_type(&self, name: &'static str, args: Vec<Arc<Ty<'s>>>) -> Arc<Ty<'s>> {
-        // todo: in the future, source objects should have caches
-        let item = self.get_named_item(&Cow::Borrowed(name)).unwrap();
-        let RelativeNamedItem::Type(NamedType::Template(template)) = item else {
-            unreachable!()
-        };
-        template.instantiate(args)
-    }
-
     fn int_ty(&self) -> Arc<Ty<'s>> {
         self.builtins.as_ref().unwrap().int()
     }
@@ -724,7 +715,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     }
 
     fn optional(&self, ty: Arc<Ty<'s>>) -> Arc<Ty<'s>> {
-        self.gen_prim_type("Optional", vec![ty])
+        self.builtins.as_ref().unwrap().optional(ty)
     }
 
     fn parse_type<'c: 's>(
