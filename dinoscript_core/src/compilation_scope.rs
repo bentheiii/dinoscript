@@ -765,7 +765,13 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             .iter()
                             .map(|arg| self.parse_type(arg, gen_params, tail_name))
                             .collect::<Result<Vec<_>, _>>()?;
-                        // todo check that the number of args match
+                        if args.len() != template.n_generics() {
+                            return Err(CompilationError::GenericArgCountMismatch { 
+                                template_name: template.name().clone(),
+                                expected_n: template.n_generics(),
+                                actual_n: args.len(),
+                            }.with_pair(ty.pair.clone()));
+                        }
                         Ok(template.instantiate(args))
                     }
                     RelativeNamedItem::Type(NamedType::Concrete(ty)) => {

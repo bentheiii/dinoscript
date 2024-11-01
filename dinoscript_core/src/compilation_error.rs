@@ -69,6 +69,11 @@ pub enum CompilationError<'c, 's> {
         existing: ShadowingItemKind,
         overrider: ShadowingItemKind,
     },
+    GenericArgCountMismatch {
+        template_name: Cow<'s, str>,
+        expected_n: usize,
+        actual_n: usize
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -204,7 +209,8 @@ impl Display for CompilationError<'_, '_> {
                 union_name, variant_name, expected_ty, actual_ty
             ),
             CompilationError::ForwardTypeNotAllowed { name } => write!(f, "Forward type ~{} is not allowed here", name),
-            CompilationError::IllegalShadowing { name, existing, overrider } => write!(f, "Cannot shadow {} {} with a {}", existing, name, overrider)
+            CompilationError::IllegalShadowing { name, existing, overrider } => write!(f, "Cannot shadow {} {} with a {}", existing, name, overrider),
+            CompilationError::GenericArgCountMismatch { template_name, expected_n, actual_n } => write!(f, "Generic {} expects {} arguments, got {}", template_name, expected_n, actual_n),
         }
     }
 }
