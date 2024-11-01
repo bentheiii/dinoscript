@@ -44,7 +44,7 @@ pub mod utils {
                 SetupItem::Value(v) => {
                     let id = id_generator();
                     let ty = (v.ty_factory)(scope.builtins.as_ref().unwrap().as_ref());
-                    scope.add_value(v.name, ty, Location::System(SystemLoc::new(source, id)));
+                    scope.add_value(v.name, ty, Location::System(SystemLoc::new(source, id)))?;
                 }
             }
             Ok(())

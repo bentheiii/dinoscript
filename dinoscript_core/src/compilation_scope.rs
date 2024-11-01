@@ -636,14 +636,22 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         Ok(())
     }
 
-    pub fn add_value(&mut self, name: Cow<'s, str>, ty: Arc<Ty<'s>>, loc: Location) {
+    pub fn add_value<'a>(&mut self, name: Cow<'s, str>, ty: Arc<Ty<'s>>, loc: Location)->Result<(), CompilationError<'a, 's>> {
         let existing_name = self.names.entry(name);
         match existing_name {
-            Entry::Occupied(_) => todo!(),
+            Entry::Occupied(occ) => {
+                let shadowing_kind = ShadowingItemKind::of(occ.get());
+                return Err(CompilationError::IllegalShadowing {
+                    name: occ.key().clone(),
+                    existing: shadowing_kind,
+                    overrider: ShadowingItemKind::Variable,
+                });
+            },
             Entry::Vacant(entry) => {
                 entry.insert(NamedItem::Variable(Variable::new(ty, loc)));
             }
         }
+        Ok(())
     }
 }
 
