@@ -35,12 +35,7 @@ impl<'s> Sequence<'s> {
     pub fn new_map(inner: AllocatedRef<'s>, func: AllocatedRef<'s>) -> Self {
         Self(SequenceInner::new_map(inner, func))
     }
-
-    pub fn new_sorted<'f, L: Fn(&AllocatedRef<'s>, &AllocatedRef<'s>) -> DinoResult<'s, bool> + 'f>(&self, is_less: impl FnOnce(&'f SystemRuntimeFrame<'_, 's, '_>) -> L, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<Self>> where 's: 'f{
-        let s = catch!(self.0.new_sorted(is_less, frame)?);
-        Ok(Ok(s.map(Self)))
-    }
-
+    
     pub fn get(&self, frame: &SystemRuntimeFrame<'_, 's, '_>, index: usize) -> DinoResult<'s> {
         self.0.get(frame, index)
     }
@@ -321,13 +316,6 @@ impl<'s> SequenceInner<'s> {
             debug_assert!(!seq.is_empty(), "map should not have an empty function");
         }
         Self::Map(SequenceMap { inner, func })
-    }
-
-    // None means the list is already sorted
-    pub fn new_sorted<'f, L: Fn(&AllocatedRef<'s>, &AllocatedRef<'s>) -> DinoResult<'s, bool> + 'f>(&self, is_less: impl FnOnce(&'f SystemRuntimeFrame<'_, 's, '_>) -> L, frame: &'f SystemRuntimeFrame<'_, 's, '_>) -> DinoResult<'s, Option<Self>> where 's: 'f{        // todo check if the array is already sorted
-        let mut array = catch!(self.iter(frame).collect::<DinoResult<Vec<_>>>()?);
-        catch!(try_sort(&mut array, is_less(frame))?);
-        Ok(Ok(Some(Self::new_array(array))))
     }
 
     pub fn idx_from_int(&self, idx: i64) -> NormalizedIdx {

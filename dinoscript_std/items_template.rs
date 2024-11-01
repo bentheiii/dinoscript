@@ -1187,15 +1187,31 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let seq_len = seq.len();
                 let mut ret = {
                     let mut v = Vec::with_capacity(seq_len);
+                    let mut any_out_of_order = false;
                     for item_ref in seq.iter(frame) {
-                        let item_ref = match item_ref? {
-                            Ok(v) => v,
-                            other => return to_return_value(Ok(other)),
-                        };
+                        let item_ref = rt_catch!(item_ref?);
+                        if !any_out_of_order {
+                            if let Some(last) = v.last() {
+                                let last = frame.runtime().clone_ref(Ok(last))?;
+                                let item_ref = frame.runtime().clone_ref(Ok(&item_ref))?;
+                                let res = frame.call(&cmp_func, &[last, item_ref])?;
+                                let res = rt_catch!(res);
+                                let Some(res) = as_prim!(res, Int) else {
+                                    return Err(RuntimeViolation::MalformedBytecode)
+                                };
+                                if *res > 0 {
+                                    any_out_of_order = true;
+                                }
+                            }
+                        }
                         v.push(item_ref);
+                    }
+                    if !any_out_of_order {
+                        return to_return_value(Ok(Ok(seq_ref)));
                     }
                     v
                 };
+
 
                 rt_catch!(try_sort::try_sort(&mut ret, |a, b| {
                     let a = frame.runtime().clone_ref(Ok(a))?;
