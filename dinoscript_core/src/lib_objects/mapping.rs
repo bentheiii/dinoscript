@@ -45,6 +45,10 @@ impl<'s> Mapping<'s> {
         self.length
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
     pub fn with_update(
         &self,
         pairs: impl IntoIterator<Item = DinoResult<'s, (AllocatedRef<'s>, AllocatedRef<'s>)>>,

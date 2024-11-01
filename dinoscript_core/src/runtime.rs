@@ -189,7 +189,7 @@ impl<'s> Runtime<'s> {
                 let obj = self.clone_ok_ref(obj)?;
                 Ok(Ok(obj))
             }
-            Err(e) => todo!(),
+            Err(_e) => todo!(),
         }
     }
 

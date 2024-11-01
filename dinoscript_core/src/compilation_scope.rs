@@ -183,7 +183,7 @@ pub mod ty {
     }
 
     impl<'s> Ty<'s> {
-        pub fn resolve<'a>(
+        pub fn resolve(
             self: &Arc<Self>,
             // todo tail should really be template
             tail: Option<&Arc<TyTemplate<'s>>>,
@@ -1484,7 +1484,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         };
 
         let raw_args = args
-            .into_iter()
+            .iter()
             .map(|fn_arg| -> Result<_, _> {
                 Ok((
                     fn_arg.name.clone(),
@@ -1533,7 +1533,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         // todo check that we don't shadow a variable
         let gen_id = gen_params.as_ref().map(|g| g.gen_id);
         let expected_return_ty = expected_return_ty
-            .map(|ert| self.parse_type(&ert, &gen_params, None))
+            .map(|ert| self.parse_type(ert, &gen_params, None))
             .transpose()?;
 
         let fn_cell_idx;
@@ -1560,7 +1560,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         for body_stmt in body {
             subscope.feed_statement(body_stmt, &mut subscope_sink)?;
         }
-        let actual_return_ty = subscope.feed_return(&ret, &mut subscope_sink)?;
+        let actual_return_ty = subscope.feed_return(ret, &mut subscope_sink)?;
         // todo check that return_tys match
         let n_captures = subscope.pending_captures.len();
         let n_cells = subscope.n_cells;

@@ -8,7 +8,7 @@ use dinoscript_core::{
             self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs,
             Ty, TyTemplate,
         },
-        CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
+        CompilationScope, NamedItem, NamedType,
     },
     dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject},
     dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen},
@@ -24,11 +24,12 @@ use dinoscript_core::{
     runtime::Runtime,
 };
 use std::{iter, ops::ControlFlow, sync::Arc};
-// pragma: skip 6
+// pragma: skip 7
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt},
     bytecode::to_in_code,
     maybe_owned::MaybeOwned,
+    compilation_scope::{Location, Overloads, SystemLoc}
 };
 use std::collections::HashMap;
 

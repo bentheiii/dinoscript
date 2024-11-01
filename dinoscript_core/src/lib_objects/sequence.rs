@@ -1,13 +1,10 @@
 use std::ops::Index;
 
-use crate::catch;
 use crate::dinobj::{AllocatedRef, DinoResult, ExtendedObject};
 use crate::dinobj_utils::as_ext;
 use crate::errors::RuntimeViolation;
 use crate::runtime::{Runtime, SystemRuntimeFrame};
 use itertools::Itertools;
-
-use super::try_sort::try_sort;
 
 #[derive(Debug)]
 pub struct Sequence<'s>(SequenceInner<'s>);
