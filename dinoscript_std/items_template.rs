@@ -5,7 +5,7 @@ use dinoscript_core::{
             self, BuiltinTemplate, CompoundKind, CompoundTemplate, Field, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate
         },
         CompilationScope, Location, NamedItem, NamedType, Overloads, SystemLoc,
-    }, dinobj::{AllocatedRef, DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{iterator::{Iterable, LengthHint}, mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime, SystemRuntimeFrame}
+    }, dinobj::{DinObject, DinoResult, SourceFnResult, TailCallAvailability, VariantObject}, dinopack::utils::{Arg, SetupFunction, SetupFunctionBody, SetupItem, SetupValue, Signature, SignatureGen}, errors::{RuntimeError, RuntimeViolation}, lib_objects::{iterator::{Iterable, LengthHint}, mapping::Mapping, optional::{self}, sequence::{NormalizedIdx, Sequence}, stack::{self}, try_sort}, runtime::{Runtime}
 };
 use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 6
@@ -585,7 +585,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // region:generic
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
-            |bi: &Builtins<'_>| {
+            |_bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic("cast", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
             },
@@ -593,7 +593,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         ))),
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
-            |bi: &Builtins<'_>| {
+            |_bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic("debug", vec![arg_gen!(bi, gen, a: T)], ty_gen!(bi, gen, T), gen)
             },
@@ -612,7 +612,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                     ty!(bi, bool),
                 )
             },
-            SetupFunctionBody::System(Box::new(|frame| unreachable!("unknown eq call"))),
+            SetupFunctionBody::System(Box::new(|_frame| unreachable!("unknown eq call"))),
         ))),
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
@@ -1490,9 +1490,10 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                     |pair_ref| {
                         let pair_ref = catch!(pair_ref?);
                         let Some(pair) = as_prim!(pair_ref, Struct) else { todo!() };
-                        let Some(key) = pair.get(0) else { todo!() };
-                        let Some(value) = pair.get(1) else { todo!() };
-                        Ok(Ok((frame.runtime().clone_ok_ref(key)?, frame.runtime().clone_ok_ref(value)?)))
+                        let [key, value] = &pair[..] else { todo!() };
+                        let key = frame.runtime().clone_ok_ref(key)?;
+                        let value = frame.runtime().clone_ok_ref(value)?;
+                        Ok(Ok((key, value)))
                     }
                 ), frame)?);
                 to_return_value(frame.runtime().allocate_ext(ret))
@@ -1592,9 +1593,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                         let len = rt_as_prim!(len, Int);
                         let mut arr = Vec::with_capacity(*len as usize);
                         loop {
-                            let Some(item) = node.get(0) else { todo!() };
+                            let [item, next, ..] = &node[..] else { todo!() };
                             arr.push(frame.runtime().clone_ok_ref(item)?);
-                            let Some(next) = node.get(1) else { todo!() };
                             let next = rt_as_prim!(next, Variant);
                             if next.tag() == stack::tag::EMPTY {
                                 break;
@@ -1636,9 +1636,8 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                         let len = rt_as_prim!(len, Int);
                         let mut arr = Vec::with_capacity(*len as usize);
                         loop {
-                            let Some(item) = node.get(0) else { todo!() };
+                            let [item, next, ..] = &node[..] else { todo!() };
                             arr.push(frame.runtime().clone_ok_ref(item)?);
-                            let Some(next) = node.get(1) else { todo!() };
                             let next = rt_as_prim!(next, Variant);
                             if next.tag() == stack::tag::EMPTY {
                                 break;
