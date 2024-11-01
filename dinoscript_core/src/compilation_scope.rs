@@ -774,12 +774,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         }
                         Ok(template.instantiate(args))
                     }
-                    RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
+                    RelativeNamedItem::Type(NamedType::Concrete(concrete_ty)) => {
                         if args.is_empty() {
-                            Ok(ty.clone())
+                            Ok(concrete_ty.clone())
                         } else {
-                            todo!("error: {} is not a template type", name)
-                            // raise an error
+                            Err(CompilationError::NonTemplateTypeInstantiation { name: name.clone() }.with_pair(ty.pair.clone()))
                         }
                     }
                     _ => todo!("handle item: {:#?}", item), // raise an error

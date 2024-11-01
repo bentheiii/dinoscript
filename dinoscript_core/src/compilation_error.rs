@@ -73,6 +73,9 @@ pub enum CompilationError<'c, 's> {
         template_name: Cow<'s, str>,
         expected_n: usize,
         actual_n: usize
+    },
+    NonTemplateTypeInstantiation {
+        name: Cow<'s, str>
     }
 }
 
@@ -211,6 +214,7 @@ impl Display for CompilationError<'_, '_> {
             CompilationError::ForwardTypeNotAllowed { name } => write!(f, "Forward type ~{} is not allowed here", name),
             CompilationError::IllegalShadowing { name, existing, overrider } => write!(f, "Cannot shadow {} {} with a {}", existing, name, overrider),
             CompilationError::GenericArgCountMismatch { template_name, expected_n, actual_n } => write!(f, "Generic {} expects {} arguments, got {}", template_name, expected_n, actual_n),
+            CompilationError::NonTemplateTypeInstantiation { name } => write!(f, "Type {} is not generic", name)
         }
     }
 }
