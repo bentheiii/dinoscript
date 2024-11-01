@@ -18,7 +18,6 @@ use crate::{
         expression::{Attr, Call, Disambiguation, Expr, ExprWithPair, Functor, Lambda, Lookup, MethodCall, Variant},
         pairable::Pairable,
         statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair},
-        ty::SpecializedBaseTy,
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
     compilation_error::{CompilationError, CompilationErrorWithPair},
@@ -736,49 +735,43 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let return_ty = self.parse_type(ret, gen_params, tail_name)?;
                 Ok(Arc::new(Ty::Fn(Fn::new(args, return_ty))))
             }
-            ast::ty::Ty::Specialized(ast::ty::SpecializedTy { base, args }) => {
-                match base {
-                    SpecializedBaseTy::Name(name) => {
-                        let Some(item) = self.get_named_item(name) else {
-                            if let Some(gen) = gen_params.as_ref() {
-                                // todo make this a hash search?
-                                if let Some(idx) = gen.generic_params.iter().position(|param| param == name) {
-                                    return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
-                                }
-                            }
-                            if let Some(tail_name_cow) = tail_name {
-                                if name == tail_name_cow {
-                                    let args = args
-                                        .iter()
-                                        .map(|arg| self.parse_type(arg, gen_params, tail_name))
-                                        .collect::<Result<Vec<_>, _>>()?;
-                                    return Ok(Arc::new(Ty::Tail(args)));
-                                }
-                            }
-                            return Err(
-                                CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone())
-                            );
-                        };
-                        match item {
-                            RelativeNamedItem::Type(NamedType::Template(template)) => {
-                                let args = args
-                                    .iter()
-                                    .map(|arg| self.parse_type(arg, gen_params, tail_name))
-                                    .collect::<Result<Vec<_>, _>>()?;
-                                // todo check that the number of args match
-                                Ok(template.instantiate(args))
-                            }
-                            RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
-                                if args.is_empty() {
-                                    Ok(ty.clone())
-                                } else {
-                                    todo!("error: {} is not a template type", name)
-                                    // raise an error
-                                }
-                            }
-                            _ => todo!("handle item: {:#?}", item), // raise an error
+            ast::ty::Ty::Specialized(ast::ty::SpecializedTy { name, args }) => {
+                let Some(item) = self.get_named_item(name) else {
+                    if let Some(gen) = gen_params.as_ref() {
+                        // todo make this a hash search?
+                        if let Some(idx) = gen.generic_params.iter().position(|param| param == name) {
+                            return Ok(Arc::new(Ty::Generic(Generic::new(idx, gen.gen_id))));
                         }
                     }
+                    if let Some(tail_name_cow) = tail_name {
+                        if name == tail_name_cow {
+                            let args = args
+                                .iter()
+                                .map(|arg| self.parse_type(arg, gen_params, tail_name))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return Ok(Arc::new(Ty::Tail(args)));
+                        }
+                    }
+                    return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(ty.pair.clone()));
+                };
+                match item {
+                    RelativeNamedItem::Type(NamedType::Template(template)) => {
+                        let args = args
+                            .iter()
+                            .map(|arg| self.parse_type(arg, gen_params, tail_name))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        // todo check that the number of args match
+                        Ok(template.instantiate(args))
+                    }
+                    RelativeNamedItem::Type(NamedType::Concrete(ty)) => {
+                        if args.is_empty() {
+                            Ok(ty.clone())
+                        } else {
+                            todo!("error: {} is not a template type", name)
+                            // raise an error
+                        }
+                    }
+                    _ => todo!("handle item: {:#?}", item), // raise an error
                 }
             }
         }

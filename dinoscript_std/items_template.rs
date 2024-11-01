@@ -28,8 +28,8 @@ use std::{iter, ops::ControlFlow, sync::Arc};
 use dinoscript_core::{
     ast::statement::{FnArgDefault, ResolveOverload, Stmt},
     bytecode::to_in_code,
+    compilation_scope::{Location, Overloads, SystemLoc},
     maybe_owned::MaybeOwned,
-    compilation_scope::{Location, Overloads, SystemLoc}
 };
 use std::collections::HashMap;
 

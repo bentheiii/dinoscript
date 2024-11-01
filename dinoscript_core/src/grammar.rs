@@ -13,7 +13,7 @@ use crate::ast::{
     },
     pairable::Pairable,
     statement::{Compound, CompoundKind, Field, Fn, FnArg, FnArgDefault, Let, ResolveOverload, Stmt, StmtWithPair},
-    ty::{FnTy, SpecializedBaseTy, SpecializedTy, Ty, TyWithPair},
+    ty::{FnTy, SpecializedTy, Ty, TyWithPair},
 };
 
 #[derive(Parser)]
@@ -56,7 +56,7 @@ fn parse_type(input: Pair<'_, Rule>) -> Result<TyWithPair<'_>, ()> {
                 .transpose()?
                 .unwrap_or_default();
             return Ok(Ty::Specialized(SpecializedTy {
-                base: SpecializedBaseTy::Name(name.into()),
+                name: name.into(),
                 args: generic_args,
             })
             .with_pair(input_marker));
