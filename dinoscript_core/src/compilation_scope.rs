@@ -184,7 +184,6 @@ pub mod ty {
     impl<'s> Ty<'s> {
         pub fn resolve(
             self: &Arc<Self>,
-            // todo tail should really be template
             tail: Option<&Arc<TyTemplate<'s>>>,
             generic_args: &Vec<Arc<Self>>,
             gen_id: Option<GenericSetId>,
