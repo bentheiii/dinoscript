@@ -21,7 +21,7 @@ pub mod pairable {
 
 pub mod ty {
 
-    use std::{borrow::Cow, fmt::Display};
+    use std::borrow::Cow;
 
     use super::pairable::{Pairable, WithPair};
     #[derive(Debug)]

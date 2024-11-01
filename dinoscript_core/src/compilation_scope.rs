@@ -613,7 +613,7 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         self.parent.is_none()
     }
 
-    pub fn add_overload(&mut self, name: Cow<'s, str>, overload: Overload<'s>)->Result<(), CompilationError> {
+    pub fn add_overload<'a>(&mut self, name: Cow<'s, str>, overload: Overload<'s>)->Result<(), CompilationError<'a, 's>> {
         let existing_name = self.names.entry(name);
         match existing_name {
             Entry::Occupied(mut entry) => match entry.get_mut() {
@@ -1542,7 +1542,9 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             fn_cell_idx = Some(cell_idx);
             // todo join the name and expected ty?
             let new_overload = Overload::new(gen_params, args, expected_return_ty.unwrap(), Location::Cell(cell_idx));
-            self.add_overload(name.clone(), new_overload);
+            self.add_overload(name.clone(), new_overload).map_err(
+                |e| e.with_pair(pair.clone())
+            )?;
         } else {
             fn_cell_idx = None;
         }

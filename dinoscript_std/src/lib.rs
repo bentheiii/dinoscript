@@ -25,7 +25,7 @@ impl DinoPack for StdPack {
         scope.builtins = Some(MaybeOwned::Owned(builtins));
 
         for item in setup_items() {
-            item.push_to_compilation(scope, source_id, &mut get_id);
+            item.push_to_compilation(scope, source_id, &mut get_id).unwrap();
         }
     }
 

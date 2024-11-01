@@ -15,13 +15,10 @@ pub mod utils {
     };
 
     use crate::{
-        bytecode::SourceId,
-        compilation_scope::{
+        bytecode::SourceId, compilation_error::CompilationError, compilation_scope::{
             ty::{Generic, GenericSetId, Ty},
             CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc,
-        },
-        dinobj::{DinObject, DinoResult, SourceFnFunc, UserFn},
-        runtime::Runtime,
+        }, dinobj::{DinObject, DinoResult, SourceFnFunc, UserFn}, runtime::Runtime
     };
 
     pub enum SetupItem<'s, C> {
@@ -30,19 +27,19 @@ pub mod utils {
     }
 
     impl<'s, C> SetupItem<'s, C> {
-        pub fn push_to_compilation<'p>(
+        pub fn push_to_compilation<'p, 'a>(
             self,
             scope: &mut CompilationScope<'p, 's, C>,
             source: SourceId,
             mut id_generator: impl FnMut() -> usize,
-        ) {
+        )->Result<(), CompilationError<'a, 's>> {
             match self {
                 SetupItem::Function(f) => {
                     let (name, overload) = f.to_overload(
                         scope.builtins.as_ref().unwrap().as_ref(),
                         SystemLoc::new(source, id_generator()),
                     );
-                    scope.add_overload(name, overload);
+                    scope.add_overload(name, overload)?;
                 }
                 SetupItem::Value(v) => {
                     let id = id_generator();
@@ -50,6 +47,7 @@ pub mod utils {
                     scope.add_value(v.name, ty, Location::System(SystemLoc::new(source, id)));
                 }
             }
+            Ok(())
         }
 
         pub fn to_dinobject(self, runtime: &Runtime<'s>) -> DinoResult<'s> {
