@@ -610,6 +610,46 @@ enum SubFunctionOutput<'s> {
     Anonymous(Fn<'s>),
 }
 
+enum CandidateRejection<'s> {
+    ArgumentCountMismatch {
+        expected: ExpectedArgCount,
+        actual_n: usize,
+    },
+    ArgumentTypeMismatch {
+        param_id: ParamIdentifier<'s>,
+        expected_ty: Arc<Ty<'s>>,
+        actual_ty: Arc<Ty<'s>>,
+    },
+    FailedDefaultResolution {
+        param_n: usize,
+        overload_name: Cow<'s, str>,
+        // todo include the resolution failure?
+    },
+}
+
+impl<'s> CandidateRejection<'s>{
+    fn to_compilation_error<'c: 's>(self, name: Cow<'c, str>)->CompilationError<'c, 's>{
+        match self{
+            Self::ArgumentCountMismatch{expected, actual_n}=>CompilationError::ArgumentCountMismatch{
+                expected,
+                actual_n,
+                func_name: name,
+            },
+            Self::ArgumentTypeMismatch{param_id, expected_ty, actual_ty}=>CompilationError::ArgumentTypeMismatch{
+                param_id,
+                expected_ty,
+                actual_ty,
+                func_name: name,
+            },
+            Self::FailedDefaultResolution{param_n, overload_name}=>CompilationError::FailedDefaultResolution {
+                param_n,
+                overload_name,
+                func_name: name,
+            },
+        }
+    }
+}
+
 impl<'p, 's, B> CompilationScope<'p, 's, B> {
     fn is_root(&self) -> bool {
         self.parent.is_none()
@@ -885,18 +925,16 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         }
     }
 
-    fn resolve_overload_candidate<'a, 'c: 's>(
+    fn resolve_overload_candidate<'a>(
         &'a self,
-        name: &Cow<'c, str>,
         rel_overload: RelativeOverload<'p, 's>,
         arg_types: &[Arc<Ty<'s>>]
-    )->Result<OverloadCandidate<'s>, CompilationError<'c, 's>>{
+    )->Result<OverloadCandidate<'s>, CandidateRejection<'s>>{
         // TODO we only need the name in this function for error reporting, we should instead make this a function return a different error type
         // and glue in the name after
         let overload = rel_overload.overload;
         if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
-                return Err(CompilationError::ArgumentCountMismatch {
-                    func_name: name.clone(),
+                return Err(CandidateRejection::ArgumentCountMismatch {
                     expected: ExpectedArgCount::from_range(overload.min_args_n(), overload.args.len()),
                     actual_n: arg_types.len(),
                 });
@@ -919,8 +957,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         {
             if let Some(arg_ty) = arg_ty {
                 if resolution.assign(&param.ty, arg_ty).is_err() {
-                        return Err(CompilationError::ArgumentTypeMismatch {
-                            func_name: name.clone(),
+                        return Err(CandidateRejection::ArgumentTypeMismatch {
                             param_id: ParamIdentifier::positional(i),
                             expected_ty: param.ty.clone(),
                             actual_ty: arg_ty.clone(),
@@ -951,9 +988,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         let candidate = match candidate {
                             Ok(candidate) => candidate,
                             Err(_) => {
-                                // todo work the error into the error type
-                                return Err(CompilationError::FailedDefaultResolution {
-                                    fn_name: name.clone(),
+                                return Err(CandidateRejection::FailedDefaultResolution {
                                     param_n: i,
                                     overload_name: ov_name.clone(),
                                 });
@@ -983,8 +1018,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         arg_types: &[Arc<Ty<'s>>],
         binding: Option<()>,
     ) -> Result<OverloadCandidate<'s>, CompilationError<'c, 's>> {
-        // TODO we only need the name in this function for error reporting, we should instead make this a function return a different error type
-        // and glue in the name after
         if let Some(binding) = binding {
             todo!()
         }
@@ -1005,10 +1038,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         for (_, overloads) in by_category.into_iter() {
             let mut resolved_overloads = Vec::new();
             for (_, rel_overload) in overloads {
-                let cand = match self.resolve_overload_candidate(name, rel_overload, arg_types) {
+                let cand = match self.resolve_overload_candidate(rel_overload, arg_types) {
                     Ok(cand) => cand,
                     Err(e) if is_one_option => {
-                        return Err(e);
+                        return Err(e.to_compilation_error(name.clone()));
                     }
                     Err(..) => {
                         continue;
@@ -1024,6 +1057,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 resolved_overloads.sort_by_key(|cand| cand.priority);
                 let first_priority = resolved_overloads[0].priority;
                 if resolved_overloads[1].priority == first_priority {
+                    // todo we should also include candidate's info here
                     return Err(CompilationError::AmbiguousOverloads {
                         name: name.clone(),
                         arg_types: TypeList(arg_types.to_owned()),
@@ -1033,6 +1067,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }
             return Ok(resolved_overloads.into_iter().next().unwrap());
         }
+        // todo we should also include rejection reasons here
         Err(CompilationError::NoOverloads {
             name: name.clone(),
             arg_types: TypeList(arg_types.to_owned()),
