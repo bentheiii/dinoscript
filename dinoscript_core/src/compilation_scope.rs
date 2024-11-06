@@ -1,10 +1,5 @@
 use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-    fmt::Display,
-    iter::repeat,
-    sync::Arc,
-    vec,
+    borrow::Cow, cmp::Reverse, collections::{hash_map::Entry, BinaryHeap, HashMap}, fmt::Display, iter::repeat, sync::Arc, vec
 };
 
 use indexmap::IndexMap;
@@ -596,6 +591,26 @@ struct OverloadCandidate<'s> {
     priority: ResolutionPriority,
 }
 
+impl<'s> PartialEq for OverloadCandidate<'s> {
+    fn eq(&self, other: &Self) -> bool {
+        self.priority == other.priority
+    }
+}
+
+impl<'s> Eq for OverloadCandidate<'s> {}
+
+impl<'s> Ord for OverloadCandidate<'s> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+impl<'s> PartialOrd for OverloadCandidate<'s> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub struct CompilationScope<'p, 's, B> {
     id: Option<GenericSetId>, // the scope id, used to differentiate between generic params of scopes
     parent: Option<&'p Self>,
@@ -1004,7 +1019,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 unreachable!()
             }
         }
-        // todo assert that all generics are resolved (not unknown)
         let output_type = overload.return_ty.resolve(None, &resolution.bound_generics, gen_id);
         Ok(OverloadCandidate {
             loc: rel_overload.loc,
@@ -1039,7 +1053,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             .sorted_by_key(|(priority, _)| *priority)
             .chunk_by(|(priority, _)| *priority);
         for (_, overloads) in by_category.into_iter() {
-            let mut resolved_overloads = Vec::new();
+            let mut resolved_overloads = BinaryHeap::new();
             for (_, rel_overload) in overloads {
                 let cand = match self.resolve_overload_candidate(rel_overload, arg_types) {
                     Ok(cand) => cand,
@@ -1050,25 +1064,20 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         continue;
                     }
                 };
-                resolved_overloads.push(cand);
+                resolved_overloads.push(Reverse(cand));
             }
-            if resolved_overloads.is_empty() {
-                continue;
-            } else if resolved_overloads.len() > 1 {
-                // we now sort our resolved overloads by their resolution priority
-                // todo use a heap here instead
-                resolved_overloads.sort_by_key(|cand| cand.priority);
-                let first_priority = resolved_overloads[0].priority;
-                if resolved_overloads[1].priority == first_priority {
-                    // todo we should also include candidate's info here
+            let Some(Reverse(first_candidate)) = resolved_overloads.pop() else {continue;};
+            match resolved_overloads.peek() {
+                Some(Reverse(second_candidate)) if first_candidate.priority == second_candidate.priority => {
                     return Err(CompilationError::AmbiguousOverloads {
                         name: name.clone(),
                         arg_types: TypeList(arg_types.to_owned()),
                     });
                 }
-                // if the first priority is better than the second, we can just return the first
+                _ => {
+                    return Ok(first_candidate);
+                }
             }
-            return Ok(resolved_overloads.into_iter().next().unwrap());
         }
         // todo we should also include rejection reasons here
         Err(CompilationError::NoOverloads {
