@@ -53,7 +53,9 @@ pub enum CompilationError<'c, 's> {
         param_name: Cow<'s, str>,
         default_param_name: Cow<'s, str>,
     },
-    #[error("Failed to resolve default value for parameter {param_n} in function {func_name} overload {overload_name}")]
+    #[error(
+        "Failed to resolve default value for parameter {param_n} in function {func_name} overload {overload_name}"
+    )]
     FailedDefaultResolution {
         func_name: Cow<'s, str>,
         param_n: usize,

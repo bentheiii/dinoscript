@@ -627,21 +627,25 @@ enum CandidateRejection<'s> {
     },
 }
 
-impl<'s> CandidateRejection<'s>{
-    fn to_compilation_error<'c: 's>(self, name: Cow<'c, str>)->CompilationError<'c, 's>{
-        match self{
-            Self::ArgumentCountMismatch{expected, actual_n}=>CompilationError::ArgumentCountMismatch{
+impl<'s> CandidateRejection<'s> {
+    fn to_compilation_error<'c: 's>(self, name: Cow<'c, str>) -> CompilationError<'c, 's> {
+        match self {
+            Self::ArgumentCountMismatch { expected, actual_n } => CompilationError::ArgumentCountMismatch {
                 expected,
                 actual_n,
                 func_name: name,
             },
-            Self::ArgumentTypeMismatch{param_id, expected_ty, actual_ty}=>CompilationError::ArgumentTypeMismatch{
+            Self::ArgumentTypeMismatch {
+                param_id,
+                expected_ty,
+                actual_ty,
+            } => CompilationError::ArgumentTypeMismatch {
                 param_id,
                 expected_ty,
                 actual_ty,
                 func_name: name,
             },
-            Self::FailedDefaultResolution{param_n, overload_name}=>CompilationError::FailedDefaultResolution {
+            Self::FailedDefaultResolution { param_n, overload_name } => CompilationError::FailedDefaultResolution {
                 param_n,
                 overload_name,
                 func_name: name,
@@ -928,16 +932,16 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     fn resolve_overload_candidate<'a>(
         &'a self,
         rel_overload: RelativeOverload<'p, 's>,
-        arg_types: &[Arc<Ty<'s>>]
-    )->Result<OverloadCandidate<'s>, CandidateRejection<'s>>{
+        arg_types: &[Arc<Ty<'s>>],
+    ) -> Result<OverloadCandidate<'s>, CandidateRejection<'s>> {
         // TODO we only need the name in this function for error reporting, we should instead make this a function return a different error type
         // and glue in the name after
         let overload = rel_overload.overload;
         if arg_types.len() > overload.args.len() || arg_types.len() < overload.min_args_n() {
-                return Err(CandidateRejection::ArgumentCountMismatch {
-                    expected: ExpectedArgCount::from_range(overload.min_args_n(), overload.args.len()),
-                    actual_n: arg_types.len(),
-                });
+            return Err(CandidateRejection::ArgumentCountMismatch {
+                expected: ExpectedArgCount::from_range(overload.min_args_n(), overload.args.len()),
+                actual_n: arg_types.len(),
+            });
         }
         let gen_id = overload.generic_params.as_ref().map(|g| g.gen_id);
         let mut resolution = BindingResolution::new(
@@ -957,11 +961,11 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         {
             if let Some(arg_ty) = arg_ty {
                 if resolution.assign(&param.ty, arg_ty).is_err() {
-                        return Err(CandidateRejection::ArgumentTypeMismatch {
-                            param_id: ParamIdentifier::positional(i),
-                            expected_ty: param.ty.clone(),
-                            actual_ty: arg_ty.clone(),
-                        });
+                    return Err(CandidateRejection::ArgumentTypeMismatch {
+                        param_id: ParamIdentifier::positional(i),
+                        expected_ty: param.ty.clone(),
+                        actual_ty: arg_ty.clone(),
+                    });
                 }
             } else if let Some(default) = &param.default {
                 match default {
@@ -976,22 +980,21 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         // todo avoid infinite recursion (note that it might be a double recursion)
                         let candidate = match self.get_named_item(ov_name) {
                             Some(RelativeNamedItem::Overloads(RelativeNamedItemOverloads { overloads })) => {
-                                self.resolve_overloads(ov_name, overloads, &expected_signature.args, None)
+                                match self.resolve_overloads(ov_name, overloads, &expected_signature.args, None) {
+                                    Ok(candidate) => candidate,
+                                    Err(_) => {
+                                        return Err(CandidateRejection::FailedDefaultResolution {
+                                            param_n: i,
+                                            overload_name: ov_name.clone(),
+                                        })
+                                    }
+                                }
                             }
-                            Some(_) => {
-                                todo!()
-                            }
-                            None => {
-                                todo!()
-                            }
-                        };
-                        let candidate = match candidate {
-                            Ok(candidate) => candidate,
-                            Err(_) => {
+                            _ => {
                                 return Err(CandidateRejection::FailedDefaultResolution {
                                     param_n: i,
                                     overload_name: ov_name.clone(),
-                                });
+                                })
                             }
                         };
                         additional_params.push(AdditionalParam::OverloadResolve(candidate));

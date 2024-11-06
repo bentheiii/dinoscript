@@ -667,7 +667,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             },
             SetupFunctionBody::System(Box::new(|frame| {
                 let a = frame.eval_pop()?;
-                
+
                 to_return_value(frame.runtime().bool(a.is_err()))
             })),
         ))),
@@ -964,7 +964,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 if a.is_empty() {
                     return to_return_value(Ok(Ok(b)));
                 }
-                
+
                 let b = rt_as_prim!(b, Str);
                 if b.is_empty() {
                     return to_return_value(Ok(Ok(a_ref)));
@@ -1368,7 +1368,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let key = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping_ref, Mapping);
-                
+
                 let ret = rt_catch!(mapping.without_key(key, frame)?);
                 match ret {
                     Some(v) => {
@@ -1397,7 +1397,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let key = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
-                
+
                 let ret = rt_catch!(mapping.lookup(key, frame)?);
                 match ret {
                     Some(v) => {
@@ -1444,7 +1444,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let mapping = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
-                
+
                 let ret = mapping.len();
 
                 to_return_value(frame.runtime().allocate(Ok(DinObject::Int(ret as i64))))
@@ -1491,7 +1491,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let key = rt_catch!(frame.eval_pop()?);
 
                 let mapping = rt_as_ext!(mapping, Mapping);
-                
+
                 let ret = rt_catch!(mapping.without_key(key, frame)?);
                 match ret {
                     Some(v) => {
@@ -1547,7 +1547,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
 
                 let mapping = rt_as_ext!(mapping, Mapping);
                 let pairs = rt_as_ext!(pairs, Sequence);
-                
+
                 let ret = rt_catch!(mapping.with_update(pairs.iter(frame).map(
                     |pair_ref| {
                         let pair_ref = catch!(pair_ref?);
@@ -1584,7 +1584,7 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
                 let fn_reduce = rt_catch!(frame.eval_pop()?);
 
                 let iterator = rt_as_ext!(iterator, Iterable);
-                
+
                 let mut ret = init;
 
                 for item in rt_catch!(iterator.iter(frame)?) {
