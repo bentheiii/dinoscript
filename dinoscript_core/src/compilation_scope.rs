@@ -831,7 +831,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             }
             Some(NamedItem::Type(ty)) => Some(RelativeNamedItem::Type(ty)),
             None => match self.parent {
-                // todo increment the parent's cell indices
                 Some(parent) => parent.get_named_item(name).map(|n| n.add_height(1)),
                 None => None,
             },

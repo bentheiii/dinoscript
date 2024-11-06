@@ -23,6 +23,7 @@ use dinoscript_core::{
     },
     runtime::Runtime,
 };
+use num::Zero;
 use std::{iter, ops::ControlFlow, sync::Arc};
 // pragma: skip 7
 use dinoscript_core::{
@@ -1175,6 +1176,33 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
         // pragma:unwrap
         builder.add_item(SetupItem::Function(SetupFunction::new(
             |bi: &Builtins<'_>| {
+                Signature::new(
+                    "range",
+                    vec![arg!(bi, start: int), arg!(bi, end: int), arg!(bi, step: int)],
+                    ty_gen!(bi, (), Sequence<int>)
+                )
+            },
+            SetupFunctionBody::System(Box::new(|frame| {
+                let start = rt_catch!(frame.eval_pop()?);
+                let end = rt_catch!(frame.eval_pop()?);
+                let step = rt_catch!(frame.eval_pop()?);
+
+                let start = rt_as_prim!(start, Int);
+                let end = rt_as_prim!(end, Int);
+                let step = rt_as_prim!(step, Int);
+
+                if step.is_zero() {
+                    return to_return_value(frame.runtime().allocate(Err("Step cannot be zero".into())));
+                }
+                if (step.is_negative() && start <= end) || (step.is_positive() && start >= end) {
+                    return to_return_value(frame.runtime().allocate_ext(Sequence::empty()));
+                }
+                return to_return_value(frame.runtime().allocate_ext(Sequence::new_range(*start, *end, *step)));
+            })),
+        ))),
+        // pragma:unwrap
+        builder.add_item(SetupItem::Function(SetupFunction::new(
+            |bi: &Builtins<'_>| {
                 let gen = SignatureGen::new(vec!["T"]);
                 Signature::new_generic(
                     "slice",
@@ -1791,7 +1819,25 @@ pub(crate) fn setup_items<'s>()-> Vec<SetupItem<'s, Builtins<'s>>>
             }"#,
         ), // pragma:replace-end
         // endregion: tuple-1
-        // region: iterable-2
+        // region:sequences-1
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "range-1",
+            r#"fn range(end: int)->Sequence<int>{
+                range(0, end, 1)
+            }"#,
+        ), // pragma:replace-end
+        // pragma:replace-start
+        builder.build_source(
+            // pragma:replace-id
+            "range-2",
+            r#"fn range(start: int, end: int)->Sequence<int>{
+                range(start, end, 1)
+            }"#,
+        ), // pragma:replace-end
+        // endregion:sequences-1
+        // region:iterable-1
         // pragma:replace-start
         builder.build_source(
             // pragma:replace-id

@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use crate::dinobj::{AllocatedRef, DinoResult, ExtendedObject};
+use crate::dinobj::{AllocatedRef, DinObject, DinoResult, ExtendedObject};
 use crate::dinobj_utils::as_ext;
 use crate::errors::RuntimeViolation;
 use crate::runtime::{Runtime, SystemRuntimeFrame};
@@ -11,6 +11,10 @@ pub struct Sequence<'s>(SequenceInner<'s>);
 
 impl<'s> Sequence<'s> {
     pub const EXPECTED_TYPE_NAME: &'static str = "Sequence";
+
+    pub fn empty() -> Self {
+        Self::new_array(Vec::new())
+    }
 
     pub fn new_array(array: Vec<AllocatedRef<'s>>) -> Self {
         Sequence(SequenceInner::new_array(array))
@@ -33,7 +37,12 @@ impl<'s> Sequence<'s> {
         Self(SequenceInner::new_map(inner, func))
     }
 
+    pub fn new_range(start: i64, end: i64, step: i64) -> Self {
+        Self(SequenceInner::Range(Range::new(start, end, step)))
+    }
+
     pub fn get(&self, frame: &SystemRuntimeFrame<'_, 's, '_>, index: usize) -> DinoResult<'s> {
+        // index must be within bounds
         self.0.get(frame, index)
     }
 
@@ -70,6 +79,7 @@ enum SequenceInner<'s> {
     Concat(SequenceConcat<'s>),
     Slice(SequenceSlice<'s>),
     Map(SequenceMap<'s>),
+    Range(Range)
 }
 
 #[derive(Debug)]
@@ -211,6 +221,21 @@ fn normalize_idx(idx: i64, len: usize) -> NormalizedIdx {
 }
 
 #[derive(Debug)]
+struct Range {
+    // must have non-zero length
+    start: i64,
+    end: i64,
+    // must be non-zero
+    step: i64,
+}
+
+impl Range {
+    fn new(start: i64, end: i64, step: i64) -> Self {
+        Self { start, end, step }
+    }
+}
+
+#[derive(Debug)]
 struct SequenceSlice<'s> {
     // guarantees:
     // * to be a valid array
@@ -321,6 +346,7 @@ impl<'s> SequenceInner<'s> {
     }
 
     pub fn get(&self, frame: &SystemRuntimeFrame<'_, 's, '_>, index: usize) -> DinoResult<'s> {
+        // index must be within bounds
         match self {
             Self::Array(array) => {
                 let Some(orig) = array.get(index) else {
@@ -357,6 +383,11 @@ impl<'s> SequenceInner<'s> {
                 let arg = arg.get(frame, index)?;
                 frame.call(&map.func, &[arg])
             }
+            Self::Range(range) => {
+                // todo use bigints
+                let ret = range.start + range.step * index as i64;
+                frame.runtime().allocate(Ok(DinObject::Int(ret)))
+            }
         }
     }
 
@@ -371,6 +402,15 @@ impl<'s> SequenceInner<'s> {
                     None => unreachable!("Invalid source"),
                 };
                 arg.len()
+            }
+            Self::Range(range) => {
+                (if range.step.is_positive() && range.start < range.end {
+                    1 + ((range.end - range.start - 1) / range.step)
+                } else {
+                    assert!(range.step.is_negative() && range.start > range.end);
+                    1 + ((range.start - range.end - 1) / -range.step)
+                }) as usize
+                    
             }
         }
     }
@@ -459,6 +499,15 @@ impl<'s> SequenceInner<'s> {
                 };
                 let arg = arg.iter(frame);
                 Box::new(arg.map(|r| frame.call(&map.func, &[r?])))
+            }
+            Self::Range(range) => {
+                let start = range.start;
+                let step = range.step;
+                let len = self.len();
+                Box::new((0..len).map(move |i| {
+                    let ret = start + step * i as i64;
+                    frame.runtime().allocate(Ok(DinObject::Int(ret)))
+                }))
             }
         }
     }
