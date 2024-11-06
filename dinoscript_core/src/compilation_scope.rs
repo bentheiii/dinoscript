@@ -1160,10 +1160,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
     {
         match functor {
             Functor::Expr(expr) => {
-                // todo consider case where expr is a type
-                // todo consider case where expr is a variant
-                // todo consider case where expr is an overload that needs to be resolved
-
                 // note that the arguments must be sunk into dummy lists first, since we might need to also put in default values
                 let mut arg_types = Vec::new();
                 let mut arg_sinks = Vec::new();
@@ -1214,7 +1210,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                     .with_pair(expr.pair.clone()));
                                 }
                             }
-                            // todo assert all types are resolved (not unknown)
                             let resolved_ty = template_arc.instantiate(resolution.bound_generics.into_iter().collect());
                             for arg_sink in arg_sinks.into_iter().rev() {
                                 sink.extend(arg_sink);
@@ -1241,10 +1236,10 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             }) = named_template.as_ref()
                             {
                                 let Some((variant_tag, _, variant)) = fields.get_full(variant_name) else {
-                                    todo!("variant not found")
+                                    return Err(CompilationError::VariantNotInUnion { name: variant_name.clone(), union_name: obj_name.clone() }.with_pair(expr.pair.clone()));
                                 };
                                 if arg_sinks.len() != 1 {
-                                    todo!("wrong number of arguments")
+                                    return Err(CompilationError::VariantArgCountMismatch { name: obj_name.clone() }.with_pair(expr.pair.clone()));
                                 }
                                 let generic_id = named_template.generic_id();
                                 let n_generics = generics.as_ref().map(|g| g.n_generics.get()).unwrap_or_default();

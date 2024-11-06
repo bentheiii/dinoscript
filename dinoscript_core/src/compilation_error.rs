@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum CompilationError<'c, 's> {
     #[error("Type mismatch in let statement: variable {var} expected {expected_ty}, got {actual_ty}")]
     LetTypeMismatch {
@@ -84,6 +85,10 @@ pub enum CompilationError<'c, 's> {
     NonTemplateTypeInstantiation { name: Cow<'s, str> },
     #[error("{kind} {name} cannot be used as a type")]
     NonTypeUsedAsType { name: Cow<'s, str>, kind: ItemKind },
+    #[error("Variant {name} is not a member of union {union_name}")]
+    VariantNotInUnion { name: Cow<'c, str>, union_name: Cow<'c, str> },
+    #[error("Variant {name} must be created with only one argument")]
+    VariantArgCountMismatch { name: Cow<'c, str> },
 }
 
 #[derive(Debug)]

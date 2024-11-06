@@ -1,14 +1,16 @@
 pub mod pairable {
-    use std::fmt::Debug;
+    use std::{fmt::Debug, panic::Location};
 
     pub struct WithPair<'s, T> {
         pub inner: T,
         pub pair: pest::iterators::Pair<'s, crate::grammar::Rule>,
+        pub location: Location<'static>,
     }
 
     pub trait Pairable<'s>: Sized {
+        #[track_caller]
         fn with_pair(self, pair: pest::iterators::Pair<'s, crate::grammar::Rule>) -> WithPair<'s, Self> {
-            WithPair { inner: self, pair }
+            WithPair { inner: self, pair, location: *Location::caller() }
         }
     }
 
@@ -106,10 +108,10 @@ pub mod expression {
     };
     use std::borrow::Cow;
 
-    pub type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
+    pub(crate) type ExprWithPair<'s> = WithPair<'s, Expr<'s>>;
 
     #[derive(Debug)]
-    pub enum Expr<'s> {
+    pub(crate) enum Expr<'s> {
         LitInt(i128),
         LitBool(bool),
         LitFloat(f64),
