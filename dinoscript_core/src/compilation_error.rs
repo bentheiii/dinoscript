@@ -6,7 +6,7 @@ use crate::{
     compilation_scope::{ty::Ty, NamedItem, NamedType, RelativeNamedItem},
 };
 
-#[derive(Debug, Clone, Error)] // todo why is this clone?
+#[derive(Debug, Error)]
 pub enum CompilationError<'c, 's> {
     #[error("Type mismatch in let statement: variable {var} expected {expected_ty}, got {actual_ty}")]
     LetTypeMismatch {
@@ -84,7 +84,7 @@ pub enum CompilationError<'c, 's> {
     NonTypeUsedAsType { name: Cow<'s, str>, kind: ItemKind },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ItemKind {
     Overload,
     Variable,
@@ -149,7 +149,7 @@ impl Display for CompilationErrorWithPair<'_, '_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ExpectedArgCount {
     Exact(usize),
     Between(usize, usize),
@@ -174,7 +174,7 @@ impl Display for ExpectedArgCount {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ParamIdentifier<'s> {
     idx: usize,
     name: Option<Cow<'s, str>>,
@@ -199,7 +199,7 @@ impl<'s> Display for ParamIdentifier<'s> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TypeList<'s>(pub Vec<Arc<Ty<'s>>>);
 
 impl<'s> Display for TypeList<'s> {
