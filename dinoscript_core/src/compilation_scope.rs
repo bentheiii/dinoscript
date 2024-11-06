@@ -1020,6 +1020,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 continue;
             } else if resolved_overloads.len() > 1 {
                 // we now sort our resolved overloads by their resolution priority
+                // todo use a heap here instead
                 resolved_overloads.sort_by_key(|cand| cand.priority);
                 let first_priority = resolved_overloads[0].priority;
                 if resolved_overloads[1].priority == first_priority {
