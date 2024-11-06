@@ -1113,9 +1113,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             additional_params,
             ..
         } = candidate;
-        // TODO I'm pretty sure we can do away with reversing here
         let n_additional_params = additional_params.len();
-        for param in additional_params.into_iter().rev() {
+        for param in additional_params.into_iter() {
             self.feed_additional_param(&loc, param, sink);
         }
         self.feed_relative_location(&loc, sink);
@@ -1139,7 +1138,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         } = candidate;
         let n_args = arg_sinks.len();
         let n_additional_params = additional_params.len();
-        // TODO I'm pretty sure we can do away with reversing here
         for param in additional_params.into_iter().rev() {
             self.feed_additional_param(&loc, param, sink);
         }

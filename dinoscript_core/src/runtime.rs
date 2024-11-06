@@ -677,7 +677,6 @@ impl<'s, 'r> RuntimeFrame<'s, 'r> {
                     let Ok(val) = val else { todo!() };
                     defaults.push(val);
                 }
-                defaults.reverse();
                 let bind_back = BindBack::new(func, defaults);
                 let obj = self.runtime.allocate(Ok(DinObject::BindBack(bind_back)))?;
                 self.stack.push(StackItem::Value(obj));
