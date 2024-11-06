@@ -282,7 +282,8 @@ impl<'p, 's> ItemsBuilder<'p, 's> {
             let ret = self.next_id;
             self.next_id += 1;
             ret
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     fn build_source(&mut self, replacement_name: &'static str, code: &'static str) {

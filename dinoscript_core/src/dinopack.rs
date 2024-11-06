@@ -15,10 +15,14 @@ pub mod utils {
     };
 
     use crate::{
-        bytecode::SourceId, compilation_error::CompilationError, compilation_scope::{
+        bytecode::SourceId,
+        compilation_error::CompilationError,
+        compilation_scope::{
             ty::{Generic, GenericSetId, Ty},
             CompilationScope, Location, Overload, OverloadArg, OverloadGenericParams, OverloadResolve, SystemLoc,
-        }, dinobj::{DinObject, DinoResult, SourceFnFunc, UserFn}, runtime::Runtime
+        },
+        dinobj::{DinObject, DinoResult, SourceFnFunc, UserFn},
+        runtime::Runtime,
     };
 
     pub enum SetupItem<'s, C> {
@@ -32,7 +36,7 @@ pub mod utils {
             scope: &mut CompilationScope<'p, 's, C>,
             source: SourceId,
             mut id_generator: impl FnMut() -> usize,
-        )->Result<(), CompilationError<'a, 's>> {
+        ) -> Result<(), CompilationError<'a, 's>> {
             match self {
                 SetupItem::Function(f) => {
                     let (name, overload) = f.to_overload(

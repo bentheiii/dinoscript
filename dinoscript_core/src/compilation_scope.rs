@@ -20,7 +20,9 @@ use crate::{
         statement::{self, FnArg, FnArgDefault, Let, Stmt, StmtWithPair},
     },
     bytecode::{Command, MakeFunction, PushFromSource, SourceId},
-    compilation_error::{CompilationError, CompilationErrorWithPair, ExpectedArgCount, ItemKind, ParamIdentifier, TypeList},
+    compilation_error::{
+        CompilationError, CompilationErrorWithPair, ExpectedArgCount, ItemKind, ParamIdentifier, TypeList,
+    },
     maybe_owned::MaybeOwned,
     overloads::{combine_types, BindingResolution, OverloadPriority, ResolutionPriority},
 };
@@ -613,7 +615,11 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         self.parent.is_none()
     }
 
-    pub fn add_overload<'a>(&mut self, name: Cow<'s, str>, overload: Overload<'s>)->Result<(), CompilationError<'a, 's>> {
+    pub fn add_overload<'a>(
+        &mut self,
+        name: Cow<'s, str>,
+        overload: Overload<'s>,
+    ) -> Result<(), CompilationError<'a, 's>> {
         let existing_name = self.names.entry(name);
         match existing_name {
             Entry::Occupied(mut entry) => match entry.get_mut() {
@@ -625,7 +631,7 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
                         existing: shadowing_kind,
                         overrider: ItemKind::Overload,
                     });
-                },
+                }
             },
             Entry::Vacant(entry) => {
                 entry.insert(NamedItem::Overloads(Overloads {
@@ -636,7 +642,12 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
         Ok(())
     }
 
-    pub fn add_value<'a>(&mut self, name: Cow<'s, str>, ty: Arc<Ty<'s>>, loc: Location)->Result<(), CompilationError<'a, 's>> {
+    pub fn add_value<'a>(
+        &mut self,
+        name: Cow<'s, str>,
+        ty: Arc<Ty<'s>>,
+        loc: Location,
+    ) -> Result<(), CompilationError<'a, 's>> {
         let existing_name = self.names.entry(name);
         match existing_name {
             Entry::Occupied(occ) => {
@@ -646,7 +657,7 @@ impl<'p, 's, B> CompilationScope<'p, 's, B> {
                     existing: shadowing_kind,
                     overrider: ItemKind::Variable,
                 });
-            },
+            }
             Entry::Vacant(entry) => {
                 entry.insert(NamedItem::Variable(Variable::new(ty, loc)));
             }
@@ -766,11 +777,12 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             .map(|arg| self.parse_type(arg, gen_params, tail_name))
                             .collect::<Result<Vec<_>, _>>()?;
                         if args.len() != template.n_generics() {
-                            return Err(CompilationError::GenericArgCountMismatch { 
+                            return Err(CompilationError::GenericArgCountMismatch {
                                 template_name: template.name().clone(),
                                 expected_n: template.n_generics(),
                                 actual_n: args.len(),
-                            }.with_pair(ty.pair.clone()));
+                            }
+                            .with_pair(ty.pair.clone()));
                         }
                         Ok(template.instantiate(args))
                     }
@@ -778,12 +790,17 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         if args.is_empty() {
                             Ok(concrete_ty.clone())
                         } else {
-                            Err(CompilationError::NonTemplateTypeInstantiation { name: name.clone() }.with_pair(ty.pair.clone()))
+                            Err(CompilationError::NonTemplateTypeInstantiation { name: name.clone() }
+                                .with_pair(ty.pair.clone()))
                         }
                     }
                     other => {
                         let kind = ItemKind::of(&other);
-                        Err(CompilationError::NonTypeUsedAsType { name: name.clone(), kind}.with_pair(ty.pair.clone()))
+                        Err(CompilationError::NonTypeUsedAsType {
+                            name: name.clone(),
+                            kind,
+                        }
+                        .with_pair(ty.pair.clone()))
                     }
                 }
             }
@@ -1543,9 +1560,8 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
             fn_cell_idx = Some(cell_idx);
             // todo join the name and expected ty?
             let new_overload = Overload::new(gen_params, args, expected_return_ty.unwrap(), Location::Cell(cell_idx));
-            self.add_overload(name.clone(), new_overload).map_err(
-                |e| e.with_pair(pair.clone())
-            )?;
+            self.add_overload(name.clone(), new_overload)
+                .map_err(|e| e.with_pair(pair.clone()))?;
         } else {
             fn_cell_idx = None;
         }

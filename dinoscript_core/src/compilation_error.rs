@@ -1,5 +1,5 @@
+use std::{borrow::Cow, fmt::Display, sync::Arc};
 use thiserror::Error;
-use std::{borrow::Cow, error::Error, fmt::Display, sync::Arc};
 
 use crate::{
     ast::pairable::{Pairable, WithPair},
@@ -15,9 +15,7 @@ pub enum CompilationError<'c, 's> {
         actual_ty: Arc<Ty<'s>>,
     },
     #[error("Type {ty} cannot be used as a value")]
-    TypeUsedAsValue {
-        ty: NamedType<'s>,
-    },
+    TypeUsedAsValue { ty: NamedType<'s> },
     #[error("Callable {func_name} expects {expected} arguments, got {actual_n}")]
     ArgumentCountMismatch {
         func_name: Cow<'s, str>,
@@ -32,9 +30,7 @@ pub enum CompilationError<'c, 's> {
         actual_ty: Arc<Ty<'s>>,
     },
     #[error("Unknown name: {name}")]
-    NameNotFound {
-        name: Cow<'c, str>,
-    },
+    NameNotFound { name: Cow<'c, str> },
     #[error("No overloads found for callable {name} with arguments {arg_types}")]
     NoOverloads {
         name: Cow<'s, str>,
@@ -46,9 +42,7 @@ pub enum CompilationError<'c, 's> {
         arg_types: TypeList<'s>,
     },
     #[error("Object of type {ty} is not callable")]
-    NotCallable {
-        ty: Arc<Ty<'s>>,
-    },
+    NotCallable { ty: Arc<Ty<'s>> },
     #[error("Type mismatch in array: expected item type {expected_ty}, got {actual_ty}")]
     ArrayItemTypeMismatch {
         expected_ty: Arc<Ty<'s>>,
@@ -82,24 +76,19 @@ pub enum CompilationError<'c, 's> {
     GenericArgCountMismatch {
         template_name: Cow<'s, str>,
         expected_n: usize,
-        actual_n: usize
+        actual_n: usize,
     },
     #[error("Type {name} is not generic")]
-    NonTemplateTypeInstantiation {
-        name: Cow<'s, str>
-    },
+    NonTemplateTypeInstantiation { name: Cow<'s, str> },
     #[error("{kind} {name} cannot be used as a type")]
-    NonTypeUsedAsType {
-        name: Cow<'s, str>,
-        kind: ItemKind
-    }
+    NonTypeUsedAsType { name: Cow<'s, str>, kind: ItemKind },
 }
 
 #[derive(Debug, Clone)]
 pub enum ItemKind {
     Overload,
     Variable,
-    Type
+    Type,
 }
 
 pub(crate) trait HasItemKind {
@@ -111,7 +100,7 @@ impl HasItemKind for NamedItem<'_> {
         match self {
             NamedItem::Overloads(_) => ItemKind::Overload,
             NamedItem::Variable(_) => ItemKind::Variable,
-            NamedItem::Type(_) => ItemKind::Type
+            NamedItem::Type(_) => ItemKind::Type,
         }
     }
 }
@@ -121,13 +110,12 @@ impl HasItemKind for RelativeNamedItem<'_, '_> {
         match self {
             RelativeNamedItem::Overloads(..) => ItemKind::Overload,
             RelativeNamedItem::Variable(..) => ItemKind::Variable,
-            RelativeNamedItem::Type(..) => ItemKind::Type
+            RelativeNamedItem::Type(..) => ItemKind::Type,
         }
     }
-    
 }
 
-impl ItemKind{
+impl ItemKind {
     pub(crate) fn of(item: &impl HasItemKind) -> Self {
         item.kind()
     }
@@ -138,7 +126,7 @@ impl Display for ItemKind {
         match self {
             ItemKind::Overload => write!(f, "function"),
             ItemKind::Variable => write!(f, "variable"),
-            ItemKind::Type => write!(f, "type")
+            ItemKind::Type => write!(f, "type"),
         }
     }
 }
@@ -214,7 +202,7 @@ impl<'s> Display for ParamIdentifier<'s> {
 #[derive(Debug, Clone)]
 pub struct TypeList<'s>(pub Vec<Arc<Ty<'s>>>);
 
-impl<'s> Display for TypeList<'s>{
+impl<'s> Display for TypeList<'s> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
         for (i, ty) in self.0.iter().enumerate() {

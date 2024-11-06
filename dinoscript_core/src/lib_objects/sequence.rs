@@ -79,7 +79,7 @@ enum SequenceInner<'s> {
     Concat(SequenceConcat<'s>),
     Slice(SequenceSlice<'s>),
     Map(SequenceMap<'s>),
-    Range(Range)
+    Range(Range),
 }
 
 #[derive(Debug)]
@@ -410,7 +410,6 @@ impl<'s> SequenceInner<'s> {
                     assert!(range.step.is_negative() && range.start > range.end);
                     1 + ((range.start - range.end - 1) / -range.step)
                 }) as usize
-                    
             }
         }
     }
