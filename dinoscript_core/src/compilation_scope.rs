@@ -645,7 +645,7 @@ enum CandidateRejection<'s> {
 impl<'s> CandidateRejection<'s> {
     fn to_compilation_error<'c: 's>(self, name: Cow<'c, str>) -> CompilationError<'c, 's> {
         match self {
-            Self::ArgumentCountMismatch { expected, actual_n } => CompilationError::ArgumentCountMismatch {
+            Self::ArgumentCountMismatch { expected, actual_n } => CompilationError::FunctionArgumentCountMismatch {
                 expected,
                 actual_n,
                 func_name: name,
@@ -654,7 +654,7 @@ impl<'s> CandidateRejection<'s> {
                 param_id,
                 expected_ty,
                 actual_ty,
-            } => CompilationError::ArgumentTypeMismatch {
+            } => CompilationError::FunctionArgumentTypeMismatch {
                 param_id,
                 expected_ty,
                 actual_ty,
@@ -1188,7 +1188,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         }) = template_arc.as_ref()
                         {
                             if fields.len() != arg_types.len() {
-                                return Err(CompilationError::ArgumentCountMismatch {
+                                return Err(CompilationError::FunctionArgumentCountMismatch {
                                     func_name: struct_name.clone(),
                                     expected: ExpectedArgCount::Exact(fields.len()),
                                     actual_n: arg_types.len(),
@@ -1201,7 +1201,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                             );
                             for (i, ((name, field), arg_ty)) in fields.iter().zip(arg_types.iter()).enumerate() {
                                 if resolution.assign(&field.raw_ty, arg_ty).is_err() {
-                                    return Err(CompilationError::ArgumentTypeMismatch {
+                                    return Err(CompilationError::FunctionArgumentTypeMismatch {
                                         func_name: struct_name.clone(),
                                         param_id: ParamIdentifier::new(i, Some(name.clone())),
                                         expected_ty: field.raw_ty.clone(),
@@ -1267,8 +1267,6 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                                 }
                                 let resolved_ty =
                                     named_template.instantiate(resolution.bound_generics.into_iter().collect());
-
-                                // todo assert that the type is correct
                                 sink.extend(arg_sinks.into_iter().next().unwrap());
                                 sink.push(Command::Variant(variant_tag));
                                 return Ok(resolved_ty);
@@ -1280,16 +1278,29 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     sink.extend(arg_sink);
                 }
                 let ty = self.feed_expression(expr.as_ref(), sink)?;
-                // todo check that the args match
                 sink.push(Command::MakePending(arg_types.len()));
-
-                match ty.as_ref() {
-                    Ty::Fn(fn_ty) => {
-                        // todo we should also consider the case where the function is generic
-                        Ok(fn_ty.return_ty.clone())
+                let Ty::Fn(fn_ty) = ty.as_ref()  else {
+                    return Err(CompilationError::NotCallable { ty: ty.clone() }.with_pair(expr.pair.clone()))
+                }; 
+                if fn_ty.args.len() != arg_types.len() {
+                    return Err(CompilationError::ArgumentCountMismatch {
+                        expected: ExpectedArgCount::Exact(fn_ty.args.len()),
+                        actual_n: arg_types.len(),
                     }
-                    _ => Err(CompilationError::NotCallable { ty: ty.clone() }.with_pair(expr.pair.clone())),
+                    .with_pair(expr.pair.clone()));
                 }
+                let mut resolution = BindingResolution::primitive();
+                for (i, (param, arg_ty)) in fn_ty.args.iter().zip(arg_types.iter()).enumerate() {
+                    if resolution.assign(param, arg_ty).is_err() {
+                        return Err(CompilationError::ArgumentTypeMismatch {
+                            param_id: ParamIdentifier::positional(i),
+                            expected_ty: param.clone(),
+                            actual_ty: arg_ty.clone(),
+                        }
+                        .with_pair(expr.pair.clone()));
+                    }
+                }
+                Ok(fn_ty.return_ty.clone())
             }
             Functor::Operator(op) => self.feed_call(
                 &Functor::Expr(Box::new(
@@ -1375,7 +1386,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     }
                     Some(RelativeNamedItem::Overloads(overloads)) => {
                         if overloads.overloads.len() != 1 {
-                            todo!() // raise an error
+                            return Err(CompilationError::AmbiguousOverloadUsedAsValue { name: name.clone() }.with_pair(expr.pair.clone()));
                         }
                         let overload = overloads.overloads.into_iter().next().unwrap();
                         let ty = overload.overload.get_type();
@@ -1407,7 +1418,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                     None => {
                         return Err(CompilationError::NameNotFound { name: name.clone() }.with_pair(expr.pair.clone()));
                     }
-                    _ => todo!(), // error?
+                    Some(_) => return Err(CompilationError::NonFunctionDisambiguation { name: name.clone() }.with_pair(expr.pair.clone())),
                 }
             }
             Expr::Attr(Attr { obj, name }) => {
@@ -1415,20 +1426,20 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
                         let Some(field) = specialized.get_field(name) else {
-                            todo!("field not found: {}", name)
+                            return Err(CompilationError::FieldNotFound {ty: obj_type, field: name.clone() }.with_pair(expr.pair.clone()));
                         }; // raise an error
                         sink.push(Command::Attr(field.idx));
                         Ok(field.raw_ty)
                     }
                     Ty::Tuple(tup) => {
                         let Some(idx) = name.strip_prefix("item").and_then(|idx| idx.parse().ok()) else {
-                            todo!()
-                        }; // raise an error
-                        if idx >= tup.len() {
-                            todo!() // raise an error
-                        }
+                            return Err(CompilationError::TupleFieldNotFound { ty: obj_type, field: name.clone() }.with_pair(expr.pair.clone()));
+                        };
+                        let Some(item_ty) = tup.get(idx) else {
+                            return Err(CompilationError::TupleFieldNotFound { ty: obj_type, field: name.clone() }.with_pair(expr.pair.clone()));
+                        };
                         sink.push(Command::Attr(idx));
-                        Ok(tup[idx].clone())
+                        Ok(item_ty.clone())
                     }
                     _ => todo!(), // raise an error
                 }

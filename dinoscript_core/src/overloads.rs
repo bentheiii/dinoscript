@@ -32,11 +32,7 @@ impl<'s> BindingResolution<'s> {
     }
 
     pub fn primitive() -> Self {
-        BindingResolution {
-            gen_id: None,
-            bound_generics: Vec::new(),
-            priority: ResolutionPriority::Exact,
-        }
+        Self::new(None, 0)
     }
 
     pub fn priority(&self) -> ResolutionPriority {

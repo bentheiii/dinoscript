@@ -18,14 +18,25 @@ pub enum CompilationError<'c, 's> {
     #[error("Type {ty} cannot be used as a value")]
     TypeUsedAsValue { ty: NamedType<'s> },
     #[error("Callable {func_name} expects {expected} arguments, got {actual_n}")]
-    ArgumentCountMismatch {
+    FunctionArgumentCountMismatch {
         func_name: Cow<'s, str>,
         expected: ExpectedArgCount,
         actual_n: usize,
     },
+    #[error("Callable expects {expected} arguments, got {actual_n}")]
+    ArgumentCountMismatch {
+        expected: ExpectedArgCount,
+        actual_n: usize,
+    },
     #[error("Type mismatch in callable {func_name}: param {param_id} expects {expected_ty}, got {actual_ty}")]
-    ArgumentTypeMismatch {
+    FunctionArgumentTypeMismatch {
         func_name: Cow<'s, str>,
+        param_id: ParamIdentifier<'s>,
+        expected_ty: Arc<Ty<'s>>,
+        actual_ty: Arc<Ty<'s>>,
+    },
+    #[error("Type mismatch in callable: param {param_id} expects {expected_ty}, got {actual_ty}")]
+    ArgumentTypeMismatch {
         param_id: ParamIdentifier<'s>,
         expected_ty: Arc<Ty<'s>>,
         actual_ty: Arc<Ty<'s>>,
@@ -89,6 +100,14 @@ pub enum CompilationError<'c, 's> {
     VariantNotInUnion { name: Cow<'c, str>, union_name: Cow<'c, str> },
     #[error("Variant {name} must be created with only one argument")]
     VariantArgCountMismatch { name: Cow<'c, str> },
+    #[error("Overload {name} has more than one function, it cannot be used as a value")]
+    AmbiguousOverloadUsedAsValue { name: Cow<'s, str> },
+    #[error("Cannot disambiguate non-function {name}")]
+    NonFunctionDisambiguation { name: Cow<'s, str> },
+    #[error("Type {ty} does not have a field {field}")]
+    FieldNotFound { ty: Arc<Ty<'s>>, field: Cow<'s, str> },
+    #[error("Tuple type {ty} accessed with invalid field {field}")]
+    TupleFieldNotFound { ty: Arc<Ty<'s>>, field: Cow<'s, str> },
 }
 
 #[derive(Debug)]
