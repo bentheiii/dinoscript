@@ -5,7 +5,7 @@ use std::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use pest::iterators::Pair;
-use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, TemplateGenericSpecs, Ty, TyTemplate};
+use ty::{CompoundKind, CompoundTemplate, Field, Fn, Generic, GenericSetId, Specialized, TemplateGenericSpecs, Ty, TyTemplate};
 
 use crate::{
     ast::{
@@ -51,8 +51,10 @@ pub mod ty {
     #[derive(Debug)]
     pub enum TyTemplate<'s> {
         Builtin(BuiltinTemplate),
+        // todo should we split structs and unions into separate types?
         Compound(CompoundTemplate<'s>),
         // only applicable inside compound templates
+        // todo is this ever used?
         ForwardCompound(Cow<'s, str>),
     }
     impl<'s> TyTemplate<'s> {
@@ -1036,7 +1038,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
         binding: Option<()>,
     ) -> Result<OverloadCandidate<'s>, CompilationError<'c, 's>> {
         if let Some(binding) = binding {
-            todo!()
+            todo!("implement binding")
         }
         let is_one_option = overloads.len() == 1;
         let by_category = overloads
@@ -1309,7 +1311,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 args,
                 sink,
             ),
-            Functor::Specialized(..) => todo!(),
+            Functor::Specialized(..) => todo!("implement specialized functor"),
         }
     }
 
@@ -1441,7 +1443,7 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                         sink.push(Command::Attr(idx));
                         Ok(item_ty.clone())
                     }
-                    _ => todo!(), // raise an error
+                    _ => return Err(CompilationError::NonFieldAccess { ty: obj_type }.with_pair(expr.pair.clone())),
                 }
             }
             Expr::Tuple(items) => {
@@ -1459,26 +1461,34 @@ impl<'p, 's, B: Builtins<'s>> CompilationScope<'p, 's, B> {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
+                        match specialized.template.as_ref(){
+                            TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Union, ..}) => {},
+                            _ => return Err(CompilationError::NonVariantAccess { ty: obj_type }.with_pair(expr.pair.clone())),
+                        };
                         let Some(field) = specialized.get_field(name) else {
-                            todo!()
-                        }; // raise an error
+                            return Err(CompilationError::VariantNotFound { ty: obj_type, variant: name.clone() }.with_pair(expr.pair.clone()));
+                        }; 
                         sink.push(Command::VariantAccess(field.idx));
                         Ok(field.raw_ty)
                     }
-                    _ => todo!(), // raise an error
+                    _ => return Err(CompilationError::NonVariantAccess { ty: obj_type }.with_pair(expr.pair.clone())),
                 }
             }
             Expr::VariantAccessOpt(Variant { obj, name }) => {
                 let obj_type = self.feed_expression(obj, sink)?;
                 match obj_type.as_ref() {
                     Ty::Specialized(specialized) => {
+                        match specialized.template.as_ref(){
+                            TyTemplate::Compound(CompoundTemplate { compound_kind: CompoundKind::Union, ..}) => {},
+                            _ => return Err(CompilationError::NonVariantAccess { ty: obj_type }.with_pair(expr.pair.clone())),
+                        };
                         let Some(field) = specialized.get_field(name) else {
-                            todo!("variant not found: {}", name)
-                        }; // raise an error
+                            return Err(CompilationError::VariantNotFound { ty: obj_type, variant: name.clone() }.with_pair(expr.pair.clone()));
+                        }; 
                         sink.push(Command::VariantAccessOpt(field.idx));
                         Ok(self.optional(field.raw_ty))
                     }
-                    _ => todo!(), // raise an error
+                    _ => return Err(CompilationError::NonVariantAccess { ty: obj_type }.with_pair(expr.pair.clone())),
                 }
             }
             Expr::Call(Call { functor, args }) => self.feed_call(functor, args, sink),

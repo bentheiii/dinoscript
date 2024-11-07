@@ -108,6 +108,12 @@ pub enum CompilationError<'c, 's> {
     FieldNotFound { ty: Arc<Ty<'s>>, field: Cow<'s, str> },
     #[error("Tuple type {ty} accessed with invalid field {field}")]
     TupleFieldNotFound { ty: Arc<Ty<'s>>, field: Cow<'s, str> },
+    #[error("Type {ty} cannot be accessed with a field")]
+    NonFieldAccess { ty: Arc<Ty<'s>> },
+    #[error("Type {ty} does not have a variant {variant}")]
+    VariantNotFound { ty: Arc<Ty<'s>>, variant: Cow<'s, str> },
+    #[error("Type {ty} cannot be accessed with a variant")]
+    NonVariantAccess { ty: Arc<Ty<'s>> },
 }
 
 #[derive(Debug)]
